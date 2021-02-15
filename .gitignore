@@ -1,0 +1,13 @@
+/Core/bin
+/Core/obj
+/Game/bin
+/Game/obj
+/Game/Game.csproj.user
+/Library/obj
+/Library/Library.csproj.user
+/Library/bin
+/WinLibrary/obj
+/WinLibrary/WinLibrary.csproj.user
+/WinLibrary/bin
+/.vs/SengokuScroll/DesignTimeBuild/.dtbcache.v2
+/.vs/SengokuScroll/v16/.suo
