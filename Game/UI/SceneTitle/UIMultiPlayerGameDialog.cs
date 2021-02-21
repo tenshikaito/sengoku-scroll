@@ -14,7 +14,7 @@ namespace Game.UI.SceneTitle
 
         public UIMultiPlayerGameDialog(GameSystem gs) : base(gs)
         {
-            this.setCommandWindow(w.scene_title.single_player_game).setCenter(true);
+            this.setCommandWindow(w.scene_title.select_game_world).setCenter(true);
 
             listView.addColumn(w.name)
                 .addColumn(w.ip)
@@ -28,7 +28,7 @@ namespace Game.UI.SceneTitle
             addConfirmButtons();
         }
 
-        public void setData(List<ServerInfo> list) => setData(list.Select(o => new ListViewItem()
+        public void setData(List<ServerInfo> list) => listView.setData(list.Select(o => new ListViewItem()
         {
             Tag = o.code,
             Text = o.name

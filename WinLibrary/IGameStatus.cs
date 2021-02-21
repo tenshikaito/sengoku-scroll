@@ -11,6 +11,10 @@ namespace WinLibrary
 
         void draw();
 
+        void sleep();
+
+        void resume();
+
         void finish();
     }
 
@@ -25,6 +29,14 @@ namespace WinLibrary
         }
 
         public virtual void draw()
+        {
+        }
+
+        public virtual void sleep()
+        {
+        }
+
+        public virtual void resume()
         {
         }
 

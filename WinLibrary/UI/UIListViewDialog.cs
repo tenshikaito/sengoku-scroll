@@ -40,20 +40,10 @@ namespace WinLibrary.UI
         protected Button addButton(string text, Action onButtonClicked)
             => new Button().init(text, onButtonClicked).addTo(pButtons);
 
-        public void setData(List<string> list) => setData(list.Select(o => new ListViewItem()
+        public void setData(List<string> list) => listView.setData(list.Select(o => new ListViewItem()
         {
             Tag = o,
             Text = o
         }).ToArray());
-
-        protected void setData(ListViewItem[] list)
-        {
-            listView.BeginUpdate();
-            listView.Items.Clear();
-            listView.Items.AddRange(list);
-            listView.autoResizeColumns();
-            listView.selectFirstRow();
-            listView.EndUpdate();
-        }
     }
 }

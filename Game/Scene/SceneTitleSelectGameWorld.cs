@@ -1,27 +1,20 @@
 ﻿using Core.Helper;
-using Core.Network;
 using Game.UI.SceneTitle;
-using System;
-using System.Collections.Concurrent;
 using System.Threading.Tasks;
 
 namespace Game.Scene
 {
-#warning no use
-    [Obsolete("no use")]
-    public class SceneTitleSinglePlayerGame : SceneBase
+    public class SceneTitleSelectGameWorld : SceneBase
     {
         private UISelectGameWorldDialog uiSelectGameWorldDialog;
 
-        private readonly ConcurrentDictionary<string, TestServerData> map = new ConcurrentDictionary<string, TestServerData>();
-
-        public SceneTitleSinglePlayerGame(GameSystem gs) : base(gs)
+        public SceneTitleSelectGameWorld(GameSystem gs) : base(gs)
         {
         }
 
         public override void start()
         {
-            onSinglePlayerGame();
+            onSelectGameWorld();
         }
 
         public override void finish()
@@ -29,7 +22,7 @@ namespace Game.Scene
             uiSelectGameWorldDialog?.Close();
         }
 
-        private void onSinglePlayerGame()
+        private void onSelectGameWorld()
         {
             uiSelectGameWorldDialog = new UISelectGameWorldDialog(gameSystem)
             {
@@ -47,10 +40,14 @@ namespace Game.Scene
 
         private void onOkButtonClicked()
         {
-            var code = uiSelectGameWorldDialog.selectedGameWorld;
+            var gwi = uiSelectGameWorldDialog.selectedGameWorld;
 
-            if (code == null) return;
+            if (gwi == null) return;
 
+            gameSystem.currentGameWorldName = gwi.name;
+            gameSystem.currentGameWorldCode = gwi.code;
+
+            gameSystem.sceneToTitleSelectGameScenario();
         }
 
         private async Task loadGameWorldList() => uiSelectGameWorldDialog.setData(await GameWorldHelper.getGameWorldInfoList());

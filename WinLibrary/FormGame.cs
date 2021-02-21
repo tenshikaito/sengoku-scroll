@@ -11,7 +11,7 @@ namespace WinLibrary
 {
     public abstract class FormGame : Form
     {
-        protected GameObject gameRoot;
+        protected StateManager gameRoot;
 
         protected SpriteRectangle background;
 
@@ -28,7 +28,7 @@ namespace WinLibrary
 
         private void initSystem()
         {
-            gameRoot = new GameObject();
+            gameRoot = new StateManager();
 
             gameGraphic = new GameGraphic()
             {

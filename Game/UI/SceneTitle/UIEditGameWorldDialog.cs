@@ -20,6 +20,6 @@ namespace Game.UI.SceneTitle
             addConfirmButton(w.close);
         }
 
-        public void setData(IEnumerable<GameWorldInfo> list) => setData(list.toGameWorldInfoList());
+        public void setData(IEnumerable<GameWorldInfo> list) => listView.setData(list.toGameWorldInfoList());
     }
 }

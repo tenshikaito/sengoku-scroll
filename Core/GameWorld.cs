@@ -11,6 +11,8 @@ namespace Core
 
         public string resourcePackageName;
 
+        public string introduction;
+
         public GameDate gameDate;
 
         public TileMap tileMap;

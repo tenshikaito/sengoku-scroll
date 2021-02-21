@@ -27,7 +27,30 @@ namespace Core.Helper
                     code = gw.code,
                     fileName = fileName,
                     width = gw.tileMap.column,
-                    height = gw.tileMap.row
+                    height = gw.tileMap.row,
+                    introduction = gw.introduction
+                };
+            }));
+
+            return result;
+        }
+
+        public static async Task<GameScenarioInfo[]> getGameScenarioInfoList()
+        {
+            fileProcessor.createDirectory();
+
+            var filePathList = fileProcessor.enumerateFiles();
+
+            var result = await Task.WhenAll(filePathList.Select(async o =>
+            {
+                var fileName = o.getFileName();
+                var gw = await loadGameWorldData<GameWorld>(fileName);
+
+                return new GameScenarioInfo()
+                {
+                    name = gw.name,
+                    code = gw.code,
+                    introduction = gw.introduction
                 };
             }));
 
@@ -55,7 +78,8 @@ namespace Core.Helper
                 gameDate = ExampleHelper.getGameDate(),
                 tileMap = tm,
                 masterData = md,
-                gameData = gd
+                gameData = gd,
+                introduction = string.Empty
             });
 
             return true;

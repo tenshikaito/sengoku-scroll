@@ -11,5 +11,7 @@
         public int width;
 
         public int height;
+
+        public string introduction;
     }
 }

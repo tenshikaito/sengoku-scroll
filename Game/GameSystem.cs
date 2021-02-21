@@ -1,8 +1,10 @@
 ﻿using Core;
+using Core.Code;
 using Game.Model;
 using Game.Scene;
 using Library;
 using System.Collections.Generic;
+using System.Drawing;
 using WinLibrary;
 using WinLibrary.Graphic;
 
@@ -21,7 +23,12 @@ namespace Game
 
         public Camera camera;
 
-        public GameObject sceneManager;
+        public StateManager sceneManager;
+
+        public string currentGameWorldCode;
+        public string currentGameWorldName;
+        public Dictionary<string, Bitmap> gameWorldThumbnailMap = new Dictionary<string, Bitmap>();
+        internal GameMode currentGameMode;
 
         public GameWording wording { get; set; }
 
@@ -55,9 +62,18 @@ namespace Game
             return s;
         }
 
-        public SceneTitleSinglePlayerGame sceneToTitleSinglePlayerGame()
+        public SceneTitleSelectGameWorld sceneToTitleSelectGameWorld()
         {
-            var s = new SceneTitleSinglePlayerGame(this);
+            var s = new SceneTitleSelectGameWorld(this);
+
+            sceneManager.switchStatus(s);
+
+            return s;
+        }
+
+        public SceneTitleSelectGameScenario sceneToTitleSelectGameScenario()
+        {
+            var s = new SceneTitleSelectGameScenario(this);
 
             sceneManager.switchStatus(s);
 

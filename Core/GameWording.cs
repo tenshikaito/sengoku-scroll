@@ -676,9 +676,17 @@ namespace Core
         {
             public string start => this[nameof(start)];
 
-            public string single_player_game => this[nameof(single_player_game)];
+            public string select_game_world => this[nameof(select_game_world)];
+
+            public string select_game_scenario => this[nameof(select_game_scenario)];
 
             public string multiplayer_game => this[nameof(multiplayer_game)];
+
+            public string select_mode => this[nameof(select_mode)];
+
+            public string story_mode => this[nameof(story_mode)];
+
+            public string free_mode => this[nameof(free_mode)];
 
             public string edit_map => this[nameof(edit_map)];
 

@@ -8,7 +8,7 @@ namespace Game.UI.SceneTitle
 
         public UIPlayerDialog(GameSystem gs) : base(gs)
         {
-            this.setCommandWindow(w.scene_title.single_player_game).setCenter(true);
+            this.setCommandWindow(w.scene_title.select_game_world).setCenter(true);
 
             listView.addColumn(w.name);
 

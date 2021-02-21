@@ -7,8 +7,6 @@ namespace WinLibrary
 {
     public class GameObject : TreeObject<GameObject>, IGameStatus, IDisposable
     {
-        protected GameObject status;
-
         public string name;
 
         public bool isEnable = true;
@@ -35,26 +33,16 @@ namespace WinLibrary
         {
         }
 
+        public virtual void sleep()
+        {
+        }
+
+        public virtual void resume()
+        {
+        }
+
         public virtual void finish()
         {
-        }
-
-        public void switchStatus(GameObject go)
-        {
-            status?.finish();
-
-            go.start();
-
-            status = go;
-        }
-
-        public override void Dispose()
-        {
-            status = null;
-
-            status?.Dispose();
-
-            base.Dispose();
         }
 
         public void onUpdate()
@@ -63,7 +51,6 @@ namespace WinLibrary
 
             update();
 
-            status?.onUpdate();
             children.ForEach(o => o.onUpdate());
         }
 
@@ -73,7 +60,6 @@ namespace WinLibrary
 
             draw();
 
-            status?.onDraw();
             children.ForEach(o => o.onDraw());
         }
 
@@ -83,7 +69,6 @@ namespace WinLibrary
 
             mouseMoved(e);
 
-            status?.onMouseMoved(e);
             children.ForEach(o => o.onMouseMoved(e));
         }
 
@@ -93,7 +78,6 @@ namespace WinLibrary
 
             mouseDragging(e, p);
 
-            status?.onMouseDragging(e, p);
             children.ForEach(o => o.onMouseDragging(e, p));
         }
 
@@ -103,7 +87,6 @@ namespace WinLibrary
 
             mouseEntered(e);
 
-            status?.onMouseEntered(e);
             children.ForEach(o => o.onMouseEntered(e));
         }
 
@@ -113,7 +96,6 @@ namespace WinLibrary
 
             mouseExited(e);
 
-            status?.onMouseExited(e);
             children.ForEach(o => o.onMouseExited(e));
         }
 
@@ -123,7 +105,6 @@ namespace WinLibrary
 
             mouseClicked(e);
 
-            status?.onMouseClicked(e);
             children.ForEach(o => o.onMouseClicked(e));
         }
 
@@ -133,7 +114,6 @@ namespace WinLibrary
 
             mousePressed(e);
 
-            status?.onMousePressed(e);
             children.ForEach(o => o.onMousePressed(e));
         }
 
@@ -143,7 +123,6 @@ namespace WinLibrary
 
             mouseReleased(e);
 
-            status?.onMouseReleased(e);
             children.ForEach(o => o.onMouseReleased(e));
         }
 
@@ -153,7 +132,6 @@ namespace WinLibrary
 
             mouseWheelScrolled(e);
 
-            status?.onMouseWheelScrolled(e);
             children.ForEach(o => o.onMouseWheelScrolled(e));
         }
 
@@ -163,7 +141,6 @@ namespace WinLibrary
 
             keyPressed(e);
 
-            status?.onKeyPressed(e);
             children.ForEach(o => o.onKeyPressed(e));
         }
 
@@ -173,7 +150,6 @@ namespace WinLibrary
 
             keyPressing(e);
 
-            status?.onKeyPressing(e);
             children.ForEach(o => o.onKeyPressing(e));
         }
 
@@ -183,7 +159,6 @@ namespace WinLibrary
 
             keyReleased(e);
 
-            status?.onKeyReleased(e);
             children.ForEach(o => o.onKeyReleased(e));
         }
 

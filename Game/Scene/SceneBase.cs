@@ -3,7 +3,7 @@ using WinLibrary;
 
 namespace Game.Scene
 {
-    public abstract class SceneBase : GameObject
+    public abstract class SceneBase : StateManager
     {
         protected GameSystem gameSystem;
 

@@ -15,7 +15,7 @@ namespace WinLibrary.Extension
             return c;
         }
 
-        public static Form setAutoSizeF(this Form f)
+        public static T setAutoSizeF<T>(this T f) where T : Form
         {
             f.setAutoSize();
             f.AutoSizeMode = AutoSizeMode.GrowAndShrink;
@@ -23,7 +23,7 @@ namespace WinLibrary.Extension
             return f;
         }
 
-        public static Form setCenter(this Form f, bool isForce = false)
+        public static T setCenter<T>(this T f, bool isForce = false) where T : Form
         {
             if (isForce)
             {
@@ -38,7 +38,7 @@ namespace WinLibrary.Extension
             return f;
         }
 
-        public static Form init(this Form f, string title)
+        public static T init<T>(this T f, string title) where T : Form
         {
             f.Text = title;
 
@@ -78,7 +78,7 @@ namespace WinLibrary.Extension
             return p;
         }
 
-        public static Form hideCommandButton(this Form f)
+        public static T hideCommandButton<T>(this T f) where T : Form
         {
             f.ControlBox = false;
             f.MinimizeBox = false;
@@ -258,6 +258,18 @@ namespace WinLibrary.Extension
 
             return lvi;
         }
+
+        public static ListView setData(this ListView lv, ListViewItem[] list)
+        {
+            lv.BeginUpdate();
+            lv.Items.Clear();
+            lv.Items.AddRange(list);
+            lv.autoResizeColumns();
+            lv.selectFirstRow();
+            lv.EndUpdate();
+
+            return lv;
+        } 
 
         public static ComboBox initDropDownList<TKey>(
             this ComboBox cb,
