@@ -44,12 +44,11 @@ namespace Game.Scene
 
             if (gwi == null) return;
 
-            gameSystem.currentGameWorldName = gwi.name;
-            gameSystem.currentGameWorldCode = gwi.code;
+            gameSystem.currentGameWorldInfo = gwi;
 
             gameSystem.sceneToTitleSelectGameScenario();
         }
 
-        private async Task loadGameWorldList() => uiSelectGameWorldDialog.setData(await GameWorldHelper.getGameWorldInfoList());
+        private async Task loadGameWorldList() => uiSelectGameWorldDialog.setData(await GameWorldHelper.getInfoList());
     }
 }

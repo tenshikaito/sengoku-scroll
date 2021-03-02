@@ -10,7 +10,7 @@ namespace Core.Helper
         private static readonly FileProcessor fileProcessor
             = new FileProcessor("/gameworld", "sgw");
 
-        public static async Task<GameWorldInfo[]> getGameWorldInfoList()
+        public static async Task<GameWorldInfo[]> getInfoList()
         {
             fileProcessor.createDirectory();
 

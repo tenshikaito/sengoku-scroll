@@ -15,7 +15,7 @@ namespace Game.UI.SceneTitle
 
         private Dictionary<string, GameScenarioInfo> gameScenarioInfoMap = new Dictionary<string, GameScenarioInfo>();
 
-        public GameScenarioInfo selectedScenarioInfo
+        public GameScenarioInfo selectedGameScenario
             => gameScenarioInfoMap.TryGetValue(listView.FocusedItem.Tag as string, out var value) ? value : null;
 
         public UISelectGameScenarioDialog(GameSystem gs) : base(gs)
@@ -48,7 +48,7 @@ namespace Game.UI.SceneTitle
             lbIntroduction.addTo(tlp);
 
             listView.SelectedIndexChanged += (s, e)
-                => lbIntroduction.Text = selectedScenarioInfo?.introduction ?? string.Empty;
+                => lbIntroduction.Text = selectedGameScenario?.introduction ?? string.Empty;
 
             addConfirmButtons();
         }

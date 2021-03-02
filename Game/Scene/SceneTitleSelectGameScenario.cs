@@ -42,10 +42,13 @@ namespace Game.Scene
 
         private void onOkButtonClicked()
         {
-            var scenarioInfo = uiSelectGameScenarioDialog.selectedScenarioInfo;
+            var scenarioInfo = uiSelectGameScenarioDialog.selectedGameScenario;
 
             if (scenarioInfo == null) return;
 
+            gameSystem.currentGameScenarioInfo = scenarioInfo;
+
+            gameSystem.sceneManager.switchStatus(new SceneLoadGameWorld(gameSystem));
         }
 
         private async Task loadGameWorldList() => uiSelectGameScenarioDialog.setData(await GameWorldHelper.getGameScenarioInfoList());

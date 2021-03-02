@@ -78,6 +78,8 @@ namespace Game.Scene
 
         private void multiplayerGame()
         {
+            gameSystem.currentGameMode = GameMode.free;
+
             gameSystem.sceneToTitleMultiplayerGame();
         }
 

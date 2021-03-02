@@ -25,10 +25,11 @@ namespace Game
 
         public StateManager sceneManager;
 
-        public string currentGameWorldCode;
-        public string currentGameWorldName;
         public Dictionary<string, Bitmap> gameWorldThumbnailMap = new Dictionary<string, Bitmap>();
-        internal GameMode currentGameMode;
+
+        public GameMode currentGameMode;
+        public GameWorldInfo currentGameWorldInfo;
+        public GameScenarioInfo currentGameScenarioInfo;
 
         public GameWording wording { get; set; }
 

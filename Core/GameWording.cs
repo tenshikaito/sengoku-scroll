@@ -461,6 +461,8 @@ namespace Core
 
         public string pointer => this[nameof(pointer)];
 
+        public string thumbnail => this[nameof(thumbnail)];
+
         public Terrain terrain;
 
         public Region region;

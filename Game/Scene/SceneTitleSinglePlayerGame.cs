@@ -53,6 +53,6 @@ namespace Game.Scene
 
         }
 
-        private async Task loadGameWorldList() => uiSelectGameWorldDialog.setData(await GameWorldHelper.getGameWorldInfoList());
+        private async Task loadGameWorldList() => uiSelectGameWorldDialog.setData(await GameWorldHelper.getInfoList());
     }
 }

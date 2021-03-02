@@ -3,25 +3,15 @@ using System;
 
 namespace Core
 {
-    public class GameWorld
+    public class GameScenario : GameData
     {
         public string name;
 
         public string code;
 
-        public string resourcePackageName;
-
         public string introduction;
 
-        public GameDate gameDate;
-
-        public TileMap tileMap;
-
-        public MasterData masterData;
-
-        public GameData gameData;
-
-        public GameWorld(string name)
+        public GameScenario(string name)
         {
             this.name = name;
         }

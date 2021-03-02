@@ -29,26 +29,45 @@ namespace Game.UI.SceneTitle
                 Dock = DockStyle.Fill,
                 RowCount = 2,
                 ColumnCount = 2,
-            }.addTo(panel);
+                MinimumSize = new Size(640, 480)
+            }.addRowStyle(40).addRowStyle(60).addColumnStyle(60).addColumnStyle(40).addTo(panel);
 
-            new Label().init("thumbnail").addTo(tlp);
-
-            var gb = new GroupBox()
+            (GroupBox gb, Panel p) createGroupBox(string text)
             {
-                Dock = DockStyle.Fill
-            }.addTo(tlp);
+                var gb = new GroupBox()
+                {
+                    Text = text,
+                    Dock = DockStyle.Fill,
+                }.addTo(tlp);
 
-            new Label().init(string.Empty).addTo(gb);
+                var p = new Panel()
+                {
+                    Dock = DockStyle.Fill
+                }.addTo(gb);
+
+                return (gb, p);
+            }
+
+            var (gb, p) = createGroupBox(w.thumbnail);
+
+            // TODO Bitmap
+            new Label().init("thumbnail").addTo(p);
+
+            tlp.SetColumnSpan(gb, 2);
+
+            (gb, p) = createGroupBox(w.game_world);
 
             var listView = new ListView().init()
                 .addColumn(w.name)
                 .addColumn(w.map_size)
-                .addTo(tlp);
+                .addTo(p);
 
             listView.DoubleClick += (s, e) => btnOk.PerformClick();
 
+            (gb, p) = createGroupBox(w.introduction);
+
             lbIntroduction.Width = 240;
-            lbIntroduction.addTo(tlp);
+            lbIntroduction.addTo(p);
 
             listView.SelectedIndexChanged += (s, e)
                 => lbIntroduction.Text = selectedGameWorld?.introduction ?? string.Empty;

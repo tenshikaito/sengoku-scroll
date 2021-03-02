@@ -179,6 +179,6 @@ namespace Game.Scene
             return true;
         }
 
-        private async Task loadGameWorldMapList() => uiEditGameWorldDialog.setData(await GameWorldHelper.getGameWorldInfoList());
+        private async Task loadGameWorldMapList() => uiEditGameWorldDialog.setData(await GameWorldHelper.getInfoList());
     }
 }
