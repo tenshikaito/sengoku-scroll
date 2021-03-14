@@ -18,7 +18,9 @@ namespace Game.UI.SceneTitle
         private Dictionary<string, GameWorldInfo> gameWorldInfoMap = new Dictionary<string, GameWorldInfo>();
 
         public GameWorldInfo selectedGameWorld
-            => gameWorldInfoMap.TryGetValue(listView.FocusedItem.Tag as string, out var value) ? value : null;
+            => listView.FocusedItem != null && gameWorldInfoMap.TryGetValue(listView.FocusedItem.Tag as string, out var value)
+            ? value
+            : null;
 
         public UISelectGameWorldDialog(GameSystem gs) : base(gs)
         {
@@ -57,7 +59,8 @@ namespace Game.UI.SceneTitle
 
             (gb, p) = createGroupBox(w.game_world);
 
-            var listView = new ListView().init()
+            listView
+                .init()
                 .addColumn(w.name)
                 .addColumn(w.map_size)
                 .addTo(p);

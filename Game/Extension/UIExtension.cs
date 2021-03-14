@@ -13,6 +13,13 @@ namespace Game.Extension
             {
                 Tag = o.name,
                 Text = o.name
-            }.addColumn(o.name).addColumn($"{o.width}x{o.height}")).ToArray();
+            }.addColumn($"{o.width}x{o.height}")).ToArray();
+
+        public static ListViewItem[] toGameScenarioInfoList(this IEnumerable<GameScenarioInfo> list)
+            => list.Select(o => new ListViewItem()
+            {
+                Tag = o.code,
+                Text = o.name
+            }.addColumn(o.name)).ToArray();
     }
 }

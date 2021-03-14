@@ -40,13 +40,17 @@ namespace Game
 
         private void initSystem()
         {
+            var sceneManager = new SceneManager();
+
+            gameRoot = sceneManager;
+
             gameSystem = new GameSystem()
             {
                 formMain = this,
                 option = option,
                 wording = wording,
                 players = players,
-                sceneManager = gameRoot,
+                sceneManager = sceneManager,
                 gameGraphic = gameGraphic
             };
 

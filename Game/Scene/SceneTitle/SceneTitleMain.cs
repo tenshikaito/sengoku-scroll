@@ -1,4 +1,5 @@
 ﻿using Core.Code;
+using Game.Scene.SceneTitle.SceneSinglePlayer;
 using Game.UI;
 using Game.UI.SceneTitle;
 
@@ -73,7 +74,7 @@ namespace Game.Scene
         {
             gameSystem.currentGameMode = GameMode.free;
 
-            gameSystem.sceneToTitleSelectGameWorld();
+            gameSystem.sceneManager.switchStatus(new SceneFreeModeGameWorld(gameSystem));
         }
 
         private void multiplayerGame()

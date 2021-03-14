@@ -2,19 +2,29 @@
 using Game.UI.SceneTitle;
 using System.Threading.Tasks;
 
-namespace Game.Scene
+namespace Game.Scene.SceneTitle.SceneSinglePlayer
 {
-    public class SceneTitleSelectGameWorld : SceneBase
+    public class SceneFreeModeGameWorld : SceneBase
     {
         private UISelectGameWorldDialog uiSelectGameWorldDialog;
 
-        public SceneTitleSelectGameWorld(GameSystem gs) : base(gs)
+        public SceneFreeModeGameWorld(GameSystem gs) : base(gs)
         {
         }
 
         public override void start()
         {
-            onSelectGameWorld();
+            onShow();
+        }
+
+        public override void sleep()
+        {
+            uiSelectGameWorldDialog.Visible = false;
+        }
+
+        public override void resume()
+        {
+            uiSelectGameWorldDialog.Visible = true;
         }
 
         public override void finish()
@@ -22,15 +32,14 @@ namespace Game.Scene
             uiSelectGameWorldDialog?.Close();
         }
 
-        private void onSelectGameWorld()
+        private void onShow()
         {
-            uiSelectGameWorldDialog = new UISelectGameWorldDialog(gameSystem)
+            uiSelectGameWorldDialog =  new UISelectGameWorldDialog(gameSystem)
             {
                 Visible = true,
                 okButtonClicked = onOkButtonClicked,
                 cancelButtonClicked = () =>
                 {
-                    uiSelectGameWorldDialog.Close();
                     gameSystem.sceneToTitleMain();
                 }
             };
@@ -46,7 +55,7 @@ namespace Game.Scene
 
             gameSystem.currentGameWorldInfo = gwi;
 
-            gameSystem.sceneToTitleSelectGameScenario();
+            gameSystem.sceneManager.pushStatus(new SceneFreeModeGameScenario(gameSystem));
         }
 
         private async Task loadGameWorldList() => uiSelectGameWorldDialog.setData(await GameWorldHelper.getInfoList());

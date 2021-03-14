@@ -23,7 +23,7 @@ namespace Game
 
         public Camera camera;
 
-        public StateManager sceneManager;
+        public SceneManager sceneManager;
 
         public Dictionary<string, Bitmap> gameWorldThumbnailMap = new Dictionary<string, Bitmap>();
 
@@ -57,24 +57,6 @@ namespace Game
         public SceneTitleMain sceneToTitleMain()
         {
             var s = new SceneTitleMain(this);
-
-            sceneManager.switchStatus(s);
-
-            return s;
-        }
-
-        public SceneTitleSelectGameWorld sceneToTitleSelectGameWorld()
-        {
-            var s = new SceneTitleSelectGameWorld(this);
-
-            sceneManager.switchStatus(s);
-
-            return s;
-        }
-
-        public SceneTitleSelectGameScenario sceneToTitleSelectGameScenario()
-        {
-            var s = new SceneTitleSelectGameScenario(this);
 
             sceneManager.switchStatus(s);
 

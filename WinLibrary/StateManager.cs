@@ -44,5 +44,13 @@ namespace WinLibrary
 
             current?.resume();
         }
+
+        public void clearStatus()
+        {
+            while(stack.TryPop(out var go))
+            {
+                go.finish();
+            }
+        }
     }
 }

@@ -21,14 +21,14 @@ namespace WinLibrary
 
         public Dispatcher dispatcher { get; } = new Dispatcher();
 
-        public FormGame()
+        public FormGame(StateManager sm = null)
         {
-            initSystem();
+            initSystem(sm);
         }
 
-        private void initSystem()
+        private void initSystem(StateManager sm)
         {
-            gameRoot = new StateManager();
+            gameRoot = sm ?? new StateManager();
 
             gameGraphic = new GameGraphic()
             {

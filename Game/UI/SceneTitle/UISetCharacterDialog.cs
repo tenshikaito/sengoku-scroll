@@ -1,5 +1,5 @@
 ﻿using Core;
-using Game.Extension;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -8,20 +8,13 @@ using WinLibrary.Extension;
 
 namespace Game.UI.SceneTitle
 {
-    public class UISelectGameScenarioDialog : UIConfirmDialog
+    public class UISetCharacterDialog : UIConfirmDialog
     {
         private Label lbIntroduction = new Label();
         private PictureBox pbThumbnail = new PictureBox();
         private ListView listView = new ListView();
 
-        private Dictionary<string, GameScenarioInfo> gameScenarioInfoMap = new Dictionary<string, GameScenarioInfo>();
-
-        public GameScenarioInfo selectedGameScenario
-            => listView.FocusedItem != null && gameScenarioInfoMap.TryGetValue(listView.FocusedItem.Tag as string, out var value)
-            ? value
-            : null;
-
-        public UISelectGameScenarioDialog(GameSystem gs) : base(gs)
+        public UISetCharacterDialog(GameSystem gs) : base(gs)
         {
             this.setCommandWindow(w.scene_title.select_game_scenario).setCenter(true);
 
@@ -70,17 +63,13 @@ namespace Game.UI.SceneTitle
             lbIntroduction.Width = 240;
             lbIntroduction.addTo(p);
 
-            listView.SelectedIndexChanged += (s, e)
-                => lbIntroduction.Text = selectedGameScenario?.introduction ?? string.Empty;
-
             addConfirmButtons();
         }
 
-        public void setData(IEnumerable<GameScenarioInfo> list)
+        public void setData(IEnumerable<GameScenarioInfo> list) => listView.setData(list.Select(o => new ListViewItem()
         {
-            gameScenarioInfoMap = list.ToDictionary(o => o.name);
-
-            listView.setData(list.toGameScenarioInfoList());
-        }
+            Tag = o.code,
+            Text = o.name
+        }.addColumn(o.name)).ToArray());
     }
 }
