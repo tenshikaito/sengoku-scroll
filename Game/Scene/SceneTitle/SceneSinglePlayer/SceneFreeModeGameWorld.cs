@@ -53,6 +53,7 @@ namespace Game.Scene.SceneTitle.SceneSinglePlayer
 
             if (gwi == null) return;
 
+            gameSystem.currentStartMode = uiSelectGameWorldDialog.checkedStartMode;
             gameSystem.currentGameWorldInfo = gwi;
 
             gameSystem.sceneManager.pushStatus(new SceneFreeModeGameScenario(gameSystem));

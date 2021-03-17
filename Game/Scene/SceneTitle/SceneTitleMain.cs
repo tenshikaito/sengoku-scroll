@@ -29,8 +29,8 @@ namespace Game.Scene
 
             uiSelectModeWindow = new UISelectModeWindow(
                 gameSystem,
-                storyMode,
-                freeMode)
+                personalMode,
+                publicMode)
             {
                 cancelButtonClicked = () =>
                 {
@@ -53,9 +53,9 @@ namespace Game.Scene
             uiSelectModeWindow.Visible = true;
         }
 
-        private void storyMode()
+        private void personalMode()
         {
-            gameSystem.currentGameMode = GameMode.story;
+            gameSystem.currentGameMode = GameMode.personal;
 
             uiSelectModeWindow.Visible = false;
 
@@ -70,16 +70,16 @@ namespace Game.Scene
             dialog.Show(uiSelectModeWindow);
         }
 
-        private void freeMode()
+        private void publicMode()
         {
-            gameSystem.currentGameMode = GameMode.free;
+            gameSystem.currentGameMode = GameMode.@public;
 
             gameSystem.sceneManager.switchStatus(new SceneFreeModeGameWorld(gameSystem));
         }
 
         private void multiplayerGame()
         {
-            gameSystem.currentGameMode = GameMode.free;
+            gameSystem.currentGameMode = GameMode.@public;
 
             gameSystem.sceneToTitleMultiplayerGame();
         }

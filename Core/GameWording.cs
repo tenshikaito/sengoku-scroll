@@ -463,18 +463,16 @@ namespace Core
 
         public string thumbnail => this[nameof(thumbnail)];
 
+        public GameMode game_mode;
+        public StartMode start_mode;
+        public ScenarioMode scenario_mode;
+
         public Terrain terrain;
-
         public Region region;
-
         public Culture culture;
-
         public Religion religion;
-
         public Road road;
-
         public StrongholdType stronghold_type;
-
         public TileMapImageInfo tile_map_image_info;
         public TerrainImage terrain_image;
 
@@ -484,6 +482,10 @@ namespace Core
 
         public GameWording(string locale, Dictionary<string, string> data) : base(locale, data)
         {
+            game_mode = new GameMode(this, nameof(game_mode));
+            start_mode = new StartMode(this, nameof(start_mode));
+            scenario_mode = new ScenarioMode(this, nameof(scenario_mode));
+
             terrain = new Terrain(this, nameof(terrain));
             region = new Region(this, nameof(region));
             culture = new Culture(this, nameof(culture));
@@ -527,10 +529,60 @@ namespace Core
 
     public partial class GameWording
     {
+        public class GameMode : Part
+        {
+            public string personal => this[nameof(personal)];
+
+            public string @public => this[nameof(@public)];
+
+            public string personal_introduction => this[nameof(personal_introduction)];
+
+            public string public_introduction => this[nameof(public_introduction)];
+
+            public GameMode(Wording w, string prefix) : base(w, prefix)
+            {
+            }
+        }
+
+        public class StartMode : Part
+        {
+            public string scenario => this[nameof(scenario)];
+
+            public string random => this[nameof(random)];
+
+            public string creation => this[nameof(creation)];
+
+            public string scenario_introduction => this[nameof(scenario_introduction)];
+
+            public string random_introduction => this[nameof(random_introduction)];
+
+            public string creation_introduction => this[nameof(creation_introduction)];
+
+            public StartMode(Wording w, string prefix) : base(w, prefix)
+            {
+            }
+        }
+
+        public class ScenarioMode : Part
+        {
+            public string story => this[nameof(story)];
+
+            public string open => this[nameof(open)];
+
+            public string story_introduction => this[nameof(story_introduction)];
+
+            public string open_introduction => this[nameof(open_introduction)];
+
+            public ScenarioMode(Wording w, string prefix) : base(w, prefix)
+            {
+            }
+        }
+    }
+
+    public partial class GameWording
+    {
         public class Terrain : Part
         {
-            public string text => this[prefix];
-
             public string is_surface => this[nameof(is_surface)];
 
             public string is_grass => this[nameof(is_grass)];
@@ -564,8 +616,6 @@ namespace Core
 
         public class Region : Part
         {
-            public string text => this[prefix];
-
             public string climate => this[nameof(climate)];
 
             public Region(Wording w, string prefix) : base(w, prefix)
@@ -575,8 +625,6 @@ namespace Core
 
         public class Culture : Part
         {
-            public string text => this[prefix];
-
             public Culture(Wording w, string prefix) : base(w, prefix)
             {
             }
@@ -584,8 +632,6 @@ namespace Core
 
         public class Religion : Part
         {
-            public string text => this[prefix];
-
             public string is_polytheism => this[nameof(is_polytheism)];
 
             public Religion(Wording w, string prefix) : base(w, prefix)
@@ -595,8 +641,6 @@ namespace Core
 
         public class Road : Part
         {
-            public string text => this[prefix];
-
             public Road(Wording w, string prefix) : base(w, prefix)
             {
             }
@@ -604,8 +648,6 @@ namespace Core
 
         public class StrongholdType : Part
         {
-            public string text => this[prefix];
-
             public StrongholdType(Wording w, string prefix) : base(w, prefix)
             {
             }
@@ -613,8 +655,6 @@ namespace Core
 
         public class TileMapImageInfo : Part
         {
-            public string text => this[prefix];
-
             public string tile_size => this[nameof(tile_size)];
 
             public string tile_width => this[nameof(tile_width)];
@@ -640,8 +680,6 @@ namespace Core
 
         public class TerrainImage : Part
         {
-            public string text => this[prefix];
-
             public string animation_view => this[nameof(animation_view)];
 
             public string animation_view_spring => this[nameof(animation_view_spring)];
@@ -686,9 +724,9 @@ namespace Core
 
             public string select_mode => this[nameof(select_mode)];
 
-            public string story_mode => this[nameof(story_mode)];
+            public string personal_mode => this[nameof(personal_mode)];
 
-            public string free_mode => this[nameof(free_mode)];
+            public string public_mode => this[nameof(public_mode)];
 
             public string edit_map => this[nameof(edit_map)];
 

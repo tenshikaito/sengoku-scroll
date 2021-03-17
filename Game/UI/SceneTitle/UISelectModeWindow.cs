@@ -6,13 +6,13 @@ namespace Game.UI.SceneTitle
     {
         public UISelectModeWindow(
             GameSystem gs,
-            Action storyMode,
-            Action freeMode) : base(gs)
+            Action personalMode,
+            Action publicMode) : base(gs)
         {
             initCommandWindow(w.scene_title.select_mode);
 
-            addCommandButton(w.scene_title.story_mode, storyMode);
-            addCommandButton(w.scene_title.free_mode, freeMode);
+            addCommandButton(w.scene_title.personal_mode, personalMode);
+            addCommandButton(w.scene_title.public_mode, publicMode);
 
             addCancelButton();
         }

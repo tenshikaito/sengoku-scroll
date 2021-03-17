@@ -27,9 +27,12 @@ namespace Game
 
         public Dictionary<string, Bitmap> gameWorldThumbnailMap = new Dictionary<string, Bitmap>();
 
-        public GameMode currentGameMode;
         public GameWorldInfo currentGameWorldInfo;
         public GameScenarioInfo currentGameScenarioInfo;
+
+        public GameMode currentGameMode;
+        public StartMode currentStartMode;
+        public ScenarioMode currentScenarioMode;
 
         public GameWording wording { get; set; }
 

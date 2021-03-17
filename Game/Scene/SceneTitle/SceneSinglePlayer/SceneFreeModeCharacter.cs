@@ -47,7 +47,7 @@ namespace Game.Scene.SceneTitle.SceneSinglePlayer
                 }
             };
 
-            _ = loadGameScenarioList();
+            _ = loadGameMasterData();
         }
 
         private void onOkButtonClicked()
@@ -55,18 +55,8 @@ namespace Game.Scene.SceneTitle.SceneSinglePlayer
 
         }
 
-        private async Task loadGameScenarioList()
+        private async Task loadGameMasterData()
         {
-            var data = await GameWorldHelper.getGameScenarioInfoList();
-
-            var list = new List<GameScenarioInfo>()
-            {
-                new GameScenarioInfo()
-            };
-
-            list.AddRange(data);
-
-            uISetCharacterDialog.setData(list);
         }
     }
 }

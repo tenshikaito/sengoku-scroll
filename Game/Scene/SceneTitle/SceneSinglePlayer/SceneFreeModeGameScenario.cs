@@ -51,25 +51,11 @@ namespace Game.Scene.SceneTitle.SceneSinglePlayer
         {
             var scenarioInfo = uiSelectGameScenarioDialog.selectedGameScenario;
 
-            if (scenarioInfo == null) return;
-
             gameSystem.currentGameScenarioInfo = scenarioInfo;
 
             gameSystem.sceneManager.pushStatus(new SceneFreeModeCharacter(gameSystem));
         }
 
-        private async Task loadGameScenarioList()
-        {
-            var data = await GameWorldHelper.getGameScenarioInfoList();
-
-            var list = new List<GameScenarioInfo>()
-            {
-                new GameScenarioInfo()
-            };
-
-            list.AddRange(data);
-
-            uiSelectGameScenarioDialog.setData(list);
-        }
+        private async Task loadGameScenarioList() => uiSelectGameScenarioDialog.setData(await GameWorldHelper.getGameScenarioInfoList());
     }
 }

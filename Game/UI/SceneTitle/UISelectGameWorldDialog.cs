@@ -1,4 +1,5 @@
 ﻿using Core;
+using Core.Code;
 using Game.Extension;
 using System;
 using System.Collections.Generic;
@@ -15,6 +16,8 @@ namespace Game.UI.SceneTitle
         private PictureBox pbThumbnail = new PictureBox();
         private ListView listView = new ListView();
 
+        private RadioButton[] rbStartModeList;
+
         private Dictionary<string, GameWorldInfo> gameWorldInfoMap = new Dictionary<string, GameWorldInfo>();
 
         public GameWorldInfo selectedGameWorld
@@ -22,42 +25,85 @@ namespace Game.UI.SceneTitle
             ? value
             : null;
 
+        public StartMode checkedStartMode => (StartMode)rbStartModeList.Single(o => o.Checked).Tag;
+
         public UISelectGameWorldDialog(GameSystem gs) : base(gs)
         {
             this.setCommandWindow(w.scene_title.select_game_world).setCenter(true);
 
-            var tlp = new TableLayoutPanel()
+            var tlpRoot = new TableLayoutPanel()
             {
                 Dock = DockStyle.Fill,
                 RowCount = 2,
-                ColumnCount = 2,
+                ColumnCount = 1,
                 MinimumSize = new Size(640, 480)
-            }.addRowStyle(40).addRowStyle(60).addColumnStyle(60).addColumnStyle(40).addTo(panel);
+            }.addRowStyle(40).addRowStyle(60).addTo(panel);
 
-            (GroupBox gb, Panel p) createGroupBox(string text)
+            var tlpTop = new TableLayoutPanel()
+            {
+                Dock = DockStyle.Fill,
+                RowCount = 1,
+                ColumnCount = 2,
+            }.addColumnStyle(80).addColumnStyle(20).addTo(tlpRoot);
+
+            var tlpBottom = new TableLayoutPanel()
+            {
+                Dock = DockStyle.Fill,
+                RowCount = 1,
+                ColumnCount = 2,
+            }.addColumnStyle(60).addColumnStyle(40).addTo(tlpRoot);
+
+            (GroupBox gb, Panel p) createGroupBox(string text, Panel plRoot, Panel p = null)
             {
                 var gb = new GroupBox()
                 {
                     Text = text,
                     Dock = DockStyle.Fill,
-                }.addTo(tlp);
+                }.addTo(plRoot);
 
-                var p = new Panel()
-                {
-                    Dock = DockStyle.Fill
-                }.addTo(gb);
+                if (p == null) p = new Panel();
+
+                p.Dock = DockStyle.Fill;
+
+                p.addTo(gb);
 
                 return (gb, p);
             }
 
-            var (gb, p) = createGroupBox(w.thumbnail);
+            var (gb, p) = createGroupBox(w.thumbnail, tlpTop);
 
-            // TODO Bitmap
+#warning TODO thumbnail
             new Label().init("thumbnail").addTo(p);
 
-            tlp.SetColumnSpan(gb, 2);
+            var flp = new FlowLayoutPanel()
+            {
+                FlowDirection = FlowDirection.TopDown
+            };
 
-            (gb, p) = createGroupBox(w.game_world);
+            RadioButton addStartMode(string text, StartMode sm, bool isChecked, string introductionText)
+            {
+                var rb = new RadioButton()
+                {
+                    Text = text,
+                    Tag = sm,
+                    Checked = isChecked
+                }.addTo(flp);
+
+                new ToolTip().SetToolTip(rb, introductionText);
+
+                return rb;
+            }
+
+            rbStartModeList = new[]
+            {
+                addStartMode(w.start_mode.scenario, StartMode.scenario, true,w.start_mode.scenario_introduction ),
+                addStartMode(w.start_mode.random, StartMode.random, false,w.start_mode.random_introduction),
+                addStartMode(w.start_mode.creation, StartMode.creation, false,w.start_mode.creation_introduction)
+            };
+
+            (gb, p) = createGroupBox(w.start_mode, tlpTop, flp);
+
+            (gb, p) = createGroupBox(w.game_world, tlpBottom);
 
             listView
                 .init()
@@ -67,7 +113,7 @@ namespace Game.UI.SceneTitle
 
             listView.DoubleClick += (s, e) => btnOk.PerformClick();
 
-            (gb, p) = createGroupBox(w.introduction);
+            (gb, p) = createGroupBox(w.introduction, tlpBottom);
 
             lbIntroduction.Width = 240;
             lbIntroduction.addTo(p);

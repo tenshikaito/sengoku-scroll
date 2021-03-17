@@ -21,6 +21,8 @@ namespace Library
             protected Wording wording;
             protected string prefix;
 
+            public string text => this[prefix];
+
             public string this[string key] => wording.data.TryGetValue($"{prefix}.{key}", out var value) ? value : key;
 
             public Part(Wording w, string prefix)
@@ -29,6 +31,8 @@ namespace Library
 
                 this.prefix = prefix;
             }
+
+            public static implicit operator string(Part p) => p.text;
         }
 
         public sealed class Association
