@@ -10,7 +10,7 @@ using WinLibrary.Graphic;
 
 namespace Game
 {
-    public class GameSystem : IGameSystem<GameWording>
+    public class GameSystem : IGameSystem
     {
         public FormMain formMain;
 
@@ -34,7 +34,8 @@ namespace Game
         public StartMode currentStartMode;
         public ScenarioMode currentScenarioMode;
 
-        public GameWording wording { get; set; }
+        public IWording wording => gameWording;
+        public GameWording gameWording { get; set; }
 
         public int screenWidth => option.screenWidth;
         public int screenHeight => option.screenHeight;
@@ -104,7 +105,7 @@ namespace Game
 
         public SceneWaiting sceneToWaiting()
         {
-            var s = new SceneWaiting(this, $"{wording.loading} ...");
+            var s = new SceneWaiting(this, $"{gameWording.loading} ...");
 
             sceneManager.switchStatus(s);
 

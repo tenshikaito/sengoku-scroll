@@ -1,16 +1,19 @@
 ﻿using Core;
-using WinLibrary;
-using WinLibrary.UI;
 
 namespace Game.UI
 {
-    public class UIConfirmDialog : UIConfirmDialog<GameWording>
+    public class UIConfirmDialog : WinLibrary.UI.UIConfirmDialog
     {
-        public UIConfirmDialog(IGameSystem<GameWording> gs) : base(gs)
+        protected new GameSystem gameSystem { get; }
+
+        protected new GameWording w => gameSystem.gameWording;
+
+        public UIConfirmDialog(GameSystem gs) : base(gs)
         {
+            gameSystem = gs;
         }
 
-        public UIConfirmDialog(IGameSystem<GameWording> gs, string title, string text) : base(gs, title, text)
+        public UIConfirmDialog(GameSystem gs, string title, string text) : base(gs, title, text)
         {
         }
     }

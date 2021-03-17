@@ -1,11 +1,10 @@
-﻿using Library;
-using System;
+﻿using System;
 using System.Windows.Forms;
 using WinLibrary.Extension;
 
 namespace WinLibrary.UI
 {
-    public class UIConfirmDialog<TWording> : UIDialog<TWording> where TWording : IWording
+    public class UIConfirmDialog : UIDialog
     {
         public Action cancelButtonClicked;
 
@@ -17,23 +16,23 @@ namespace WinLibrary.UI
             set => btnCancel.Enabled = value;
         }
 
-        public UIConfirmDialog(IGameSystem<TWording> gs) : base(gs)
+        public UIConfirmDialog(IGameSystem gs) : base(gs)
         {
             CancelButton = btnCancel;
 
             btnCancel.Click += (s, e) => cancelButtonClicked?.Invoke();
         }
 
-        public UIConfirmDialog(IGameSystem<TWording> gs, string title, string text) : this(gs)
+        public UIConfirmDialog(IGameSystem gs, string title, string text) : this(gs)
         {
-            this.setCommandWindow(title).addMessage<UIConfirmDialog<TWording>>(text);
+            this.setCommandWindow(title).addMessage<UIConfirmDialog>(text);
 
             addConfirmButtons();
 
             cancelButtonClicked = Close;
         }
 
-        public UIConfirmDialog<TWording> addConfirmButtons(string okButtonText = null, string cancelButtonText = null)
+        public UIConfirmDialog addConfirmButtons(string okButtonText = null, string cancelButtonText = null)
         {
             var tlp = new TableLayoutPanel()
             {

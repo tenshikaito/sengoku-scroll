@@ -1,13 +1,16 @@
 ﻿using Core;
-using WinLibrary;
-using WinLibrary.UI;
 
 namespace Game.UI
 {
-    public abstract class UICommandWindow : UICommandWindow<GameWording>
+    public abstract class UICommandWindow : WinLibrary.UI.UICommandWindow
     {
-        protected UICommandWindow(IGameSystem<GameWording> gs) : base(gs)
+        protected new GameSystem gameSystem { get; }
+
+        protected new GameWording w => gameSystem.gameWording;
+
+        protected UICommandWindow(GameSystem gs) : base(gs)
         {
+            gameSystem = gs;
         }
     }
 }

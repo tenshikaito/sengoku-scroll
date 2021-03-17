@@ -1,11 +1,10 @@
-﻿using Library;
-using System;
+﻿using System;
 using System.Windows.Forms;
 using WinLibrary.Extension;
 
 namespace WinLibrary.UI
 {
-    public class UIDialog<TWording> : UIWindow<TWording> where TWording : IWording
+    public class UIDialog : UIWindow
     {
         public Action okButtonClicked;
 
@@ -17,7 +16,7 @@ namespace WinLibrary.UI
             set => btnOk.Enabled = value;
         }
 
-        public UIDialog(IGameSystem<TWording> gs) : base(gs)
+        public UIDialog(IGameSystem gs) : base(gs)
         {
             AcceptButton = btnOk;
             CancelButton = btnOk;
@@ -25,16 +24,16 @@ namespace WinLibrary.UI
             btnOk.Click += (s, e) => okButtonClicked?.Invoke();
         }
 
-        public UIDialog(IGameSystem<TWording> gs, string title, string text) : this(gs)
+        public UIDialog(IGameSystem gs, string title, string text) : this(gs)
         {
-            this.setCommandWindow(title).addMessage<UIDialog<TWording>>(text);
+            this.setCommandWindow(title).addMessage<UIDialog>(text);
 
             addConfirmButton();
 
             okButtonClicked = Close;
         }
 
-        protected UIDialog<TWording> addConfirmButton(string okButtonText = null)
+        protected UIDialog addConfirmButton(string okButtonText = null)
         {
             btnOk.addTo(panel);
             btnOk.Text = okButtonText ?? w.ok;

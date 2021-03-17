@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Windows.Forms;
-using WinLibrary.Extension;
 
 namespace Game.UI.SceneTitle
 {

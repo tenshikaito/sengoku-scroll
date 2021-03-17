@@ -48,7 +48,7 @@ namespace Game
             {
                 formMain = this,
                 option = option,
-                wording = wording,
+                gameWording = wording,
                 players = players,
                 sceneManager = sceneManager,
                 gameGraphic = gameGraphic

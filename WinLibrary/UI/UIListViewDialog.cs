@@ -1,5 +1,4 @@
-﻿using Library;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -8,14 +7,14 @@ using WinLibrary.Extension;
 
 namespace WinLibrary.UI
 {
-    public class UIListViewDialog<TWording> : UIConfirmDialog<TWording> where TWording : IWording
+    public class UIListViewDialog : UIConfirmDialog
     {
         protected ListView listView;
         protected TableLayoutPanel pButtons;
 
         public string selectedValue => listView.FocusedItem == null ? null : (string)listView.FocusedItem.Tag;
 
-        public UIListViewDialog(IGameSystem<TWording> gs) : base(gs)
+        public UIListViewDialog(IGameSystem gs) : base(gs)
         {
             var tlp = new TableLayoutPanel()
             {

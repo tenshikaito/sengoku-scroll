@@ -1,8 +1,5 @@
-﻿using Core;
-using Core.Helper;
+﻿using Core.Helper;
 using Game.UI.SceneTitle;
-using Library.Helper;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Game.Scene.SceneTitle.SceneSinglePlayer

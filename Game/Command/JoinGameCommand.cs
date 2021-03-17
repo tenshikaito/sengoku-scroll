@@ -10,7 +10,7 @@ namespace Game.Command
         {
             // 流程：将自身的身份信息发送到服务端、在服务端自动创建好角色后将角色信息返回
 
-            var w = gs.wording;
+            var w = gs.gameWording;
 
             var dispatcher = gs.formMain.dispatcher;
 

@@ -2,9 +2,9 @@
 
 namespace WinLibrary
 {
-    public interface IGameSystem<TWording> where TWording : IWording
+    public interface IGameSystem
     {
-        TWording wording { get; }
+        IWording wording { get; }
 
         FormGame formGame { get; }
     }

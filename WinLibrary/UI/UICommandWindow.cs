@@ -1,15 +1,14 @@
-﻿using Library;
-using System;
+﻿using System;
 using System.Windows.Forms;
 using WinLibrary.Extension;
 
 namespace WinLibrary.UI
 {
-    public class UICommandWindow<TWording> : UIWindow<TWording> where TWording : IWording
+    public class UICommandWindow : UIWindow
     {
         public Action cancelButtonClicked;
 
-        public UICommandWindow(IGameSystem<TWording> gs) : base(gs)
+        public UICommandWindow(IGameSystem gs) : base(gs)
         {
         }
 

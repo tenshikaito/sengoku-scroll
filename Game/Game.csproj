@@ -16,7 +16,8 @@
   <ItemGroup>
     <Compile Update="UI\SceneTitle\UISetCharacterDialog.cs" />
     <Compile Update="UI\SceneTitle\UISelectModeWindow.cs" />
-    <Compile Update="UI\UICommandWindow.cs">
+    <Compile Update="UI\UICommandWindow.cs" />
+    <Compile Update="UI\UIDialog.cs">
       <SubType>Form</SubType>
     </Compile>
   </ItemGroup>

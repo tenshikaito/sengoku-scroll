@@ -1,13 +1,16 @@
 ﻿using Core;
-using WinLibrary;
-using WinLibrary.UI;
 
 namespace Game.UI
 {
-    public class UIEditableListViewDialog : UIEditableListViewDialog<GameWording>
+    public class UIEditableListViewDialog : WinLibrary.UI.UIEditableListViewDialog
     {
-        public UIEditableListViewDialog(IGameSystem<GameWording> gs) : base(gs)
+        protected new GameSystem gameSystem { get; }
+
+        protected new GameWording w => gameSystem.gameWording;
+
+        public UIEditableListViewDialog(GameSystem gs) : base(gs)
         {
+            gameSystem = gs;
         }
     }
 }

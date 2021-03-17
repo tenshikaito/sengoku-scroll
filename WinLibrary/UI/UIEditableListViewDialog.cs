@@ -1,11 +1,10 @@
-﻿using Library;
-using System;
+﻿using System;
 using System.Windows.Forms;
 using WinLibrary.Extension;
 
 namespace WinLibrary.UI
 {
-    public class UIEditableListViewDialog<TWording> : UIListViewDialog<TWording> where TWording : IWording
+    public class UIEditableListViewDialog : UIListViewDialog
     {
         protected Button btnAdd;
         protected Button btnEdit;
@@ -15,7 +14,7 @@ namespace WinLibrary.UI
         public Action<string> removeButtonClicked;
         public Action<string> editButtonClicked;
 
-        public UIEditableListViewDialog(IGameSystem<TWording> gs) : base(gs)
+        public UIEditableListViewDialog(IGameSystem gs) : base(gs)
         {
             var p = pButtons;
 

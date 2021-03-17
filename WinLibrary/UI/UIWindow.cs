@@ -4,15 +4,15 @@ using WinLibrary.Extension;
 
 namespace WinLibrary.UI
 {
-    public abstract class UIWindow<TWording> : Form where TWording : IWording
+    public abstract class UIWindow : Form
     {
-        protected IGameSystem<TWording> gameSystem;
+        protected IGameSystem gameSystem;
 
         protected FlowLayoutPanel panel = new FlowLayoutPanel();
 
-        protected TWording w => gameSystem.wording;
+        protected IWording w => gameSystem.wording;
 
-        public UIWindow(IGameSystem<TWording> gs)
+        public UIWindow(IGameSystem gs)
         {
             gameSystem = gs;
 
@@ -23,7 +23,7 @@ namespace WinLibrary.UI
             this.setAutoSizeF().setCenter();
         }
 
-        protected T addMessage<T>(string text) where T : UIWindow<TWording>
+        protected T addMessage<T>(string text) where T : UIWindow
         {
             new Label() { Margin = new Padding(20) }.init(text).setAutoSize().setMiddleCenter().addTo(panel);
 
