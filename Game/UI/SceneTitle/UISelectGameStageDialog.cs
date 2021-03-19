@@ -10,7 +10,7 @@ using static Game.Helper.UIHelper;
 
 namespace Game.UI.SceneTitle
 {
-    public class UISelectGameWorldDialog : UIConfirmDialog
+    public class UISelectGameStageDialog : UIConfirmDialog
     {
         private Label lbIntroduction = new Label();
         private PictureBox pbThumbnail = new PictureBox();
@@ -18,18 +18,18 @@ namespace Game.UI.SceneTitle
 
         private RadioButton[] rbStartModeList;
 
-        private Dictionary<string, GameWorldInfo> gameWorldInfoMap = new Dictionary<string, GameWorldInfo>();
+        private Dictionary<string, GameStageInfo> gameStageInfoMap = new Dictionary<string, GameStageInfo>();
 
-        public GameWorldInfo selectedGameWorld
-            => listView.FocusedItem != null && gameWorldInfoMap.TryGetValue(listView.FocusedItem.Tag as string, out var value)
+        public GameStageInfo selectedGameStage
+            => listView.FocusedItem != null && gameStageInfoMap.TryGetValue(listView.FocusedItem.Tag as string, out var value)
             ? value
             : null;
 
         public StartMode checkedStartMode => (StartMode)rbStartModeList.Single(o => o.Checked).Tag;
 
-        public UISelectGameWorldDialog(GameSystem gs) : base(gs)
+        public UISelectGameStageDialog(GameSystem gs) : base(gs)
         {
-            this.setCommandWindow(w.scene_title.select_game_world).setCenter(true);
+            this.setCommandWindow(w.scene_title.select_game_stage).setCenter(true);
 
             var tlpRoot = new TableLayoutPanel()
             {
@@ -73,7 +73,7 @@ namespace Game.UI.SceneTitle
 
             (gb, p) = createGroupBox(w.start_mode, tlpTop, flp);
 
-            (gb, p) = createGroupBox(w.game_world, tlpBottom);
+            (gb, p) = createGroupBox(w.game_stage, tlpBottom);
 
             listView
                 .init()
@@ -89,7 +89,7 @@ namespace Game.UI.SceneTitle
             lbIntroduction.addTo(p);
 
             listView.SelectedIndexChanged += (s, e)
-                => lbIntroduction.Text = selectedGameWorld?.introduction ?? string.Empty;
+                => lbIntroduction.Text = selectedGameStage?.introduction ?? string.Empty;
 
             addConfirmButtons();
         }
@@ -109,11 +109,11 @@ namespace Game.UI.SceneTitle
         }
 
 
-        public void setData(IEnumerable<GameWorldInfo> list)
+        public void setData(IEnumerable<GameStageInfo> list)
         {
-            gameWorldInfoMap = list.ToDictionary(o => o.name);
+            gameStageInfoMap = list.ToDictionary(o => o.name);
 
-            listView.setData(list.toGameWorldInfoList());
+            listView.setData(list.toGameStageInfoList());
         }
     }
 }

@@ -429,6 +429,10 @@ namespace Core
 
         public string game_world => this[nameof(game_world)];
 
+        public string game_stage => this[nameof(game_stage)];
+
+        public string game_scenario => this[nameof(game_scenario)];
+
         public string main_tile_map => this[nameof(main_tile_map)];
 
         public string detail_tile_map => this[nameof(detail_tile_map)];
@@ -473,6 +477,10 @@ namespace Core
         public Religion religion;
         public Road road;
         public StrongholdType stronghold_type;
+
+        public Character character;
+        public Force force;
+
         public TileMapImageInfo tile_map_image_info;
         public TerrainImage terrain_image;
 
@@ -492,6 +500,8 @@ namespace Core
             religion = new Religion(this, nameof(religion));
             road = new Road(this, nameof(road));
             stronghold_type = new StrongholdType(this, nameof(stronghold_type));
+
+            force = new Force(this, nameof(force));
 
             tile_map_image_info = new TileMapImageInfo(this, nameof(tile_map_image_info));
             terrain_image = new TerrainImage(this, nameof(terrain_image));
@@ -653,6 +663,20 @@ namespace Core
             }
         }
 
+        public class Character : Part
+        {
+            public Character(Wording w, string prefix) : base(w, prefix)
+            {
+            }
+        }
+
+        public class Force : Part
+        {
+            public Force(Wording w, string prefix) : base(w, prefix)
+            {
+            }
+        }
+
         public class TileMapImageInfo : Part
         {
             public string tile_size => this[nameof(tile_size)];
@@ -718,7 +742,11 @@ namespace Core
 
             public string select_game_world => this[nameof(select_game_world)];
 
+            public string select_game_stage => this[nameof(select_game_stage)];
+
             public string select_game_scenario => this[nameof(select_game_scenario)];
+
+            public string select_character => this[nameof(select_character)];
 
             public string multiplayer_game => this[nameof(multiplayer_game)];
 

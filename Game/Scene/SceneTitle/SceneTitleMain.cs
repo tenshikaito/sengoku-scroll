@@ -1,7 +1,13 @@
-﻿using Core.Code;
-using Game.Scene.SceneTitle.SceneSinglePlayer;
+﻿using Core;
+using Core.Code;
+using Core.Data;
+using Core.Helper;
+using Game.Scene.SceneTitle.SceneStartGame;
 using Game.UI;
 using Game.UI.SceneTitle;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Game.Scene
 {
@@ -21,7 +27,8 @@ namespace Game.Scene
                 singlePlayerGame,
                 multiplayerGame,
                 editGameWorld,
-                selectPlayer)
+                selectPlayer,
+                showDebugDialog)
             {
                 Text = gameSystem.currentPlayer.name,
                 Visible = true
@@ -39,12 +46,60 @@ namespace Game.Scene
                 },
                 Visible = false
             };
+
+            initDebugCommand();
         }
 
         public override void finish()
         {
             uiMainMenuWindow?.Close();
             uiSelectModeWindow?.Close();
+        }
+
+        private UIDebugWindow uiDebugWindow;
+        private Dictionary<string, Func<string, Task>> commandMap = new Dictionary<string, Func<string, Task>>();
+
+        private void initDebugCommand()
+        {
+            void add(string name, Func<string, Task> action) => commandMap[name] = action;
+
+            add(nameof(test), test);
+        }
+
+        private void showDebugDialog()
+        {
+            uiDebugWindow = new UIDebugWindow(gameSystem, onDeubgCommandInput)
+            {
+                Visible = true,
+            };
+
+            uiDebugWindow.FormClosed += (s, e) => uiDebugWindow = null;
+        }
+
+        private async Task onDeubgCommandInput(string text)
+        {
+            appendCommandOutputText($"{DateTime.Now}>{text}");
+
+            if (commandMap.TryGetValue(text, out var action)) await action(text);
+            else appendCommandOutputText("no command found.");
+        }
+
+        private void appendCommandOutputText(string text)
+        {
+            uiDebugWindow?.appendOutputText(text);
+        }
+
+        private async Task test(string text)
+        {
+            await GameStageHelper.save("test", new GameStageInfo()
+            {
+                name = "test",
+                width = 1000,
+                height = 800,
+                introduction = "introduction"
+            }, new TileMap(new Library.Component.TileMap2D.Size(1000, 800)));
+
+            appendCommandOutputText("completed");
         }
 
         private void singlePlayerGame()
@@ -74,7 +129,7 @@ namespace Game.Scene
         {
             gameSystem.currentGameMode = GameMode.@public;
 
-            gameSystem.sceneManager.switchStatus(new SceneFreeModeGameWorld(gameSystem));
+            gameSystem.sceneManager.switchStatus(new ScenePublicModeGameStage(gameSystem));
         }
 
         private void multiplayerGame()

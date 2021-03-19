@@ -9,7 +9,8 @@ namespace Game.UI.SceneTitle
             Action singlePlayerGame,
             Action multiplayerGame,
             Action editMap,
-            Action selectPlayer)
+            Action selectPlayer,
+            Action debug)
             : base(gs)
         {
             initCommandWindow(w.scene_title.start);
@@ -18,6 +19,7 @@ namespace Game.UI.SceneTitle
             addCommandButton(w.scene_title.multiplayer_game, multiplayerGame);
             addCommandButton(w.scene_title.edit_map, editMap);
             addCommandButton(w.scene_title.select_player, selectPlayer);
+            addCommandButton("debug", debug);
         }
     }
 }

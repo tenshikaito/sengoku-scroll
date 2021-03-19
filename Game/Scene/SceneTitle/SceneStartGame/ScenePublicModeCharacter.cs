@@ -1,13 +1,13 @@
 ﻿using Game.UI.SceneTitle;
 using System.Threading.Tasks;
 
-namespace Game.Scene.SceneTitle.SceneSinglePlayer
+namespace Game.Scene.SceneTitle.SceneStartGame
 {
-    public class SceneFreeModeCharacter : SceneBase
+    public class ScenePublicModeCharacter : SceneBase
     {
-        private UISetCharacterDialog uISetCharacterDialog;
+        private UISetCharacterDialog uiSetCharacterDialog;
 
-        public SceneFreeModeCharacter(GameSystem gs) : base(gs)
+        public ScenePublicModeCharacter(GameSystem gs) : base(gs)
         {
         }
 
@@ -18,22 +18,22 @@ namespace Game.Scene.SceneTitle.SceneSinglePlayer
 
         public override void sleep()
         {
-            uISetCharacterDialog.Visible = false;
+            uiSetCharacterDialog.Visible = false;
         }
 
         public override void resume()
         {
-            uISetCharacterDialog.Visible = true;
+            uiSetCharacterDialog.Visible = true;
         }
 
         public override void finish()
         {
-            uISetCharacterDialog?.Close();
+            uiSetCharacterDialog?.Close();
         }
 
         private void onShow()
         {
-            uISetCharacterDialog = new UISetCharacterDialog(gameSystem)
+            uiSetCharacterDialog = new UISetCharacterDialog(gameSystem)
             {
                 Visible = true,
                 okButtonClicked = onOkButtonClicked,

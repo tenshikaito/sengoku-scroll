@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using WinLibrary.Extension;
+using static Game.Helper.UIHelper;
 
 namespace Game.UI.SceneTitle
 {
@@ -52,23 +53,6 @@ namespace Game.UI.SceneTitle
                 ColumnCount = 2,
             }.addColumnStyle(60).addColumnStyle(40).addTo(tlpRoot);
 
-            (GroupBox gb, Panel p) createGroupBox(string text, Panel plRoot, Panel p = null)
-            {
-                var gb = new GroupBox()
-                {
-                    Text = text,
-                    Dock = DockStyle.Fill,
-                }.addTo(plRoot);
-
-                if (p == null) p = new Panel();
-
-                p.Dock = DockStyle.Fill;
-
-                p.addTo(gb);
-
-                return (gb, p);
-            }
-
             var (gb, p) = createGroupBox(w.thumbnail, tlpTop);
 
 #warning TODO thumbnail
@@ -76,35 +60,21 @@ namespace Game.UI.SceneTitle
 
             var flp = new FlowLayoutPanel()
             {
+                Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.TopDown
             };
-
-            RadioButton addStartMode(string text, ScenarioMode sm, bool isChecked, bool isEnabled, string introductionText)
-            {
-                var rb = new RadioButton()
-                {
-                    Text = text,
-                    Tag = sm,
-                    Checked = isChecked,
-                    Enabled = isEnabled,
-                }.addTo(flp);
-
-                new ToolTip().SetToolTip(rb, introductionText);
-
-                return rb;
-            }
 
             var gm = gs.currentGameMode;
 
             rbStartModeList = new[]
             {
-                addStartMode(w.scenario_mode.story, ScenarioMode.story, gm == GameMode.personal, gm == GameMode.personal, w.scenario_mode.story_introduction),
-                addStartMode(w.scenario_mode.open, ScenarioMode.open, gm != GameMode.personal, true, w.scenario_mode.open_introduction),
+                addStartMode(w.scenario_mode.story, ScenarioMode.story, flp, gm == GameMode.personal, gm == GameMode.personal, w.scenario_mode.story_introduction),
+                addStartMode(w.scenario_mode.open, ScenarioMode.open, flp, gm != GameMode.personal, true, w.scenario_mode.open_introduction),
             };
 
             (gb, p) = createGroupBox(w.start_mode, tlpTop, flp);
 
-            (gb, p) = createGroupBox(w.game_world, tlpBottom);
+            (gb, p) = createGroupBox(w.game_scenario, tlpBottom);
 
             listView
                 .init()
@@ -122,6 +92,21 @@ namespace Game.UI.SceneTitle
                 => lbIntroduction.Text = selectedGameScenario?.introduction ?? string.Empty;
 
             addConfirmButtons();
+        }
+
+        RadioButton addStartMode(string text, ScenarioMode sm, FlowLayoutPanel flp, bool isChecked, bool isEnabled, string introductionText)
+        {
+            var rb = new RadioButton()
+            {
+                Text = text,
+                Tag = sm,
+                Checked = isChecked,
+                Enabled = isEnabled,
+            }.addTo(flp);
+
+            new ToolTip().SetToolTip(rb, introductionText);
+
+            return rb;
         }
 
         public void setData(IEnumerable<GameScenarioInfo> list)

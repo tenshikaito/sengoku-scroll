@@ -14,12 +14,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Update="UI\SceneTitle\UISelectCharacterDialog.cs" />
+    <Compile Update="UI\SceneTitle\UISelectGameStageDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="UI\SceneTitle\UISetCharacterDialog.cs" />
     <Compile Update="UI\SceneTitle\UISelectModeWindow.cs" />
     <Compile Update="UI\UICommandWindow.cs" />
     <Compile Update="UI\UIDialog.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="UI\UIListViewDialog.cs" />
   </ItemGroup>
 
   <ItemGroup>

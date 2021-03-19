@@ -2,13 +2,13 @@
 using Game.UI.SceneTitle;
 using System.Threading.Tasks;
 
-namespace Game.Scene.SceneTitle.SceneSinglePlayer
+namespace Game.Scene.SceneTitle.SceneStartGame
 {
-    public class SceneFreeModeGameScenario : SceneBase
+    public class ScenePublicModeGameScenario : SceneBase
     {
         private UISelectGameScenarioDialog uiSelectGameScenarioDialog;
 
-        public SceneFreeModeGameScenario(GameSystem gs) : base(gs)
+        public ScenePublicModeGameScenario(GameSystem gs) : base(gs)
         {
         }
 
@@ -50,7 +50,7 @@ namespace Game.Scene.SceneTitle.SceneSinglePlayer
 
             gameSystem.currentGameScenarioInfo = scenarioInfo;
 
-            gameSystem.sceneManager.pushStatus(new SceneFreeModeCharacter(gameSystem));
+            gameSystem.sceneManager.pushStatus(new ScenePublicModeCharacter(gameSystem));
         }
 
         private async Task loadGameScenarioList() => uiSelectGameScenarioDialog.setData(await GameWorldHelper.getGameScenarioInfoList());

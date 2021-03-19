@@ -15,6 +15,13 @@ namespace Game.Extension
                 Text = o.name
             }.addColumn($"{o.width}x{o.height}")).ToArray();
 
+        public static ListViewItem[] toGameStageInfoList(this IEnumerable<GameStageInfo> list) 
+            => list.Select(o=> new ListViewItem()
+            {
+                Tag = o.name,
+                Text = o.name
+            }.addColumn($"{o.width}x{o.height}")).ToArray();
+
         public static ListViewItem[] toGameScenarioInfoList(this IEnumerable<GameScenarioInfo> list)
             => list.Select(o => new ListViewItem()
             {
