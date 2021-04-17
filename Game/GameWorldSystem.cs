@@ -6,7 +6,7 @@ namespace Game
 {
     public class GameWorldSystem : GameWorld
     {
-        public Player currentPlayer;
+        public Character currentPlayer;
 
         public Camera camera;
 

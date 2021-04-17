@@ -1,5 +1,4 @@
 ﻿using System.IO;
-using System.Threading.Tasks;
 using static Library.Helper.FileHelper;
 
 namespace Core.Helper
@@ -8,9 +7,9 @@ namespace Core.Helper
     {
         private static string optionPath { get; } = Directory.GetCurrentDirectory() + "/option.json";
 
-        public static async Task<T> loadOption<T>() => await read<T>(optionPath);
+        public static T loadOption<T>() => read<T>(optionPath);
 
-        public static async Task saveOption(object o) => await write(optionPath, o, true);
+        public static void saveOption(object o) => write(optionPath, o, true);
 
     }
 }

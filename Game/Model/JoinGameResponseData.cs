@@ -5,6 +5,6 @@ namespace Game.Model
     public class JoinGameResponseData
     {
         public GameWorldSystem gameWorldData;
-        public Player player;
+        public Character player;
     }
 }

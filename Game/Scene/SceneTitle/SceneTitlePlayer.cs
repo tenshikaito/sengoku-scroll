@@ -57,7 +57,7 @@ namespace Game.Scene
                         servers = new List<ServerInfo>()
                     });
 
-                    await PlayerHelper.savePlayer(gameSystem.players);
+                    PlayerHelper.savePlayer(gameSystem.players);
 
                     uiPlayerDialog.setData(gameSystem.players.Select(o => o.name).ToList());
 
@@ -82,11 +82,11 @@ namespace Game.Scene
 
             var dialog = new UIConfirmDialog(gameSystem, "confirm", $"remove player {name} ?");
 
-            dialog.okButtonClicked = async () =>
+            dialog.okButtonClicked = () =>
             {
                 gameSystem.players.RemoveAll(o => o.name == name);
 
-                await PlayerHelper.savePlayer(gameSystem.players);
+                PlayerHelper.savePlayer(gameSystem.players);
 
                 uiPlayerDialog.setData(gameSystem.players.Select(o => o.name).ToList());
 
@@ -103,7 +103,7 @@ namespace Game.Scene
             uiPlayerDetailDialog = new UIPlayerDetailDialog(gameSystem)
             {
                 Text = gameSystem.wording.edit,
-                okButtonClicked = async () =>
+                okButtonClicked = () =>
                 {
                     var newName = uiPlayerDetailDialog.name;
 
@@ -111,7 +111,7 @@ namespace Game.Scene
 
                     gameSystem.players.SingleOrDefault(o => o.name == oldName).name = newName;
 
-                    await PlayerHelper.savePlayer(gameSystem.players);
+                    PlayerHelper.savePlayer(gameSystem.players);
 
                     uiPlayerDialog.setData(gameSystem.players.Select(o => o.name).ToList());
 

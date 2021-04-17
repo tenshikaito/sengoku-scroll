@@ -7,8 +7,8 @@ namespace Game.UI
 {
     public class UIDebugWindow : UIWindow
     {
-        private TextBox tbOutput;
-        private TextBox tbInput;
+        private readonly TextBox tbOutput;
+        private readonly TextBox tbInput;
 
         public UIDebugWindow(GameSystem gs, Func<string, Task> inputText) : base(gs)
         {
@@ -51,12 +51,28 @@ namespace Game.UI
             tbInput.Focus();
         }
 
-        public void appendOutputText(string text) => BeginInvoke(new Action(() =>
+        public UIDebugWindow appendOutputText(string text)
         {
             tbOutput.AppendText(text);
-            tbOutput.AppendText(Environment.NewLine);
-        }));
 
-        public void clearOutputText() => BeginInvoke(new Action(() => tbOutput.Text = string.Empty));
+            return this;
+        }
+
+        public UIDebugWindow appendOutputNewLine()
+        {
+            tbOutput.AppendText(Environment.NewLine);
+
+            return this;
+        }
+
+        public void invokeAppendOutputText(string text)
+            => BeginInvoke(new Action(() => appendOutputText(text)));
+
+        public void invokeAppendOutputNewLine()
+            => BeginInvoke(new Action(() => appendOutputNewLine()));
+
+        public void clearOutputText() => tbOutput.Clear();
+
+        public void invokeClearOutputText() => BeginInvoke(new Action(() => tbOutput.Clear()));
     }
 }

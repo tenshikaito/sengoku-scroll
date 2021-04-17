@@ -12,11 +12,11 @@ namespace Game.UI.SceneTitle
 {
     public class UISelectGameScenarioDialog : UIConfirmDialog
     {
-        private Label lbIntroduction = new Label();
-        private PictureBox pbThumbnail = new PictureBox();
-        private ListView listView = new ListView();
+        private readonly Label lbIntroduction = new Label();
+        private readonly PictureBox pbThumbnail = new PictureBox();
+        private readonly ListView listView = new ListView();
 
-        private RadioButton[] rbStartModeList;
+        private readonly RadioButton[] rbStartModeList;
 
         private Dictionary<string, GameScenarioInfo> gameScenarioInfoMap = new Dictionary<string, GameScenarioInfo>();
 

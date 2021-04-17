@@ -44,7 +44,7 @@ namespace Game.Scene.SceneTitle.SceneStartGame
                 }
             };
 
-            _ = loadGameWorldList();
+            //_ = loadGameWorldList();
         }
 
         private void onOkButtonClicked()
@@ -59,6 +59,6 @@ namespace Game.Scene.SceneTitle.SceneStartGame
             gameSystem.sceneManager.pushStatus(new ScenePublicModeGameScenario(gameSystem));
         }
 
-        private async Task loadGameWorldList() => uiSelectGameStageDialog.setData(await GameStageHelper.getInfoList());
+        //private async Task loadGameWorldList() => uiSelectGameStageDialog.setData(await GameStageHelper.getInfoList());
     }
 }

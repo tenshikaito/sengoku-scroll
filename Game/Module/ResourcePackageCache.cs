@@ -1,4 +1,4 @@
-﻿using Core.Module;
+﻿using Core;
 using System.Drawing;
 using WinLibrary.Module;
 

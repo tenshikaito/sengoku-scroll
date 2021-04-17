@@ -15,7 +15,7 @@ namespace Game.UI.GameComponent
         private readonly SpriteText stForce;
         private readonly SpriteText stHp;
 
-        private Player player => gameWorld.currentPlayer;
+        private Character player => gameWorld.currentPlayer;
 
         public UIPlayerInfoPanel(GameSystem gs, GameWorldSystem gw, Point position)
         {

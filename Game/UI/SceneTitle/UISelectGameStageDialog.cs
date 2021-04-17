@@ -12,15 +12,15 @@ namespace Game.UI.SceneTitle
 {
     public class UISelectGameStageDialog : UIConfirmDialog
     {
-        private Label lbIntroduction = new Label();
-        private PictureBox pbThumbnail = new PictureBox();
-        private ListView listView = new ListView();
+        private readonly Label lbIntroduction = new Label();
+        private readonly PictureBox pbThumbnail = new PictureBox();
+        private readonly ListView listView = new ListView();
 
-        private RadioButton[] rbStartModeList;
+        private readonly RadioButton[] rbStartModeList;
 
-        private Dictionary<string, GameStageInfo> gameStageInfoMap = new Dictionary<string, GameStageInfo>();
+        private Dictionary<string, MapInfo> gameStageInfoMap = new Dictionary<string, MapInfo>();
 
-        public GameStageInfo selectedGameStage
+        public MapInfo selectedGameStage
             => listView.FocusedItem != null && gameStageInfoMap.TryGetValue(listView.FocusedItem.Tag as string, out var value)
             ? value
             : null;
@@ -109,7 +109,7 @@ namespace Game.UI.SceneTitle
         }
 
 
-        public void setData(IEnumerable<GameStageInfo> list)
+        public void setData(IEnumerable<MapInfo> list)
         {
             gameStageInfoMap = list.ToDictionary(o => o.name);
 

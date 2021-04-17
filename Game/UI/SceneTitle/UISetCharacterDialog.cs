@@ -9,9 +9,9 @@ namespace Game.UI.SceneTitle
 {
     public class UISetCharacterDialog : UIConfirmDialog
     {
-        private Label lbIntroduction = new Label();
-        private PictureBox pbThumbnail = new PictureBox();
-        private ListView listView = new ListView();
+        private readonly Label lbIntroduction = new Label();
+        private readonly PictureBox pbThumbnail = new PictureBox();
+        private readonly ListView listView = new ListView();
 
         public UISetCharacterDialog(GameSystem gs) : base(gs)
         {

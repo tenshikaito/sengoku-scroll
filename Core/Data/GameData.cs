@@ -9,6 +9,6 @@ namespace Core.Data
         public IncreasedIdDictionary<Province> province;
         public IncreasedIdDictionary<Stronghold> stronghold;
 
-        public IncreasedIdDictionary<Player> player;
+        public IncreasedIdDictionary<Character> character;
     }
 }

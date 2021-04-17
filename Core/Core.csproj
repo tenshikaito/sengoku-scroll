@@ -191,6 +191,9 @@
 
   <ItemGroup>
     <Folder Include="Component\" />
+    <Folder Include="stage\sanguo%24default\" />
+    <Folder Include="stage\warring_states%24default\" />
+    <Folder Include="world\" />
   </ItemGroup>
 
 </Project>

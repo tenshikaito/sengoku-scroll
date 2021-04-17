@@ -4,7 +4,7 @@ namespace WinLibrary
 {
     public class StateManager : GameObject
     {
-        private Stack<GameObject> stack = new Stack<GameObject>();
+        private readonly Stack<GameObject> stack = new Stack<GameObject>();
         private GameObject current;
 
         public void switchStatus(GameObject go)

@@ -17,7 +17,7 @@ namespace Core.Helper
             force = new IncreasedIdDictionary<Force>().init(),
             province = new IncreasedIdDictionary<Province>().init(),
             stronghold = new IncreasedIdDictionary<Stronghold>().init(),
-            player = new IncreasedIdDictionary<Player>().init()
+            character = new IncreasedIdDictionary<Character>().init()
         };
 
         public static TileMap getTileMap(int width, int height) => new TileMap(new TileMap2D.Size(width, height))

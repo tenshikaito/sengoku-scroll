@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace Core.Model
 {
-    public class Player : TileObject
+    public class Character : TileObject
     {
         public static readonly List<Ability.Type> abilityList = Enum.GetValues(typeof(Ability.Type)).Cast<Ability.Type>().ToList();
 
@@ -75,7 +75,7 @@ namespace Core.Model
 
         public int? mount;
 
-        public Player init()
+        public Character init()
         {
             ability = abilityList.ToDictionary(o => o, o => new Ability() { value = 1 });
             skill = skillList.ToDictionary(o => o, o => new Skill());

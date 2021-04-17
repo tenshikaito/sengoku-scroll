@@ -57,7 +57,7 @@ namespace Game.Scene
         }
 
         private UIDebugWindow uiDebugWindow;
-        private Dictionary<string, Func<string, Task>> commandMap = new Dictionary<string, Func<string, Task>>();
+        private readonly Dictionary<string, Func<string, Task>> commandMap = new Dictionary<string, Func<string, Task>>();
 
         private void initDebugCommand()
         {
@@ -82,24 +82,31 @@ namespace Game.Scene
 
             if (commandMap.TryGetValue(text, out var action)) await action(text);
             else appendCommandOutputText("no command found.");
+
+            appendCommandOutputNewLine();
         }
 
         private void appendCommandOutputText(string text)
         {
-            uiDebugWindow?.appendOutputText(text);
+            uiDebugWindow?.appendOutputText(text).appendOutputNewLine();
+        }
+
+        private void appendCommandOutputNewLine()
+        {
+            uiDebugWindow?.appendOutputNewLine();
         }
 
         private async Task test(string text)
         {
-            await GameStageHelper.save("test", new GameStageInfo()
-            {
-                name = "test",
-                width = 1000,
-                height = 800,
-                introduction = "introduction"
-            }, new TileMap(new Library.Component.TileMap2D.Size(1000, 800)));
+            //await GameStageHelper.save("test", new MapInfo()
+            //{
+            //    name = "test",
+            //    width = 1000,
+            //    height = 800,
+            //    introduction = "introduction"
+            //}, new TileMap(new Library.Component.TileMap2D.Size(1000, 800)));
 
-            appendCommandOutputText("completed");
+            //appendCommandOutputText("completed");
         }
 
         private void singlePlayerGame()

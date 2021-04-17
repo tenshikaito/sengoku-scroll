@@ -1,0 +1,13 @@
+﻿游戏档案结构：
+
+stage/
+stage/{stageName}
+stage/{stageName}/stage.info 舞台文件
+stage/{stageName}/map.dat 地图文件
+stage/{stageName}/environment.dat {<key,value>}环境文件：包括文化宗教等固定数据设定
+stage/{stageName}/character.dat {[]}人物文件
+stage/{stageName}/scenario.info 剧本文件
+stage/{stageName}/scenario.dat {[]}剧本文件：包括舞台时间游戏开始时的环境和人物数据的整合
+
+world/
+world/{worldName}_[autosave/{dateTime}].dat 存档文件：包含了增量地图数据、环境、人物的所有数据、是stage整合后的所有数据、可以直接载入游玩

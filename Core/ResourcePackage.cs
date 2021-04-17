@@ -1,6 +1,6 @@
 ﻿using System.IO;
 
-namespace Core.Module
+namespace Core
 {
     public class ResourcePackage
     {

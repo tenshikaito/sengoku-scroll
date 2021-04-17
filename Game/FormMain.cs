@@ -1,4 +1,5 @@
 ﻿using Core;
+using Core.Helper;
 using Game.Model;
 using System.Collections.Generic;
 using System.Drawing;
@@ -9,19 +10,19 @@ namespace Game
 {
     public class FormMain : FormGame
     {
-        private GameSystem gameSystem;
-
         private readonly Option option;
         private readonly GameWording wording;
-        private readonly List<PlayerInfo> players;
+
+        private GameSystem gameSystem;
+
+        private List<PlayerInfo> players;
 
         protected override IFormGameOption formGameOption => option;
 
-        public FormMain(Option option, GameWording wording, List<PlayerInfo> players)
+        public FormMain(Option option, GameWording wording)
         {
             this.option = option;
             this.wording = wording;
-            this.players = players;
 
             initWindow();
             initSystem();
@@ -40,6 +41,8 @@ namespace Game
 
         private void initSystem()
         {
+            players = PlayerHelper.loadPlayer<List<PlayerInfo>>();
+
             var sceneManager = new SceneManager();
 
             gameRoot = sceneManager;

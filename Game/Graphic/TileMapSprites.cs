@@ -150,7 +150,7 @@ namespace Game.Graphic
 
         private void drawPlayer(GameGraphic g, MapPoint p, int sx, int sy)
         {
-            var map = gameWorld.gameData.player.map.Values;
+            var map = gameWorld.gameData.character.map.Values;
 
             if (map.Any(o => o.location == p))
             {

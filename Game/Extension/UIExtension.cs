@@ -15,7 +15,7 @@ namespace Game.Extension
                 Text = o.name
             }.addColumn($"{o.width}x{o.height}")).ToArray();
 
-        public static ListViewItem[] toGameStageInfoList(this IEnumerable<GameStageInfo> list) 
+        public static ListViewItem[] toGameStageInfoList(this IEnumerable<MapInfo> list) 
             => list.Select(o=> new ListViewItem()
             {
                 Tag = o.name,

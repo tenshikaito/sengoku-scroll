@@ -33,10 +33,10 @@ namespace Library.Module
                 string.IsNullOrEmpty(fileExtension) ? "*" : $"*.{fileExtension}");
 
         public async Task write(string fileName, object o)
-            => await FileHelper.write(getFilePath(fileName), o);
+            => await FileHelper.writeAsync(getFilePath(fileName), o);
 
         public async Task<T> read<T>(string fileName)
-            => await FileHelper.read<T>(getFilePath(fileName));
+            => await FileHelper.readAsync<T>(getFilePath(fileName));
 
         public void delete(string name)
             => File.Delete(getFilePath(name));

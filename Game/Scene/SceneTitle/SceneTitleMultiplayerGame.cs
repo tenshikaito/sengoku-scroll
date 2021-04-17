@@ -87,7 +87,7 @@ namespace Game.Scene
             uiGameServerDetailDialog = new UIGameServerDetailDialog(gameSystem)
             {
                 Visible = true,
-                okButtonClicked = async () =>
+                okButtonClicked = () =>
                 {
                     var (txtName, txtIp, txtPort) = uiGameServerDetailDialog.value;
 
@@ -103,7 +103,7 @@ namespace Game.Scene
                         port = port
                     });
 
-                    await PlayerHelper.savePlayer(gameSystem.players);
+                    PlayerHelper.savePlayer(gameSystem.players);
 
                     loadGameServerList();
 
@@ -129,7 +129,7 @@ namespace Game.Scene
             uiGameServerDetailDialog = new UIGameServerDetailDialog(gameSystem)
             {
                 Visible = true,
-                okButtonClicked = async () =>
+                okButtonClicked = () =>
                 {
                     var (txtName, txtIp, txtPort) = uiGameServerDetailDialog.value;
 
@@ -141,7 +141,7 @@ namespace Game.Scene
                     si.ip = txtIp;
                     si.port = port;
 
-                    await PlayerHelper.savePlayer(gameSystem.players);
+                    PlayerHelper.savePlayer(gameSystem.players);
 
                     loadGameServerList();
 
@@ -166,11 +166,11 @@ namespace Game.Scene
 
             var dialog = new UIConfirmDialog(gameSystem, "confirm", $"remove {name} ?");
 
-            dialog.okButtonClicked = async () =>
+            dialog.okButtonClicked = () =>
             {
                 gameSystem.currentPlayer.servers.RemoveAll(o => o.code == code);
 
-                await PlayerHelper.savePlayer(gameSystem.players);
+                PlayerHelper.savePlayer(gameSystem.players);
 
                 loadGameServerList();
 

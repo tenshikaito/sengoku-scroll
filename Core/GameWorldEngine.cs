@@ -13,7 +13,6 @@ namespace Core
         {
             var gameWorld = await GameWorldHelper.loadGameWorldData<GameWorld>(gameWorldFileName);
 
-            var gameScenario = await GameScenarioHelper.loadGameScenarioData<GameScenario>(gameScenarioFile);
         }
     }
 }

@@ -15,13 +15,12 @@ namespace Game
         ///  The main entry point for the application.
         /// </summary>
         [STAThread]
-        public static async Task Main()
+        public static void Main()
         {
             try
             {
                 var option = new Option();
-                var wording = await WordingHelper.loadCharset("zh-tw");
-                var players = await PlayerHelper.loadPlayer<List<PlayerInfo>>();
+                var wording = WordingHelper.loadCharset("zh-tw");
 
                 AppDomain.CurrentDomain.UnhandledException += onException;
 
@@ -30,7 +29,7 @@ namespace Game
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                Application.Run(new FormMain(option, wording, players));
+                Application.Run(new FormMain(option, wording));
             }
             catch (Exception e)
             {

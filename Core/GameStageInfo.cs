@@ -1,19 +1,15 @@
-﻿using Core.Data;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace Core
 {
     public class GameStageInfo
     {
-        public string name;
+        public string name { get; set; }
 
-        public int width;
-
-        public int height;
-
-        public string introduction;
-
-        public byte[] thumbnail;
+        public string introduction { get; set; }
     }
 }

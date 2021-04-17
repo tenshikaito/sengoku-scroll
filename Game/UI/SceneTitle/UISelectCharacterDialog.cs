@@ -11,10 +11,10 @@ namespace Game.UI.SceneTitle
 {
     public class UISelectCharacterDialog : UIListViewDialog
     {
-        private PictureBox pbThumbnail = new PictureBox();
-        private PictureBox pbPortrait = new PictureBox();
-        private Label lbName = new Label();
-        private Label lbIntroduction = new Label();
+        private readonly PictureBox pbThumbnail = new PictureBox();
+        private readonly PictureBox pbPortrait = new PictureBox();
+        private readonly Label lbName = new Label();
+        private readonly Label lbIntroduction = new Label();
 
         public UISelectCharacterDialog(GameSystem gs) : base(gs)
         {
