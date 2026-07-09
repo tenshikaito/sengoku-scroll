@@ -1,0 +1,24 @@
+@SengokuScroll.WebApi_HostAddress = http://localhost:5100
+
+### 加载剧本 mini_kanto
+POST {{SengokuScroll.WebApi_HostAddress}}/strategy/load
+Content-Type: application/json
+
+{
+  "scenarioId": "mini_kanto"
+}
+
+### 获取世界状态
+GET {{SengokuScroll.WebApi_HostAddress}}/strategy/state
+
+### 织田先锋 (id=1) 移动到 (5,4)
+POST {{SengokuScroll.WebApi_HostAddress}}/strategy/units/1/move
+Content-Type: application/json
+
+{
+  "x": 5,
+  "y": 4
+}
+
+### 推进 1 天
+POST {{SengokuScroll.WebApi_HostAddress}}/strategy/advance-day

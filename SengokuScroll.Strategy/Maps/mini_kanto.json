@@ -1,0 +1,137 @@
+{
+  "id": "mini_kanto",
+  "name": "迷你关东试玩",
+  "version": "1.0",
+  "map": {
+    "width": 10,
+    "height": 10,
+    "defaultTerrain": "plain",
+    "terrains": [
+      { "id": 1, "key": "plain", "name": "平地", "movementCost": 2 }
+    ],
+    "roadTypes": [
+      { "id": 1, "key": "highway", "name": "官道", "speedBonus": 1, "movementCost": 1 }
+    ],
+    "roadTemplates": [
+      {
+        "id": "oda_east_trunk",
+        "typeId": 1,
+        "points": [
+          { "x": 1, "y": 4 },
+          { "x": 2, "y": 4 },
+          { "x": 3, "y": 4 },
+          { "x": 4, "y": 4 },
+          { "x": 5, "y": 4 }
+        ]
+      },
+      {
+        "id": "oda_north_branch",
+        "typeId": 1,
+        "points": [
+          { "x": 4, "y": 4 },
+          { "x": 4, "y": 3 },
+          { "x": 4, "y": 2 }
+        ]
+      }
+    ],
+    "placedRoads": ["oda_east_trunk", "oda_north_branch"],
+    "politicalRegions": [
+      { "id": 1, "key": "owari", "name": "尾张" },
+      { "id": 2, "key": "mikawa", "name": "三河" },
+      { "id": 3, "key": "suruga", "name": "骏河" }
+    ],
+    "politicalRegionGrid": [
+      "owari","owari","owari","owari","mikawa","mikawa","mikawa","suruga","suruga","suruga",
+      "owari","owari","owari","owari","mikawa","mikawa","mikawa","suruga","suruga","suruga",
+      "owari","owari","owari","owari","mikawa","mikawa","mikawa","suruga","suruga","suruga",
+      "owari","owari","owari","owari","mikawa","mikawa","mikawa","suruga","suruga","suruga",
+      "owari","owari","owari","owari","mikawa","mikawa","mikawa","suruga","suruga","suruga",
+      "owari","owari","owari","owari","mikawa","mikawa","mikawa","suruga","suruga","suruga",
+      "owari","owari","owari","owari","mikawa","mikawa","mikawa","suruga","suruga","suruga",
+      "owari","owari","owari","owari","mikawa","mikawa","mikawa","suruga","suruga","suruga",
+      "owari","owari","owari","owari","mikawa","mikawa","mikawa","suruga","suruga","suruga",
+      "owari","owari","owari","owari","mikawa","mikawa","mikawa","suruga","suruga","suruga"
+    ],
+    "landmarks": [
+      { "id": 1, "name": "热田神宫", "x": 3, "y": 6 },
+      { "id": 2, "name": "富士山", "x": 8, "y": 8 },
+      { "id": 3, "name": "桶狭间", "x": 2, "y": 5 }
+    ]
+  },
+  "scenario": {
+    "startDate": { "year": 1560, "month": 1, "day": 1 },
+    "playerForceId": 1,
+    "lord": { "name": "织田信长", "strongholdId": 1 },
+    "forces": [
+      { "id": 1, "name": "织田", "lordCharacterId": 1, "food": 50000, "money": 12000 },
+      { "id": 2, "name": "今川", "lordCharacterId": 3, "food": 48000, "money": 10000 },
+      { "id": 3, "name": "酒井", "lordCharacterId": 6, "food": 12000, "money": 8000, "status": "InnerVassal", "suzerainForceId": 1 },
+      { "id": 4, "name": "北条支系", "lordCharacterId": 7, "food": 10000, "money": 6000, "status": "InnerVassal", "suzerainForceId": 2 }
+    ],
+    "characters": [
+      { "id": 1, "name": "织田信长", "forceId": 1, "strongholdId": 1, "leadership": 96, "power": 82, "birthYear": 1534 },
+      { "id": 2, "name": "柴田胜家", "forceId": 1, "leadership": 91, "power": 88, "birthYear": 1522 },
+      { "id": 3, "name": "今川氏真", "forceId": 2, "leadership": 68, "power": 65, "birthYear": 1538 },
+      { "id": 4, "name": "林秀贞", "forceId": 1, "strongholdId": 1, "leadership": 72, "politics": 78, "birthYear": 1507 },
+      { "id": 5, "name": "北条氏康", "forceId": 2, "strongholdId": 4, "leadership": 88, "power": 75, "birthYear": 1515 },
+      { "id": 6, "name": "酒井忠次", "forceId": 3, "strongholdId": 2, "leadership": 85, "power": 80, "birthYear": 1485 },
+      { "id": 7, "name": "北条纲成", "forceId": 4, "strongholdId": 5, "leadership": 78, "power": 72, "birthYear": 1510 }
+    ],
+    "strongholds": [
+      { "id": 1, "name": "清洲", "forceId": 1, "x": 1, "y": 4, "lordId": 0, "food": 15000, "population": 8000, "mayorName": "林秀贞", "morale": 85, "training": 68, "money": 3000000 },
+      { "id": 2, "name": "犬山", "forceId": 3, "x": 2, "y": 2, "lordId": 6, "food": 12000, "population": 6000, "morale": 78, "training": 62, "money": 1500000 },
+      { "id": 3, "name": "冈崎", "forceId": 1, "x": 1, "y": 7, "lordId": 0, "food": 10000, "population": 7000, "morale": 80, "training": 65, "money": 1200000 },
+      { "id": 4, "name": "小田原", "forceId": 2, "x": 8, "y": 5, "lordId": 5, "food": 18000, "population": 12000, "morale": 82, "training": 70, "money": 4000000 },
+      { "id": 5, "name": "骏府", "forceId": 4, "x": 7, "y": 3, "lordId": 7, "food": 14000, "population": 9000, "morale": 79, "training": 64, "money": 2500000 },
+      { "id": 6, "name": "挂川", "forceId": 2, "x": 6, "y": 7, "lordId": 0, "food": 11000, "population": 6500, "morale": 76, "training": 60, "money": 1800000 },
+      { "id": 7, "name": "三河凑", "forceId": 1, "x": 3, "y": 6, "lordId": 0, "food": 8000, "population": 4000, "morale": 74, "training": 58, "money": 800000 },
+      { "id": 8, "name": "伊豆港", "forceId": 2, "x": 8, "y": 8, "lordId": 0, "food": 9000, "population": 5000, "morale": 75, "training": 55, "money": 900000 },
+      { "id": 9, "name": "足助", "forceId": 1, "x": 4, "y": 1, "lordId": 0, "food": 7000, "population": 3500, "morale": 72, "training": 56, "money": 600000 },
+      { "id": 10, "name": "沼津", "forceId": 4, "x": 5, "y": 8, "lordId": 0, "food": 6000, "population": 3000, "morale": 70, "training": 54, "money": 500000 }
+    ],
+    "units": [
+      {
+        "id": 1,
+        "name": "织田先锋",
+        "forceId": 1,
+        "x": 4,
+        "y": 4,
+        "soldiers": 100,
+        "food": 2000,
+        "movement": 10,
+        "commanderId": 2,
+        "commanderName": "柴田胜家",
+        "morale": 82,
+        "training": 72,
+        "money": 500000,
+        "composition": [
+          { "typeId": 1, "typeName": "足轻", "soldiers": 63 },
+          { "typeId": 2, "typeName": "弓兵", "soldiers": 16 },
+          { "typeId": 3, "typeName": "骑兵", "soldiers": 12 },
+          { "typeId": 4, "typeName": "铁炮", "soldiers": 9 }
+        ]
+      },
+      {
+        "id": 2,
+        "name": "今川先锋",
+        "forceId": 2,
+        "x": 5,
+        "y": 4,
+        "soldiers": 80,
+        "food": 1600,
+        "movement": 10,
+        "commanderId": 3,
+        "commanderName": "今川氏真",
+        "morale": 78,
+        "training": 68,
+        "money": 300000,
+        "composition": [
+          { "typeId": 1, "typeName": "足轻", "soldiers": 50 },
+          { "typeId": 2, "typeName": "弓兵", "soldiers": 12 },
+          { "typeId": 3, "typeName": "骑兵", "soldiers": 10 },
+          { "typeId": 4, "typeName": "铁炮", "soldiers": 8 }
+        ]
+      }
+    ]
+  }
+}

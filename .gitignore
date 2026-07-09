@@ -1,0 +1,48 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.pdb
+*.log
+
+## Visual Studio
+.vs/
+*.vsidx
+*.vspscc
+*.vssscc
+*.pidb
+*.booproj
+*.svd
+*.DotSettings.user
+
+## Test Results
+TestResults/
+*.testlog
+*.coverage
+*.coveragexml
+CoverletSourceRootsMapping_*
+.msCoverageSourceRootsMapping_*
+
+## NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## Node.js / 前端
+node_modules/
+dist/
+*.local
+.vscode/
+
+## 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store
+/data.xlsx
+/model.xlsx
+/rule.xlsx
+/screen.xlsx

@@ -1,0 +1,156 @@
+import type {
+  StrategyBattleLogEntry,
+  StrategyBattlePreview,
+  StrategyBattleResult,
+  StrategyWorldState,
+} from "@/api/strategyTypes";
+
+function safeInt(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeLogEntry(raw: unknown, index: number): StrategyBattleLogEntry {
+  const entry = raw as Record<string, unknown>;
+  return {
+    order: safeInt(entry.order ?? entry.Order, index + 1),
+    side: String(entry.side ?? entry.Side ?? "system"),
+    phase: String(entry.phase ?? entry.Phase ?? ""),
+    message: String(entry.message ?? entry.Message ?? ""),
+  };
+}
+
+export function normalizeBattleResult(raw: unknown): StrategyBattleResult {
+  const r = raw as Record<string, unknown>;
+  const logRaw = (r.logEntries ?? r.LogEntries) as unknown[] | undefined;
+
+  return {
+    attackerWon: Boolean(r.attackerWon ?? r.AttackerWon),
+    attackerUnitId: safeInt(r.attackerUnitId ?? r.AttackerUnitId),
+    defenderUnitId: safeInt(r.defenderUnitId ?? r.DefenderUnitId),
+    attackerName: String(r.attackerName ?? r.AttackerName ?? ""),
+    defenderName: String(r.defenderName ?? r.DefenderName ?? ""),
+    attackerSoldiersBefore: safeInt(r.attackerSoldiersBefore ?? r.AttackerSoldiersBefore),
+    defenderSoldiersBefore: safeInt(r.defenderSoldiersBefore ?? r.DefenderSoldiersBefore),
+    attackerCasualties: safeInt(r.attackerCasualties ?? r.AttackerCasualties),
+    defenderCasualties: safeInt(r.defenderCasualties ?? r.DefenderCasualties),
+    attackerSoldiersAfter: safeInt(r.attackerSoldiersAfter ?? r.AttackerSoldiersAfter),
+    defenderSoldiersAfter: safeInt(r.defenderSoldiersAfter ?? r.DefenderSoldiersAfter),
+    attackerWinRatePercent: safeInt(r.attackerWinRatePercent ?? r.AttackerWinRatePercent),
+    resolutionSeed: safeInt(r.resolutionSeed ?? r.ResolutionSeed),
+    resolutionRoll: safeInt(r.resolutionRoll ?? r.ResolutionRoll),
+    logEntries: Array.isArray(logRaw)
+      ? logRaw.map((entry, index) => normalizeLogEntry(entry, index))
+      : [],
+  };
+}
+
+export function isValidBattleResult(result: StrategyBattleResult): boolean {
+  return (
+    result.attackerUnitId > 0 &&
+    result.defenderUnitId > 0 &&
+    (result.attackerSoldiersBefore > 0 ||
+      result.attackerSoldiersAfter >= 0 ||
+      result.attackerCasualties >= 0)
+  );
+}
+
+/** 旧版 API 仅返回世界状态时，由战前预览与前后状态推导战斗结果。 */
+export function deriveBattleResult(
+  preview: StrategyBattlePreview,
+  attackerId: number,
+  stateBefore: StrategyWorldState,
+  stateAfter: StrategyWorldState
+): StrategyBattleResult {
+  const attackerBefore = stateBefore.units.find((u) => u.id === attackerId);
+  const defenderBefore = stateBefore.units.find((u) => u.id === preview.defenderUnitId);
+  const attackerAfter = stateAfter.units.find((u) => u.id === attackerId);
+  const defenderAfter = stateAfter.units.find((u) => u.id === preview.defenderUnitId);
+
+  const attBefore = attackerBefore?.soldiers ?? preview.attackerSoldiers;
+  const defBefore = defenderBefore?.soldiers ?? preview.defenderSoldiers;
+  const attAfter = attackerAfter?.soldiers ?? attBefore;
+  const defAfter = defenderAfter?.soldiers ?? defBefore;
+  const attLoss = Math.max(0, attBefore - attAfter);
+  const defLoss = Math.max(0, defBefore - defAfter);
+  let attackerWon = defLoss > attLoss || (defAfter === 0 && attAfter > 0);
+  if (attLoss === 0 && defLoss === 0) {
+    attackerWon = preview.attackerWinRatePercent >= 50;
+  }
+
+  const attackerName = attackerBefore?.name ?? "攻方";
+  const defenderName = defenderBefore?.name ?? preview.defenderName;
+
+  const result: StrategyBattleResult = {
+    attackerWon,
+    attackerUnitId: attackerId,
+    defenderUnitId: preview.defenderUnitId,
+    attackerName,
+    defenderName,
+    attackerSoldiersBefore: attBefore,
+    defenderSoldiersBefore: defBefore,
+    attackerCasualties: attLoss,
+    defenderCasualties: defLoss,
+    attackerSoldiersAfter: attAfter,
+    defenderSoldiersAfter: defAfter,
+    attackerWinRatePercent: preview.attackerWinRatePercent,
+    resolutionSeed: preview.resolutionSeed,
+    resolutionRoll: -1,
+    logEntries: buildFallbackBattleLog(
+      attackerName,
+      defenderName,
+      attBefore,
+      defBefore,
+      attLoss,
+      defLoss,
+      attAfter,
+      defAfter,
+      attackerWon,
+      preview.attackerWinRatePercent
+    ),
+  };
+
+  return result;
+}
+
+function buildFallbackBattleLog(
+  attackerName: string,
+  defenderName: string,
+  attBefore: number,
+  defBefore: number,
+  attLoss: number,
+  defLoss: number,
+  attAfter: number,
+  defAfter: number,
+  attackerWon: boolean,
+  winRate: number
+): StrategyBattleLogEntry[] {
+  let order = 0;
+  const add = (side: StrategyBattleLogEntry["side"], phase: string, message: string) => ({
+    order: ++order,
+    side,
+    phase,
+    message,
+  });
+
+  return [
+    add("system", "接触", `${attackerName} 与 ${defenderName} 在野外遭遇。`),
+    add("attacker", "接敌", `${attackerName} 发起进攻（${attBefore} 名）。`),
+    add("defender", "接敌", `${defenderName} 列阵应战（${defBefore} 名）。`),
+    add("system", "交锋", `战前评估：攻方胜率 ${winRate}%。`),
+    attackerWon
+      ? add("attacker", "突破", `突破成功，己方 −${attLoss} → 剩余 ${attAfter}。`)
+      : add("attacker", "受挫", `攻势受挫，己方 −${attLoss} → 剩余 ${attAfter}。`),
+    attackerWon
+      ? add("defender", "溃退", `敌军 −${defLoss} → 剩余 ${defAfter}。`)
+      : add("defender", "维持", `守军 −${defLoss} → 剩余 ${defAfter}。`),
+    add("system", "结束", attackerWon ? "攻方获胜，当日野战结束。" : "守方获胜，当日野战结束。"),
+  ];
+}
+
+export function displayUnitName(result: StrategyBattleResult, side: "attacker" | "defender"): string {
+  if (side === "attacker") {
+    return result.attackerName || `#${result.attackerUnitId}`;
+  }
+  return result.defenderName || `#${result.defenderUnitId}`;
+}

@@ -1,0 +1,13 @@
+namespace SengokuScroll.Domain.Entities;
+
+/// <summary>
+/// ‘≠¡œ
+/// </summary>
+public class MaterialResource
+{
+    public int Id { get; set; }
+
+    public required string Name { get; set; }
+
+    public int Rarity { get; set; }
+}

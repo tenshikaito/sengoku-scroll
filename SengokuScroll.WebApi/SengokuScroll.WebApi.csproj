@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SengokuScroll.Application\SengokuScroll.Application.csproj" />
+    <ProjectReference Include="..\SengokuScroll.Domain\SengokuScroll.Domain.csproj" />
+    <ProjectReference Include="..\SengokuScroll.Strategy\SengokuScroll.Strategy.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\SengokuScroll.Strategy\Maps\mini_kanto.json" Link="Maps\mini_kanto.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
