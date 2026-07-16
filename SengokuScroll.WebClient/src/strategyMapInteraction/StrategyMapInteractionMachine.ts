@@ -76,6 +76,18 @@ export class StrategyMapInteractionMachine {
     this.current.onBeginAttack(this.ctx);
   }
 
+  onBeginMerge(): void {
+    this.current.onBeginMerge(this.ctx);
+  }
+
+  onBeginSplit(): void {
+    this.current.onBeginSplit(this.ctx);
+  }
+
+  onBeginExpedition(): void {
+    this.current.onBeginExpedition(this.ctx);
+  }
+
   onShowIntel(): void {
     this.current.onShowIntel(this.ctx);
   }

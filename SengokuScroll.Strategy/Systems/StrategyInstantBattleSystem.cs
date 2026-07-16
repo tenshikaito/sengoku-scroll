@@ -4,8 +4,11 @@ using SengokuScroll.Domain.Contexts;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Evaluators;
 using SengokuScroll.Strategy.Actions;
+using SengokuScroll.Strategy.Battle;
 using SengokuScroll.Strategy.Calculators;
+using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.GameError;
 
 namespace SengokuScroll.Strategy.Systems;
@@ -13,6 +16,7 @@ namespace SengokuScroll.Strategy.Systems;
 /// <summary>瞬间战预览与执行（M3-a 野战：相邻敌军单位）。</summary>
 public sealed class StrategyInstantBattleSystem(
     IGameContext context,
+    StrategyScenarioMeta scenarioMeta,
     UnitAttackEvaluator attackEvaluator)
 {
     /// <summary>战前预览：校验攻击合法性并估算胜率/伤亡区间。</summary>
@@ -26,7 +30,7 @@ public sealed class StrategyInstantBattleSystem(
     }
 
     /// <summary>执行瞬间战并写回单位状态。</summary>
-    public GameResult<(StrategyBattlePreviewDto Preview, InstantBattleOutcome Outcome)> Execute(
+    public GameResult<(StrategyBattlePreviewDto Preview, InstantBattleOutcome Outcome, TacticalBattleResult Tactical)> Execute(
         int attackerUnitId,
         Point2 target)
     {
@@ -35,13 +39,20 @@ public sealed class StrategyInstantBattleSystem(
             return validation.Error!;
 
         var preview = BuildPreview(attacker!, defender!, target);
-        var outcome = InstantBattleCalculator.Resolve(attacker!, defender!, preview.ResolutionSeed);
-
-        UnitBattleActions.ApplyCasualties(attacker!, outcome.AttackerCasualties);
-        UnitBattleActions.ApplyCasualties(defender!, outcome.DefenderCasualties);
+        var resolveCtx = InstantBattleCalculator.CreateResolveContext(
+            attacker!,
+            defender!,
+            context.GameWorldContext.GameWorld.GameData,
+            context.GameWorldContext.GameWorld.GameMapMasterData);
+        // 业务：使用确定性种子保证预览与执行结果一致
+        var tactical = InstantBattleCalculator.ResolveTactical(resolveCtx, preview.ResolutionSeed);
+        BattleCasualtyRules.ApplyCasualtiesToWorld(
+            tactical,
+            context.GameWorldContext.GameWorld.GameData,
+            scenarioMeta.Difficulty);
         UnitBattleActions.MarkAttacked(attacker!, context.GameRuleConfig);
 
-        return (preview, outcome);
+        return (preview, tactical.Outcome, tactical);
     }
 
     private GameResult ValidateFieldBattle(
@@ -68,8 +79,14 @@ public sealed class StrategyInstantBattleSystem(
 
     private StrategyBattlePreviewDto BuildPreview(Unit attacker, Unit defender, Point2 target)
     {
-        var date = context.GameWorldContext.GameWorld.GameData.GameDate;
-        var winRate = InstantBattleCalculator.ComputeAttackerWinRatePercent(attacker, defender);
+        var world = context.GameWorldContext.GameWorld;
+        var date = world.GameData.GameDate;
+        var resolveCtx = InstantBattleCalculator.CreateResolveContext(
+            attacker,
+            defender,
+            world.GameData,
+            world.GameMapMasterData);
+        var winRate = InstantBattleCalculator.ComputeAttackerWinRatePercent(resolveCtx);
         var seed = InstantBattleCalculator.ComputeResolutionSeed(
             date,
             attacker.Id,
@@ -77,7 +94,7 @@ public sealed class StrategyInstantBattleSystem(
             target.X,
             target.Y);
         var (attMin, attMax, defMin, defMax) =
-            InstantBattleCalculator.EstimateCasualtyRanges(attacker, defender, winRate);
+            InstantBattleCalculator.EstimateCasualtyRanges(attacker, defender, winRate, scenarioMeta.Difficulty);
 
         return new StrategyBattlePreviewDto
         {

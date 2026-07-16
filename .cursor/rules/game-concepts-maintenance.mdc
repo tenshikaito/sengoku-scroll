@@ -1,0 +1,43 @@
+---
+description: 变更游戏内容时同步维护 docs/game-concepts.md 概念词典
+globs: SengokuScroll.Domain/**/*,SengokuScroll.Strategy/**/*,SengokuScroll.Application/**/*,SengokuScroll.WebClient/src/**/*,docs/**/*
+alwaysApply: false
+---
+
+# 游戏概念文档维护
+
+权威概念清单：[docs/game-concepts.md](../../docs/game-concepts.md)
+
+## 必须同步更新概念文档的情况
+
+- 新增/删除/重命名 Domain 实体、枚举、状态、DTO 字段
+- 改变已有概念的语义（例：驻军从地图单位改为城内兵数）
+- 新增剧本 JSON 字段或存档字段
+- 新增前端可见的游戏术语或事件类型
+- 设计已确认并开始实装的新机制
+
+## 每次变更前：影响检查
+
+对照 `game-concepts.md` §0.2 检查清单，逐项确认是否影响已有概念条目。
+
+## 更新步骤
+
+1. 在 `game-concepts.md` 对应章节增删改概念条目（含 ✅/📋/🔮 状态）
+2. 若概念进入/离开「概念总索引」，同步 § 概念总索引表
+3. 若新增枚举值，同步附录 A
+4. 若新增 Rules/Systems，同步附录 B
+5. 在 §0.4 变更记录追加一行摘要
+
+## 可不更新文档的情况
+
+- 纯 Bug 修复、不改变语义
+- 重构且概念定义不变
+- 仅调整数值常量
+
+此类变更在 PR/提交说明中注明「无概念变更」即可。
+
+## 与详细设计文档的分工
+
+- **game-concepts.md**：概念是什么（名词、枚举、关系）
+- **\*-detail-design.md**：玩法怎么设计（流程、数值、UI）
+- 两者冲突时：以 **已实装代码** 为准，并修正文档

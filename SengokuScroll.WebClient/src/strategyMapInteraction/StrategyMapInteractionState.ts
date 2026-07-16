@@ -62,6 +62,15 @@ export abstract class StrategyMapInteractionState {
   /** 指令菜单：点击「攻击」。 */
   onBeginAttack(_ctx: StrategyMapInteractionContext): void {}
 
+  /** 指令菜单：点击「合并」。 */
+  onBeginMerge(_ctx: StrategyMapInteractionContext): void {}
+
+  /** 指令菜单：点击「分兵」。 */
+  onBeginSplit(_ctx: StrategyMapInteractionContext): void {}
+
+  /** 据点菜单：点击「出征」。 */
+  onBeginExpedition(_ctx: StrategyMapInteractionContext): void {}
+
   /** 指令菜单：查看详细情报。 */
   onShowIntel(_ctx: StrategyMapInteractionContext): void {}
 

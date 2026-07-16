@@ -2,6 +2,7 @@
 import type { StrategyStrongholdState, StrategyWorldState } from "@/api/strategy";
 import { getForceColorCss } from "./forceColors";
 import StrategyIntelFieldList from "./StrategyIntelFieldList.vue";
+import StrategyStrongholdTitle from "./StrategyStrongholdTitle.vue";
 import { strongholdHoverIntelRows } from "@/utils/strategyIntelRows";
 
 defineProps<{
@@ -13,7 +14,7 @@ defineProps<{
 <template>
   <div class="summary">
     <div class="name" :style="{ color: getForceColorCss(stronghold.forceId) }">
-      🏯 {{ stronghold.name }}
+      <StrategyStrongholdTitle :stronghold="stronghold" :world-state="worldState" size="hover" />
     </div>
     <StrategyIntelFieldList variant="hover" :rows="strongholdHoverIntelRows(worldState, stronghold)" />
   </div>
@@ -27,8 +28,6 @@ defineProps<{
 }
 
 .name {
-  font-weight: 600;
-  font-size: 0.88rem;
   margin-bottom: 6px;
 }
 </style>

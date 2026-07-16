@@ -3,8 +3,6 @@ import type {
   StrategyBattlePreview,
   StrategyInstantBattleResponse,
   StrategyPathPreview,
-  StrategyPolicyChangeResponse,
-  StrategyAdvanceDayResponse,
   MapPoint,
 } from "./strategyTypes";
 import {
@@ -35,47 +33,10 @@ import {
 
 const STRATEGY_SAVE_STORAGE_KEY = "sengoku_scroll_strategy_save_v1";
 
-const DEFAULT_SCENARIO_ID = "mini_kanto";
-
-type SessionRecoveryHandler = (state: StrategyWorldState) => void;
-let sessionRecoveryHandler: SessionRecoveryHandler | null = null;
-let sessionRecoveryPromise: Promise<boolean> | null = null;
-
-/** WebApi 进程重启后内存仿真丢失时，由客户端在自动 reload 后同步 UI 状态。 */
-export function setStrategySessionRecoveryHandler(handler: SessionRecoveryHandler | null) {
-  sessionRecoveryHandler = handler;
-}
-
-async function recoverLiveSessionOnce(): Promise<boolean> {
-  if (sessionRecoveryPromise) return sessionRecoveryPromise;
-
-  sessionRecoveryPromise = (async () => {
-    try {
-      const state = normalizeStrategyWorldState(
-        await fetchLive<unknown>(
-          "POST",
-          "/load",
-          { scenarioId: DEFAULT_SCENARIO_ID },
-          { allowSessionRecovery: false }
-        )
-      );
-      sessionRecoveryHandler?.(state);
-      return true;
-    } catch {
-      return false;
-    } finally {
-      sessionRecoveryPromise = null;
-    }
-  })();
-
-  return sessionRecoveryPromise;
-}
-
 async function fetchLive<T>(
   method: string,
   pathSuffix: string,
-  body?: unknown,
-  sessionOptions?: { allowSessionRecovery?: boolean }
+  body?: unknown
 ): Promise<T> {
   const path = `${STRATEGY_API_PREFIX}${pathSuffix}`;
   const fullUrl = resolveRequestUrl(path);
@@ -112,14 +73,6 @@ async function fetchLive<T>(
       else if (errBody?.code) detail = String(errBody.code);
     } catch {
       /* ignore */
-    }
-
-    const allowRecovery = sessionOptions?.allowSessionRecovery !== false;
-    if (allowRecovery && detail === "DataNotFound" && pathSuffix !== "/load") {
-      const recovered = await recoverLiveSessionOnce();
-      if (recovered) {
-        return fetchLive<T>(method, pathSuffix, body, { allowSessionRecovery: false });
-      }
     }
 
     recordDiagnostic({
@@ -286,6 +239,90 @@ export const getStrategyState = () =>
     () => normalizeStrategyWorldState(mockGetState())
   );
 
+export const orderUnitAttack = (
+  unitId: number,
+  x: number,
+  y: number
+) =>
+  request(
+    "POST",
+    `/units/${unitId}/attack-order`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/attack-order`, { x, y }).then(
+        normalizeStrategyWorldState
+      ),
+    () => normalizeStrategyWorldState(mockOrderUnitAttack(unitId, x, y))
+  );
+
+export const orderUnitSiege = (
+  unitId: number,
+  strongholdId: number,
+  mode: "Assault" | "Encircle"
+) =>
+  request(
+    "POST",
+    `/units/${unitId}/siege-order`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/siege-order`, {
+        strongholdId,
+        mode,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持 siege-order");
+    }
+  );
+
+export const mergeUnits = (sourceUnitId: number, targetUnitId: number) =>
+  request(
+    "POST",
+    `/units/${sourceUnitId}/merge`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${sourceUnitId}/merge`, { targetUnitId }).then(
+        normalizeStrategyWorldState
+      ),
+    () => {
+      throw new Error("Mock 模式不支持 merge");
+    }
+  );
+
+export const splitUnit = (
+  unitId: number,
+  subUnitIds: number[],
+  spawnX: number,
+  spawnY: number,
+  name?: string
+) =>
+  request(
+    "POST",
+    `/units/${unitId}/split`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/split`, {
+        subUnitIds,
+        spawnX,
+        spawnY,
+        name,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持 split");
+    }
+  );
+
+export const deployFromStronghold = (
+  strongholdId: number,
+  payload: import("./strategyTypes").StrategyDeployFromStrongholdRequest
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/deploy`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/deploy`, payload).then(
+        normalizeStrategyWorldState
+      ),
+    () => {
+      throw new Error("Mock 模式不支持 deploy");
+    }
+  );
+
 export const moveUnit = (
   unitId: number,
   x: number,
@@ -380,17 +417,6 @@ export const setUnitDirective = (unitId: number, directive: string) =>
     }
   );
 
-export const orderUnitAttack = (unitId: number, x: number, y: number) =>
-  request(
-    "POST",
-    `/units/${unitId}/attack-order`,
-    () =>
-      fetchLive<unknown>("POST", `/units/${unitId}/attack-order`, { x, y }).then(
-        normalizeStrategyWorldState
-      ),
-    () => normalizeStrategyWorldState(mockOrderUnitAttack(unitId, x, y))
-  );
-
 export const advanceDay = () =>
   request(
     "POST",
@@ -433,12 +459,45 @@ export interface StrategyMovementTraceEntry {
   detail?: string;
 }
 
+export interface StrategyAiDecisionTraceEntry {
+  sequence: number;
+  at: string;
+  /** Directive | Action | Skip */
+  phase: string;
+  code: string;
+  message: string;
+  unitId: number;
+  unitName: string;
+  forceId: number;
+  actedOrChanged: boolean;
+  fromDirective?: string | null;
+  toDirective?: string | null;
+  currentDirective?: string | null;
+  targetUnitId?: number | null;
+  targetX?: number | null;
+  targetY?: number | null;
+    /** 思维链步骤 */
+    steps: string[];
+    targetStrongholdId?: number | null;
+    stance?: string | null;
+    siegeMode?: string | null;
+    unitStatus?: string | null;
+}
+
 export const getMovementTrace = () =>
   request(
     "GET",
     "/debug/movement-trace",
     () => fetchLive<StrategyMovementTraceEntry[]>("GET", "/debug/movement-trace"),
     () => [] as StrategyMovementTraceEntry[]
+  );
+
+export const getAiDecisionTrace = () =>
+  request(
+    "GET",
+    "/debug/ai-decision-trace",
+    () => fetchLive<StrategyAiDecisionTraceEntry[]>("GET", "/debug/ai-decision-trace"),
+    () => [] as StrategyAiDecisionTraceEntry[]
   );
 
 /** 导出当前仿真 JSON 存档（Live）；Mock 时写入 localStorage 快照。 */

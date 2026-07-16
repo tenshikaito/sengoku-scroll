@@ -10,11 +10,13 @@ using static SengokuScroll.Domain.GameError;
 
 namespace SengokuScroll.Application.CommandHandlers;
 
+/// <summary>?? RPG ???????????????????</summary>
 public partial class CharacterMoveCommandHandler(
     ILogger<CharacterMoveCommandHandler> logger,
     IPathfindingService pathfindingService)
     : CommandHandlerBase, IRequestHandler<CharacterMoveCommand>
 {
+    /// <summary>???????????????????????</summary>
     public GameResult Handle(CharacterMoveCommand cmd, IGameRequestContext context)
     {
         LogParams(cmd.CharacterId, cmd.Location);
@@ -25,7 +27,7 @@ public partial class CharacterMoveCommandHandler(
         if (!character)
             return CharacterError.CharacterNotFound;
 
-        // ¼ÆËãÂ·¾¶
+        // ??????????????
         var pathLocationList = pathfindingService.CalculatePath(character, cmd.Location);
 
         if (pathLocationList is null)

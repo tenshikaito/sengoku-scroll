@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Services.Pathfinding;
 using SengokuScroll.Strategy.Diagnostics;
+using SengokuScroll.Strategy.Battle;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Data;
 using SengokuScroll.Strategy.Actions;
@@ -47,10 +48,130 @@ public sealed class StrategySimulationHost : IDisposable
             var loaded = StrategyScenarioLoader.LoadFromFile(path);
             simulation = StrategySimulationBootstrap.CreateScope(loaded.World, loaded.Meta);
             simulation.MovementTrace.Clear();
+            simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
             LoadedScenarioId = scenarioId;
             timeController.Pause();
 
             RunMonthStartOnLoadIfNeeded(simulation);
+
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>合并两支友军：来源部队子编制并入目标部队后移除来源。</summary>
+    public GameResult<StrategyWorldStateDto> OrderUnitMerge(int sourceUnitId, int targetUnitId)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Units.TryGetValue(sourceUnitId, out var source))
+                return GameError.UnitError.UnitNotFound;
+
+            if (!gameData.Units.TryGetValue(targetUnitId, out var target))
+                return GameError.UnitError.UnitNotFound;
+
+            var result = UnitMergeActions.MergeUnits(
+                simulation.GameContext.GameWorldContext,
+                source,
+                target,
+                gameData);
+            if (!result.IsSuccess)
+                return result.Error!;
+
+            simulation.MovementTrace.Log(
+                "UnitMerge",
+                "部队合并",
+                targetUnitId,
+                target.Location,
+                source.Location,
+                $"source={sourceUnitId} soldiers={target.Soldier}");
+
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>从部队拆出子编制并在邻格生成新部队。</summary>
+    public GameResult<StrategyWorldStateDto> OrderUnitSplit(
+        int unitId,
+        IReadOnlyList<int> subUnitIds,
+        Point2 spawn,
+        string? unitName = null)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Units.TryGetValue(unitId, out var parent))
+                return GameError.UnitError.UnitNotFound;
+
+            var spawnLocation = new Point3(spawn.X, spawn.Y);
+            var result = UnitSplitActions.SplitSubUnits(
+                simulation.GameContext.GameWorldContext,
+                parent,
+                subUnitIds,
+                spawnLocation,
+                gameData,
+                unitName);
+            if (!result.IsSuccess)
+                return result.Error!;
+
+            simulation.MovementTrace.Log(
+                "UnitSplit",
+                "部队分兵",
+                unitId,
+                parent.Location,
+                spawnLocation,
+                $"newUnit={result.Value!.Id} subUnits={subUnitIds.Count}");
+
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>从当主居城出征：扣减城内兵并在据点格生成部队。</summary>
+    public GameResult<StrategyWorldStateDto> DeployFromStronghold(
+        int strongholdId,
+        string unitName,
+        int commanderId,
+        IReadOnlyList<StrategyDeployCompositionEntry> composition,
+        int? food = null,
+        int? money = null)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var gameData = simulation.World.GameData;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            var result = UnitDeploymentActions.DeployFromStronghold(
+                simulation.GameContext.GameWorldContext,
+                stronghold,
+                meta,
+                gameData,
+                meta.PlayerForceId,
+                unitName,
+                commanderId,
+                composition,
+                food,
+                money);
+            if (!result.IsSuccess)
+                return result.Error!;
+
+            simulation.MovementTrace.Log(
+                "StrongholdDeploy",
+                "居城出征",
+                result.Value!.Id,
+                stronghold.Location,
+                stronghold.Location,
+                $"stronghold={strongholdId} commander={commanderId} soldiers={result.Value.Soldier}");
 
             return BuildStateResult();
         }
@@ -69,6 +190,9 @@ public sealed class StrategySimulationHost : IDisposable
 
             if (!simulation.World.GameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
+
+            if (SiegeOrderRules.IsSiegeMovementLocked(unit))
+                return GameError.MovementError.CannotMoveToTile;
 
             var pathfinding = simulation.Services.GetRequiredService<IPathfindingService>();
             var start = (Point2)unit.Location;
@@ -162,6 +286,63 @@ public sealed class StrategySimulationHost : IDisposable
                 unit.Location,
                 target,
                 $"defender={preview.Value.DefenderUnitId} attAp={unit.Ap}");
+
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>对敌方据点下达攻城指令（强攻 / 包围，消耗 AP）。</summary>
+    public GameResult<StrategyWorldStateDto> OrderUnitSiege(int unitId, int strongholdId, UnitSiegeMode mode)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            if (!simulation.World.GameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+
+            if (!simulation.World.GameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.DataNotFound;
+
+            var rules = simulation.Services.GetRequiredService<GameRuleConfig>();
+            var validate = SiegeOrderRules.Validate(
+                unit, stronghold, mode, simulation.World.GameData, rules.SiegeOrderAp);
+            if (!validate.IsSuccess)
+                return validate.Error!;
+
+            SiegeOrderRules.Apply(
+                simulation.GameContext.GameWorldContext,
+                unit,
+                stronghold,
+                mode,
+                simulation.World.GameData,
+                rules.SiegeOrderAp,
+                simulation.ScenarioMeta);
+
+            var battleReportDelivery = simulation.Services.GetRequiredService<BattleReportDeliveryHelper>();
+            var siegeDefender = StrongholdGarrisonRules.FindGarrisonUnit(stronghold, simulation.World.GameData);
+            battleReportDelivery.DeliverSiegeOrderStartedReport(
+                unit,
+                stronghold,
+                mode,
+                simulation.World.GameData,
+                siegeDefender);
+
+            if (SiegeOrderRules.CanCaptureViaAssaultOrder(unit, stronghold, simulation.World.GameData))
+            {
+                // 业务：强攻后守军溃灭则即时占领据点
+                var captureHelper = simulation.Services.GetRequiredService<StrongholdCaptureHelper>();
+                captureHelper.CaptureStronghold(unit, stronghold, stronghold.ForceId, simulation.World.GameData);
+            }
+
+            simulation.MovementTrace.Log(
+                "SiegeOrder",
+                $"攻城指令 {mode}",
+                unitId,
+                unit.Location,
+                stronghold.Location,
+                $"stronghold={strongholdId} ap_left={unit.Ap}");
 
             return BuildStateResult();
         }
@@ -280,7 +461,7 @@ public sealed class StrategySimulationHost : IDisposable
             if (!result)
                 return result.Error!;
 
-            var (preview, outcome) = result.Value!;
+            var (preview, outcome, tactical) = result.Value!;
             simulation.MovementTrace.Log(
                 "InstantBattle",
                 outcome.AttackerWon ? "攻方胜" : "守方胜",
@@ -295,6 +476,8 @@ public sealed class StrategySimulationHost : IDisposable
             var attackerUnit = simulation!.World.GameData.Units[unitId];
             var defenderUnit = simulation.World.GameData.Units[preview.DefenderUnitId];
 
+            var engagementKind = BattleEngagementClassifier.Classify(attackerUnit, defenderUnit, simulation.World.GameData);
+
             return new StrategyInstantBattleResponseDto
             {
                 State = world.Value!,
@@ -303,6 +486,8 @@ public sealed class StrategySimulationHost : IDisposable
                     AttackerWon = outcome.AttackerWon,
                     AttackerUnitId = unitId,
                     DefenderUnitId = preview.DefenderUnitId,
+                    AttackerForceId = attackerUnit.ForceId,
+                    DefenderForceId = defenderUnit.ForceId,
                     AttackerName = attackerUnit.Name,
                     DefenderName = defenderUnit.Name,
                     AttackerSoldiersBefore = outcome.AttackerSoldiersBefore,
@@ -314,7 +499,9 @@ public sealed class StrategySimulationHost : IDisposable
                     AttackerWinRatePercent = outcome.AttackerWinRatePercent,
                     ResolutionSeed = outcome.ResolutionSeed,
                     ResolutionRoll = outcome.ResolutionRoll,
-                    LogEntries = InstantBattleCalculator.BuildBattleLog(attackerUnit, defenderUnit, outcome)
+                    EngagementKind = engagementKind.ToString(),
+                    LogEntries = tactical.LogEntries,
+                    FactorNotes = []
                 }
             };
         }
@@ -329,9 +516,15 @@ public sealed class StrategySimulationHost : IDisposable
                 return GameError.DataNotFound;
 
             var dayOutcomeBuffer = simulation.Services.GetRequiredService<StrategyDayOutcomeBuffer>();
+            var dayDebugLog = simulation.Services.GetRequiredService<IStrategyDayDebugLog>();
             dayOutcomeBuffer.Clear();
 
+            var upcoming = simulation.World.GameData.GameDate.AddDays(1);
+            dayDebugLog.BeginDay(upcoming.Year, upcoming.Month, upcoming.Day, LoadedScenarioId);
+
             timeController.AdvanceDay(simulation.World, simulation.Engine);
+
+            dayDebugLog.EndDay(dayOutcomeBuffer.ResolvedBattles.Count, dayOutcomeBuffer.Events.Count);
             simulation.MovementTrace.Log("AdvanceDay", "日推进完成", detail:
                 $"{simulation.World.GameData.GameDate.Year}-{simulation.World.GameData.GameDate.Month}-{simulation.World.GameData.GameDate.Day} battles={dayOutcomeBuffer.ResolvedBattles.Count}");
 
@@ -342,8 +535,10 @@ public sealed class StrategySimulationHost : IDisposable
             return new StrategyAdvanceDayResponseDto
             {
                 State = world.Value!,
-                ResolvedBattles = dayOutcomeBuffer.ResolvedBattles.ToList(),
-                Events = dayOutcomeBuffer.Events.ToList()
+                ResolvedBattles = [.. dayOutcomeBuffer.ResolvedBattles],
+                Events = [.. dayOutcomeBuffer.Events],
+                DayDebugLogPath = dayDebugLog.LastWrittenFilePath,
+                DayDebugEntryCount = dayDebugLog.Snapshot().Count
             };
         }
     }
@@ -387,6 +582,7 @@ public sealed class StrategySimulationHost : IDisposable
 
             StrategyWorldSaveService.Apply(save, simulation.World);
             simulation.MovementTrace.Clear();
+            simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
 
             return BuildStateResult();
         }
@@ -424,6 +620,52 @@ public sealed class StrategySimulationHost : IDisposable
             return simulation?.MovementTrace.Snapshot() ?? [];
     }
 
+    /// <summary>获取 AI 决策思维链追踪（最近 400 条）。</summary>
+    public IReadOnlyList<StrategyAiDecisionTraceEntry> GetAiDecisionTrace()
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return [];
+
+            return simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Snapshot();
+        }
+    }
+
+    /// <summary>获取日推进 debug 日志快照（内存缓冲 + 最近文件路径）。</summary>
+    public StrategyDayDebugLogSnapshotDto GetDayDebugLog()
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+            {
+                return new StrategyDayDebugLogSnapshotDto
+                {
+                    Enabled = false,
+                    LastWrittenFilePath = null,
+                    Entries = []
+                };
+            }
+
+            var log = simulation.Services.GetRequiredService<IStrategyDayDebugLog>();
+            return new StrategyDayDebugLogSnapshotDto
+            {
+                Enabled = log.IsEnabled,
+                LastWrittenFilePath = log.LastWrittenFilePath,
+                Entries = log.Snapshot().Select(e => new StrategyDayDebugEntryDto
+                {
+                    Sequence = e.Sequence,
+                    At = e.At.ToString("O"),
+                    GameYear = e.GameYear,
+                    GameMonth = e.GameMonth,
+                    GameDay = e.GameDay,
+                    Category = e.Category,
+                    Message = e.Message
+                }).ToList()
+            };
+        }
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -437,6 +679,7 @@ public sealed class StrategySimulationHost : IDisposable
 
     private static void RunMonthStartOnLoadIfNeeded(StrategySimulationScope simulation)
     {
+        // 业务：加载日恰为月初结算日时，补发当月领主贡纳
         if (!EconomyRules.IsMonthlySettlementDay(simulation.World.GameData.GameDate))
             return;
 

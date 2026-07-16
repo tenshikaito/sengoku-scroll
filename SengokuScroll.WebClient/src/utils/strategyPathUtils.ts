@@ -1,7 +1,6 @@
-export interface MapPoint {
-  x: number;
-  y: number;
-}
+import type { MapPoint } from "@/api/strategyTypes";
+
+export type { MapPoint };
 
 export function concatPathSegments(segments: MapPoint[][]): MapPoint[] {
   const merged: MapPoint[] = [];

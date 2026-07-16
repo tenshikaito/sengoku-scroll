@@ -8,10 +8,7 @@ function formatScaledAmount(value: unknown, scale: number): string {
   const n = Number(value);
   const safe = Number.isFinite(n) ? n : 0;
   const scaled = safe / scale;
-  if (Number.isInteger(scaled)) {
-    return scaled.toLocaleString();
-  }
-  return scaled.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return Math.trunc(scaled).toLocaleString();
 }
 
 /** 兵数：面板显示为「人」。 */
@@ -21,12 +18,22 @@ export function formatSoldiers(count: unknown): string {
   return `${safe.toLocaleString()}人`;
 }
 
+/** 粮草（合）→ 石（仅数值）。 */
+export function formatFoodKoku(go: unknown): string {
+  return formatScaledAmount(go, GO_PER_KOKU);
+}
+
 /** 粮草（合）→ 石。 */
 export function formatFoodGo(go: unknown): string {
-  return `${formatScaledAmount(go, GO_PER_KOKU)}石`;
+  return `${formatFoodKoku(go)}石`;
+}
+
+/** 金钱（最小单位）→ 贯（仅数值）。 */
+export function formatMoneyKan(minUnit: unknown): string {
+  return formatScaledAmount(minUnit, MONEY_PER_KAN);
 }
 
 /** 金钱（最小单位）→ 贯。 */
 export function formatMoney(minUnit: unknown): string {
-  return `${formatScaledAmount(minUnit, MONEY_PER_KAN)}贯`;
+  return `${formatMoneyKan(minUnit)}贯`;
 }

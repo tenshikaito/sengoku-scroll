@@ -62,3 +62,56 @@ public sealed class StrategyRestoreSaveRequest
 {
     public required string Json { get; init; }
 }
+
+/// <summary>攻城指令请求。</summary>
+public sealed class SiegeOrderRequest
+{
+    public required int StrongholdId { get; init; }
+
+    /** Assault | Encircle */
+    public required string Mode { get; init; }
+}
+
+/// <summary>部队合并请求：将 source 并入 target。</summary>
+public sealed class MergeUnitRequest
+{
+    public required int TargetUnitId { get; init; }
+}
+
+/// <summary>部队分兵请求。</summary>
+public sealed class SplitUnitRequest
+{
+    public required IReadOnlyList<int> SubUnitIds { get; init; }
+
+    public required int SpawnX { get; init; }
+
+    public required int SpawnY { get; init; }
+
+    public string? Name { get; init; }
+}
+
+/// <summary>出征编组条目。</summary>
+public sealed class DeployCompositionRequestEntry
+{
+    public required int TypeId { get; init; }
+
+    public string? TypeName { get; init; }
+
+    public required int Soldiers { get; init; }
+
+    public int? CommanderId { get; init; }
+}
+
+/// <summary>居城出征请求。</summary>
+public sealed class DeployFromStrongholdRequest
+{
+    public string? UnitName { get; init; }
+
+    public required int CommanderId { get; init; }
+
+    public required IReadOnlyList<DeployCompositionRequestEntry> Composition { get; init; }
+
+    public int? Food { get; init; }
+
+    public int? Money { get; init; }
+}

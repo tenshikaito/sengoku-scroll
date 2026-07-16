@@ -13,7 +13,7 @@ public sealed class StrategyMovementTrace
     public void Clear() => entries.Clear();
 
     public IReadOnlyList<StrategyMovementTraceEntry> Snapshot()
-        => entries.ToArray();
+        => [.. entries];
 
     public void Log(string phase, string message, int? unitId = null, Point2? from = null, Point2? to = null,
         string? detail = null)

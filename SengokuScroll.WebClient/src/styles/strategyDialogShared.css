@@ -1,0 +1,10 @@
+/* 策略模式对话框：页脚按钮居中。 */
+.strategy-dialog-centered-footer .el-dialog__footer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.strategy-dialog-centered-footer .el-dialog__footer .el-button + .el-button {
+  margin-left: 0;
+}

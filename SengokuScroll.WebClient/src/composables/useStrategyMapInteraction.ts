@@ -13,6 +13,7 @@ import {
   StrategyMapInteractionMachine,
   type StrategyMapInteractionStateSnapshot,
 } from "@/strategyMapInteraction/StrategyMapInteractionMachine";
+import { SplitSpawnSelectionInteractionState } from "@/strategyMapInteraction/states/SplitSpawnSelectionInteractionState";
 
 export interface UseStrategyMapInteractionOptions {
   worldState: Ref<StrategyWorldState | null>;
@@ -28,6 +29,8 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
   const menuAnchor = ref<StrategyMenuAnchor | null>(null);
   const moveTarget = ref<{ x: number; y: number } | null>(null);
   const lockedCommand = ref<StrategyMoveTarget | null>(null);
+  const pendingMergeTargetUnitId = ref<number | null>(null);
+  const pendingSplitSubUnitIds = ref<number[]>([]);
   const snapshot = ref<StrategyMapInteractionStateSnapshot>({
     id: "navigate",
     mapUnitSelectionEnabled: true,
@@ -132,6 +135,41 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
       const targetUnit = world.units.find((u) => u.x === x && u.y === y);
       return targetUnit !== undefined && targetUnit.forceId !== playerForceId;
     },
+    isValidMergeTarget: (targetUnitId) => {
+      const sourceUnitId = options.selectedUnitId.value;
+      const world = options.worldState.value;
+      if (!sourceUnitId || !world || targetUnitId === sourceUnitId) return false;
+      const source = world.units.find((u) => u.id === sourceUnitId);
+      const target = world.units.find((u) => u.id === targetUnitId);
+      if (!source || !target) return false;
+      if (source.forceId !== playerForceId || target.forceId !== playerForceId) return false;
+      if (source.soldiers <= 0 || target.soldiers <= 0) return false;
+      const dx = Math.abs(source.x - target.x);
+      const dy = Math.abs(source.y - target.y);
+      return dx + dy <= 1;
+    },
+    isValidSplitSpawnCell: (x, y) => {
+      const unitId = options.selectedUnitId.value;
+      const world = options.worldState.value;
+      if (!unitId || !world) return false;
+      const unit = world.units.find((u) => u.id === unitId);
+      if (!unit || unit.forceId !== playerForceId) return false;
+      const dx = Math.abs(unit.x - x);
+      const dy = Math.abs(unit.y - y);
+      if (dx + dy !== 1) return false;
+      return !world.units.some((u) => u.soldiers > 0 && u.x === x && u.y === y);
+    },
+    getPendingMergeTargetUnitId: () => pendingMergeTargetUnitId.value,
+    setPendingMergeTargetUnitId: (id) => {
+      pendingMergeTargetUnitId.value = id;
+    },
+    getPendingSplitSubUnitIds: () => pendingSplitSubUnitIds.value,
+    setPendingSplitSubUnitIds: (ids) => {
+      pendingSplitSubUnitIds.value = [...ids];
+    },
+    clearPendingSplitSubUnitIds: () => {
+      pendingSplitSubUnitIds.value = [];
+    },
     transitionTo: (state) => machine.transitionTo(state),
   });
 
@@ -156,6 +194,8 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
     menuAnchor,
     moveTarget,
     lockedCommand,
+    pendingMergeTargetUnitId,
+    pendingSplitSubUnitIds,
     snapshot,
     mapUnitSelectionEnabled,
     mapStrongholdSelectionEnabled,
@@ -172,6 +212,11 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
     onMapRightClick: () => machine.onMapRightClick(),
     onBeginMove: () => machine.onBeginMove(),
     onBeginAttack: () => machine.onBeginAttack(),
+    onBeginMerge: () => machine.onBeginMerge(),
+    onBeginSplit: () => machine.onBeginSplit(),
+    onBeginExpedition: () => machine.onBeginExpedition(),
+    enterSplitSpawnSelection: () =>
+      machine.transitionTo(new SplitSpawnSelectionInteractionState()),
     onConfirmBattle: () => machine.onConfirmBattle(),
     onBattlePreviewReady: () => machine.onBattlePreviewReady(),
     onCancel: () => machine.onCancel(),

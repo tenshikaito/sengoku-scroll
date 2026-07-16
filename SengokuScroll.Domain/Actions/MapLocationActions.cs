@@ -11,19 +11,21 @@ namespace SengokuScroll.Domain.Actions;
 /// </summary>
 public static class MapLocationActions
 {
-    /// <summary>移动军事单位并同步 <see cref="GameMapData.Units"/> 索引。</summary>
+    /// <summary>移动军事单位并同步 <see cref="GameMapData.Units"/> 多单位列表索引。</summary>
     public static void SetUnitLocation(IGameWorldContext context, Unit unit, Point3 newLocation)
-        => SetEntityLocation(
-            context.GameWorld,
-            unit.Id,
-            newLocation,
-            unit.Location,
-            loc => unit.Location = loc,
-            world => world.GameMapData.Units);
+    {
+        var world = context.GameWorld;
+        var tileMap = world.GameMapMasterData.TileMap;
+        var index = world.GameMapData.Units;
+
+        RemoveUnitFromTileIndex(index, tileMap, unit.Location, unit.Id);
+        unit.Location = newLocation;
+        AddUnitToTileIndex(index, tileMap, newLocation, unit.Id);
+    }
 
     /// <summary>移动角色并同步 <see cref="GameMapData.Characters"/> 索引。</summary>
     public static void SetCharacterLocation(IGameWorldContext context, Character character, Point3 newLocation)
-        => SetEntityLocation(
+        => SetSingleEntityLocation(
             context.GameWorld,
             character.Id,
             newLocation,
@@ -33,7 +35,7 @@ public static class MapLocationActions
 
     /// <summary>移动据点并同步 <see cref="GameMapData.Strongholds"/> 索引。</summary>
     public static void SetStrongholdLocation(IGameWorldContext context, Stronghold stronghold, Point3 newLocation)
-        => SetEntityLocation(
+        => SetSingleEntityLocation(
             context.GameWorld,
             stronghold.Id,
             newLocation,
@@ -41,19 +43,43 @@ public static class MapLocationActions
             loc => stronghold.Location = loc,
             world => world.GameMapData.Strongholds);
 
-    /// <summary>将军事单位登记到其当前坐标对应的格点索引（世界构建时调用）。</summary>
+    /// <summary>将军事单位登记到其当前坐标对应的格点列表（世界构建时调用）。</summary>
     public static void RegisterUnit(GameWorld world, Unit unit)
-        => RegisterAtCurrentLocation(world, unit.Id, unit.Location, world.GameMapData.Units);
+        => AddUnitToTileIndex(
+            world.GameMapData.Units,
+            world.GameMapMasterData.TileMap,
+            unit.Location,
+            unit.Id);
+
+    /// <summary>从地图与数据中移除军事单位（溃灭/解散）。</summary>
+    public static void RemoveUnit(IGameWorldContext context, Unit unit)
+    {
+        var world = context.GameWorld;
+        RemoveUnitFromTileIndex(
+            world.GameMapData.Units,
+            world.GameMapMasterData.TileMap,
+            unit.Location,
+            unit.Id);
+        world.GameData.Units.Remove(unit.Id);
+    }
 
     /// <summary>将角色登记到其当前坐标对应的格点索引（世界构建时调用）。</summary>
     public static void RegisterCharacter(GameWorld world, Character character)
-        => RegisterAtCurrentLocation(world, character.Id, character.Location, world.GameMapData.Characters);
+        => AddSingleToTileIndex(
+            world.GameMapData.Characters,
+            world.GameMapMasterData.TileMap,
+            character.Location,
+            character.Id);
 
     /// <summary>将据点登记到其当前坐标对应的格点索引（世界构建时调用）。</summary>
     public static void RegisterStronghold(GameWorld world, Stronghold stronghold)
-        => RegisterAtCurrentLocation(world, stronghold.Id, stronghold.Location, world.GameMapData.Strongholds);
+        => AddSingleToTileIndex(
+            world.GameMapData.Strongholds,
+            world.GameMapMasterData.TileMap,
+            stronghold.Location,
+            stronghold.Id);
 
-    private static void SetEntityLocation(
+    private static void SetSingleEntityLocation(
         GameWorld world,
         int entityId,
         Point3 newLocation,
@@ -64,19 +90,50 @@ public static class MapLocationActions
         var tileMap = world.GameMapMasterData.TileMap;
         var index = getIndex(world);
 
-        RemoveFromTileIndex(index, tileMap, currentLocation, entityId);
+        RemoveSingleFromTileIndex(index, tileMap, currentLocation, entityId);
         setLocation(newLocation);
-        AddToTileIndex(index, tileMap, newLocation, entityId);
+        AddSingleToTileIndex(index, tileMap, newLocation, entityId);
     }
 
-    private static void RegisterAtCurrentLocation(
-        GameWorld world,
-        int entityId,
+    private static void RemoveUnitFromTileIndex(
+        Dictionary<int, List<int>> index,
+        TileMap tileMap,
         Point3 location,
-        Dictionary<int, int> index)
-        => AddToTileIndex(index, world.GameMapMasterData.TileMap, location, entityId);
+        int entityId)
+    {
+        if (tileMap.IsOutOfBounds(location))
+            return;
 
-    private static void RemoveFromTileIndex(
+        var tileIndex = tileMap.GetIndex(location);
+        if (!index.TryGetValue(tileIndex, out var list))
+            return;
+
+        list.Remove(entityId);
+        if (list.Count == 0)
+            index.Remove(tileIndex);
+    }
+
+    private static void AddUnitToTileIndex(
+        Dictionary<int, List<int>> index,
+        TileMap tileMap,
+        Point3 location,
+        int entityId)
+    {
+        if (tileMap.IsOutOfBounds(location))
+            throw new ArgumentOutOfRangeException(nameof(location), $"坐标 {location} 超出地图边界。");
+
+        var tileIndex = tileMap.GetIndex(location);
+        if (!index.TryGetValue(tileIndex, out var list))
+        {
+            list = [];
+            index[tileIndex] = list;
+        }
+
+        if (!list.Contains(entityId))
+            list.Add(entityId);
+    }
+
+    private static void RemoveSingleFromTileIndex(
         Dictionary<int, int> index,
         TileMap tileMap,
         Point3 location,
@@ -86,12 +143,11 @@ public static class MapLocationActions
             return;
 
         var tileIndex = tileMap.GetIndex(location);
-
         if (index.TryGetValue(tileIndex, out var existingId) && existingId == entityId)
             index.Remove(tileIndex);
     }
 
-    private static void AddToTileIndex(
+    private static void AddSingleToTileIndex(
         Dictionary<int, int> index,
         TileMap tileMap,
         Point3 location,

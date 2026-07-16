@@ -3,17 +3,21 @@ namespace SengokuScroll.Strategy.Constants;
 /// <summary>
 /// 战国时代兵站·输送相关的设计常数（史实简化参照，见 strategy-development-plan §6.1.1）。
 /// 本类仅存放常量，不含方法；计算逻辑见 <see cref="Calculators.LogisticsCalculator"/>。
+/// 口粮使用毫合（milli-go）整型，1000 = 1 合。
 /// </summary>
 public static class LogisticsConstants
 {
     /// <summary>1 石 = 1000 合。</summary>
     public const int GoPerKoku = 1000;
 
-    /// <summary>出征兵士日粮（合/人/日），参照「一日三合」取中值 2 合。</summary>
-    public const double DailySoldierRationGo = 2.0;
+    /// <summary>出征兵士日粮（毫合/人/日）；3000 ≈ 一日三合。</summary>
+    public const int DailySoldierRationMilliGo = 3000;
 
-    /// <summary>输送人夫日粮（合/人/日）。</summary>
-    public const double PorterDailyRationGo = 1.5;
+    /// <summary>市民日粮（毫合/人/日）；2000 = 2 合。</summary>
+    public const int DailyCivilianRationMilliGo = 2000;
+
+    /// <summary>输送人夫日粮（毫合/人/日）；1500 = 1.5 合。</summary>
+    public const int PorterDailyRationMilliGo = 1500;
 
     /// <summary>默认运输队人夫数。</summary>
     public const int DefaultPorterCount = 50;

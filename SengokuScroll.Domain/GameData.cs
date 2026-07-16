@@ -9,6 +9,11 @@ public class GameData
     /// <summary>当前游戏内日期。</summary>
     public GameDate GameDate { get; set; }
 
+    /// <summary>
+    /// 本局固定随机种子（开局生成或剧本指定）。所有战斗/事件掷点应混入此值以保证可回放。
+    /// </summary>
+    public int SimulationSeed { get; set; }
+
     /// <summary>全部势力，Key 为势力 Id。</summary>
     public required Dictionary<int, Force> Forces { get; init; } = [];
 
@@ -29,4 +34,13 @@ public class GameData
 
     /// <summary>地图上所有信使，Key 为信使 Id。</summary>
     public required Dictionary<int, Messenger> Messengers { get; init; } = [];
+
+    /// <summary>进行中的法理战争。</summary>
+    public Dictionary<int, War> Wars { get; init; } = [];
+
+    /// <summary>地图战场容器（野战/攻城）。</summary>
+    public Dictionary<int, Battlefield> Battlefields { get; init; } = [];
+
+    /// <summary>下一战场 Id（自增）。</summary>
+    public int NextBattlefieldId { get; set; } = 1;
 }

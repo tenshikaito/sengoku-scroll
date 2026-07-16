@@ -5,26 +5,32 @@ export type {
   StrategyUnitState,
   StrategySupplyConvoyState,
   StrategyMessengerState,
+  StrategyBattlefieldState,
+  StrategyBattlefieldParticipant,
 } from "./strategyTypes";
 
 export {
   loadScenario,
   getStrategyState,
+  orderUnitAttack,
+  orderUnitSiege,
+  mergeUnits,
+  splitUnit,
+  deployFromStronghold,
   moveUnit,
   previewUnitPath,
   previewBattle,
   executeInstantBattle,
   setUnitDirective,
-  orderUnitAttack,
   advanceDay,
   getMovementTrace,
+  getAiDecisionTrace,
   exportStrategySave,
   restoreStrategySave,
   hasLocalStrategySave,
-  setStrategySessionRecoveryHandler,
 } from "./strategyClient";
 
-export type { StrategyMovementTraceEntry } from "./strategyClient";
+export type { StrategyMovementTraceEntry, StrategyAiDecisionTraceEntry } from "./strategyClient";
 export type { StrategyPathPreview, StrategyBattlePreview, StrategyBattleResult, StrategyBattleLogEntry, StrategyInstantBattleResponse, StrategyPolicyChangeResponse, StrategyAdvanceDayResponse, StrategyLordState, StrategyEvent, StrategyEconomySettlementDetail, StrategyEconomyMonthlyDetail, MapPoint } from "./strategyTypes";
 
 export {

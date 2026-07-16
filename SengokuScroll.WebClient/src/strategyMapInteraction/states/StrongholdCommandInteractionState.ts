@@ -12,6 +12,8 @@ export class StrongholdCommandInteractionState extends StrategyMapInteractionSta
   readonly mapRightClickEnabled = true;
   readonly popupMode = "strongholdCommand" as const;
 
+  override onBeginExpedition(_ctx: StrategyMapInteractionContext): void {}
+
   override onCancel(ctx: StrategyMapInteractionContext): void {
     ctx.setSelectedUnitId(null);
     ctx.setSelectedStrongholdId(null);

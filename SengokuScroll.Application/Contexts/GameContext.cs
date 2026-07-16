@@ -3,6 +3,7 @@ using SengokuScroll.Domain.Contexts;
 
 namespace SengokuScroll.Application.Contexts;
 
+/// <summary>单次请求可见的游戏上下文：世界、规则与事件总线。</summary>
 public class GameContext(
     IGameWorldContext gameDataContext,
     IGameWorldEventDispatcher gameEventContext,

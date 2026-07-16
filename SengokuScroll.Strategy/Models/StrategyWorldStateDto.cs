@@ -3,10 +3,16 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Data;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
+using SengokuScroll.Domain.Rules;
+using SengokuScroll.Strategy.Rules;
 using SengokuScroll.Domain.Definitions;
+using SengokuScroll.Domain.Extensions;
+using SengokuScroll.Domain.Types;
 using SengokuScroll.Domain.World;
+using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Models;
 
@@ -25,9 +31,15 @@ public sealed record StrategyWorldStateDto
 
     public required IReadOnlyList<StrategyUnitStateDto> Units { get; init; }
 
+    /// <summary>进行中的地图战场（交战格折叠显示）。</summary>
+    public required IReadOnlyList<StrategyBattlefieldStateDto> Battlefields { get; init; }
+
     public required IReadOnlyList<StrategySupplyConvoyStateDto> SupplyConvoys { get; init; }
 
     public required IReadOnlyList<StrategyMessengerStateDto> Messengers { get; init; }
+
+    /// <summary>将领摘要（统计本势力将领数等）。</summary>
+    public required IReadOnlyList<StrategyCharacterSummaryDto> Characters { get; init; }
 
     /// <summary>玩家势力视角外交（目标势力 + 关系）。</summary>
     public required IReadOnlyList<StrategyDiplomacyStateDto> Diplomacies { get; init; }
@@ -35,8 +47,17 @@ public sealed record StrategyWorldStateDto
     /// <summary>玩家势力 Id。</summary>
     public required int PlayerForceId { get; init; }
 
+    /// <summary>本局难度（Easy/Normal/...）。</summary>
+    public required string Difficulty { get; init; }
+
+    /// <summary>本局固定随机种子（回放/联机预埋）。</summary>
+    public required int SimulationSeed { get; init; }
+
     /// <summary>当主摘要（方针/战报信使出发点）。</summary>
     public required StrategyLordStateDto Lord { get; init; }
+
+    /// <summary>剧本 Master Data 快照（情报系统查阅用）。</summary>
+    public required StrategyMasterDataSnapshotDto MasterData { get; init; }
 }
 
 /// <summary>地图尺寸与名称。</summary>
@@ -120,6 +141,197 @@ public sealed record StrategyForceStateDto
 
     /// <summary>宗主势力 Id；内藩/外藩时有效。</summary>
     public int? SuzerainForceId { get; init; }
+
+    /// <summary>本势力据点数（含旗下内藩）。</summary>
+    public required int StrongholdCount { get; init; }
+
+    /// <summary>本势力将领数（含旗下内藩）。</summary>
+    public required int CharacterCount { get; init; }
+
+    /// <summary>威望（Domain <see cref="Entities.Force.Prestige"/>）。</summary>
+    public required byte Prestige { get; init; }
+
+    /// <summary>正统性（Domain <see cref="Entities.Force.Orthodoxy"/>）。</summary>
+    public required byte Orthodoxy { get; init; }
+
+    /// <summary>当主角色驻留据点 Id（<see cref="Character.StrongholdId"/>；无则 0）。</summary>
+    public required int LordResidenceStrongholdId { get; init; }
+
+    /// <summary>势力内贡赋欠粮（合；M4-d）。</summary>
+    public required int InternalArrearsFoodGo { get; init; }
+
+    /// <summary>势力内贡赋欠钱（文；M4-d）。</summary>
+    public required int InternalArrearsMoney { get; init; }
+
+    /// <summary>继承人角色 Id；无则 null。</summary>
+    public int? SuccessorId { get; init; }
+}
+
+/// <summary>将领摘要（供前端统计与出征编组）。</summary>
+public sealed record StrategyCharacterSummaryDto
+{
+    public required int Id { get; init; }
+
+    public required int ForceId { get; init; }
+
+    public required string Name { get; init; }
+
+    public required int StrongholdId { get; init; }
+
+    /// <summary>Map | Stronghold | Unit</summary>
+    public required string LocationType { get; init; }
+
+    /// <summary>Idle | UnitAction | Task | Prisoner 等</summary>
+    public required string ForceStatus { get; init; }
+
+    public required int Leadership { get; init; }
+
+    public required int Power { get; init; }
+
+    public required int Politics { get; init; }
+
+    public required int Strategy { get; init; }
+
+    public required int Charm { get; init; }
+
+    public required string CultureName { get; init; }
+
+    public required string ReligionName { get; init; }
+
+    /// <summary>仕官年数（在本家势力任职年数；开局为 0）。</summary>
+    public required int YearsInForce { get; init; }
+
+    /// <summary>Male | Female</summary>
+    public required string Sex { get; init; }
+
+    public required int Age { get; init; }
+
+    public required StrategyCharacterPersonalityDto Personality { get; init; }
+
+    public required StrategyCharacterProficiencyDto Proficiency { get; init; }
+
+    public required bool IsDead { get; init; }
+
+    /// <summary>是否生病。</summary>
+    public required bool IsSick { get; init; }
+
+    /// <summary>出身：RoyalFamily | Noble | Landlord | Normal | Slave。</summary>
+    public required string BirthType { get; init; }
+
+    /// <summary>任务剩余天数（任务中时有效；未实装时为 null）。</summary>
+    public int? TaskRemainingDays { get; init; }
+
+    /// <summary>忠诚度 0–100（暂以情义属性映射）。</summary>
+    public required int Loyalty { get; init; }
+}
+
+public sealed record StrategyMasterDataEntryDto
+{
+    public required int Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public string? Group { get; init; }
+
+    public string? Description { get; init; }
+
+    public string? Extra { get; init; }
+
+    /// <summary>按字段展开的明细（情报 Master Data 表格列）。</summary>
+    public IReadOnlyDictionary<string, string>? Fields { get; init; }
+}
+
+public sealed record StrategyMasterDataSnapshotDto
+{
+    public required IReadOnlyList<StrategyMasterDataEntryDto> CultureGroups { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> Cultures { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> ReligionGroups { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> Religions { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> StrongholdTypes { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> DefenseFacilityTypes { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> UnitTypes { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> CharacterDefinitions { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> Terrains { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> Climates { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> Regions { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> Roads { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> Landmarks { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> TerrainVegetationFeatures { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> TerrainSurfaceFeatures { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> Enums { get; init; }
+}
+
+public sealed record StrategyCharacterPersonalityDto
+{
+    public int Temper { get; init; }
+
+    public int Courage { get; init; }
+
+    public int Principle { get; init; }
+
+    public int Action { get; init; }
+
+    public int Friendship { get; init; }
+
+    public int Ambition { get; init; }
+
+    public int Hobby { get; init; }
+
+    public int Desire { get; init; }
+
+    public int Drinking { get; init; }
+
+    public int Fortune { get; init; }
+}
+
+public sealed record StrategyCharacterProficiencyDto
+{
+    public int Infantry { get; init; }
+
+    public int Ride { get; init; }
+
+    public int Archery { get; init; }
+
+    public int Firelock { get; init; }
+
+    public int Sealing { get; init; }
+
+    public int Military { get; init; }
+
+    public int Fighting { get; init; }
+
+    public int Spy { get; init; }
+
+    public int Agriculture { get; init; }
+
+    public int Commerce { get; init; }
+
+    public int Construct { get; init; }
+
+    public int Smelt { get; init; }
+
+    public int Eloquence { get; init; }
+
+    public int Court { get; init; }
+
+    public int Sociality { get; init; }
+
+    public int Healing { get; init; }
 }
 
 /// <summary>玩家视角外交摘要。</summary>
@@ -129,6 +341,18 @@ public sealed record StrategyDiplomacyStateDto
 
     /// <summary>Neutral | Allied | Enemy。</summary>
     public required string Relation { get; init; }
+
+    /// <summary>外交关系值（-100 恶劣 ~ 100 亲密）。</summary>
+    public required int Relationship { get; init; }
+
+    /// <summary>信赖度（-100 不信任 ~ 100 完全信任）。</summary>
+    public required int Trust { get; init; }
+
+    /// <summary>贡赋欠粮（合）。</summary>
+    public required int ArrearsFoodGo { get; init; }
+
+    /// <summary>贡赋欠钱（文）。</summary>
+    public required int ArrearsMoney { get; init; }
 }
 
 /// <summary>据点摘要。</summary>
@@ -147,6 +371,15 @@ public sealed record StrategyStrongholdStateDto
     public required int Food { get; init; }
 
     public required int Population { get; init; }
+
+    /// <summary>治安（0–100）。</summary>
+    public required int Stability { get; init; }
+
+    /// <summary>民心（0–100，取自民间 Actor）。</summary>
+    public required int PopularFeelings { get; init; }
+
+    /// <summary>是否显示「居城」（当主居城或任命领主据点）。</summary>
+    public required bool IsLordResidence { get; init; }
 
     /// <summary>领主角色 Id；0 = 当主直辖。</summary>
     public required int LordId { get; init; }
@@ -169,6 +402,12 @@ public sealed record StrategyStrongholdStateDto
 
     public required int Money { get; init; }
 
+    /// <summary>城内驻军士兵数（非地图单位）。</summary>
+    public required int GarrisonSoldiers { get; init; }
+
+    /// <summary>城内伤兵数。</summary>
+    public required int GarrisonWounded { get; init; }
+
     public required byte PollTaxRate { get; init; }
 
     public required byte AgricultureTaxRate { get; init; }
@@ -176,6 +415,49 @@ public sealed record StrategyStrongholdStateDto
     public required byte CommerceTaxRate { get; init; }
 
     public required byte TariffTaxRate { get; init; }
+
+    /// <summary>是否史实据点（false = 虚构据点）。</summary>
+    public required bool IsHistorical { get; init; }
+
+    /// <summary>城防（城防设施防御值累加）。</summary>
+    public required int Defense { get; init; }
+
+    /// <summary>已建城防设施。</summary>
+    public required IReadOnlyList<StrategyDefenseFacilityStateDto> DefenseFacilities { get; init; }
+
+    /// <summary>官府奢侈品库存（M4-d）。</summary>
+    public required int LuxuryGoods { get; init; }
+
+    /// <summary>经济设施（Market/奢侈品工坊等）。</summary>
+    public required IReadOnlyList<StrategyEconomyFacilityStateDto> EconomyFacilities { get; init; }
+
+    /// <summary>当前被进攻状态：Assault=强攻，Encircle=围城；无则 null。</summary>
+    public string? SiegeThreat { get; init; }
+}
+
+/// <summary>经济设施摘要（M4-d）。</summary>
+public sealed record StrategyEconomyFacilityStateDto
+{
+    public required int TypeId { get; init; }
+
+    public required string Name { get; init; }
+}
+
+/// <summary>城防设施摘要。</summary>
+public sealed record StrategyDefenseFacilityStateDto
+{
+    public required int TypeId { get; init; }
+
+    public required string Name { get; init; }
+
+    /// <summary>Castle | Wall | Gate | Moat | Defender</summary>
+    public required string Category { get; init; }
+
+    /// <summary>设施等级（1–3）。</summary>
+    public required int Level { get; init; }
+
+    /// <summary>该设施城防加成。</summary>
+    public required int Defense { get; init; }
 }
 
 /// <summary>军事单位摘要。</summary>
@@ -232,6 +514,68 @@ public sealed record StrategyUnitStateDto
 
     /// <summary>在途运输队补给摘要。</summary>
     public required IReadOnlyList<StrategyInTransitSupplyDto> InTransitSupplies { get; init; }
+
+    /// <summary>姿态（Normal / Attacking / Surrounding / …）。</summary>
+    public required string Stance { get; init; }
+
+    /// <summary>攻城方式（None / Encircle / Assault）。</summary>
+    public required string SiegeMode { get; init; }
+
+    /// <summary>方针目标据点 Id（0=无）。</summary>
+    public required int DirectiveTargetId { get; init; }
+
+    public string? TargetStrongholdName { get; init; }
+
+    public int TargetUnitId { get; init; }
+
+    public string? TargetUnitName { get; init; }
+
+    /// <summary>所属地图战场 Id；0 表示未入战。</summary>
+    public int BattlefieldId { get; init; }
+}
+
+/// <summary>战场内按势力汇总的参战摘要（悬浮框用）。</summary>
+public sealed record StrategyBattlefieldParticipantDto
+{
+    public required int ForceId { get; init; }
+
+    public required string ForceName { get; init; }
+
+    public required int Soldiers { get; init; }
+
+    public required int Morale { get; init; }
+
+    public required int Money { get; init; }
+
+    public required int Food { get; init; }
+}
+
+/// <summary>地图交战战场摘要（替代叠军图标显示）。</summary>
+public sealed record StrategyBattlefieldStateDto
+{
+    public required int Id { get; init; }
+
+    public required int X { get; init; }
+
+    public required int Y { get; init; }
+
+    /// <summary>Field | Siege</summary>
+    public required string Kind { get; init; }
+
+    public required int StandoffDays { get; init; }
+
+    /// <summary>围城格进攻方式：Assault | Encircle；野战为 null。</summary>
+    public string? SiegeThreat { get; init; }
+
+    /// <summary>两侧合计兵力（兼容）。</summary>
+    public required int SoldierTotal { get; init; }
+
+    /// <summary>攻方（战争进攻侧）合计兵力；围城格「围」下仅显示此项。</summary>
+    public required int AggressorSoldierTotal { get; init; }
+
+    public required IReadOnlyList<StrategyBattlefieldParticipantDto> Participants { get; init; }
+
+    public required IReadOnlyList<int> UnitIds { get; init; }
 }
 
 /// <summary>单位在途补给摘要。</summary>
@@ -320,6 +664,10 @@ public sealed record StrategyBattleResultDto
 
     public required int DefenderUnitId { get; init; }
 
+    public required int AttackerForceId { get; init; }
+
+    public required int DefenderForceId { get; init; }
+
     public required string AttackerName { get; init; }
 
     public required string DefenderName { get; init; }
@@ -342,7 +690,35 @@ public sealed record StrategyBattleResultDto
 
     public required int ResolutionRoll { get; init; }
 
+    /// <summary>FieldBattle | Ambush | Siege</summary>
+    public required string EngagementKind { get; init; }
+
     public required IReadOnlyList<StrategyBattleLogEntryDto> LogEntries { get; init; }
+
+    public required IReadOnlyList<StrategyBattleFactorNoteDto> FactorNotes { get; init; }
+
+    /// <summary>攻方驰援部队名（不含主队）。</summary>
+    public IReadOnlyList<string> AttackerReinforcementNames { get; init; } = [];
+
+    /// <summary>守方驰援部队名（不含主队）。</summary>
+    public IReadOnlyList<string> DefenderReinforcementNames { get; init; } = [];
+
+    /// <summary>是否劝降成功（零伤亡）。</summary>
+    public bool IsSurrendered { get; init; }
+}
+
+/// <summary>胜负因素修正明细。</summary>
+public sealed record StrategyBattleFactorNoteDto
+{
+    public required string FactorId { get; init; }
+
+    public required string Label { get; init; }
+
+    public required int AttackerWinRateDelta { get; init; }
+
+    public required int DefenderWinRateDelta { get; init; }
+
+    public string? Detail { get; init; }
 }
 
 /// <summary>战斗过程日志条目。</summary>
@@ -375,16 +751,22 @@ public sealed record StrategyPolicyChangeResponseDto
     public required string Outcome { get; init; }
 }
 
-/// <summary>日推进响应：含当回合已结算战斗（M3-b）。</summary>
+/// <summary>日推进响应：信使抵达等事件；战报详情随 BattleReportArrived 事件送达。</summary>
 public sealed record StrategyAdvanceDayResponseDto
 {
     public required StrategyWorldStateDto State { get; init; }
 
-    /// <summary>本日推进期间已结算、待 UI 弹出的战报。</summary>
+    /// <summary>已废弃即时战报通道；保留空列表以兼容旧客户端。详情见 Events[].BattleResult。</summary>
     public required IReadOnlyList<StrategyBattleResultDto> ResolvedBattles { get; init; }
 
     /// <summary>本日推进期间信使抵达等事件，供左上角消息栏展示。</summary>
     public required IReadOnlyList<StrategyEventDto> Events { get; init; }
+
+    /// <summary>日推进 debug 日志写入路径（启用写文件时）。</summary>
+    public string? DayDebugLogPath { get; init; }
+
+    /// <summary>本日 debug 日志条目数（内存缓冲）。</summary>
+    public int DayDebugEntryCount { get; init; }
 }
 
 /// <summary>当主位置摘要。</summary>
@@ -398,6 +780,9 @@ public sealed record StrategyLordStateDto
     public required int X { get; init; }
 
     public required int Y { get; init; }
+
+    /// <summary>当主居城名（势力君主名义上的居城据点）。</summary>
+    public string? ResidenceStrongholdName { get; init; }
 }
 
 /// <summary>运输队摘要（非军事单位，情报字段与 <see cref="StrategyUnitStateDto"/> 对齐）。</summary>
@@ -530,17 +915,27 @@ public static class StrategyWorldStateMapper
         var tileMap = world.GameMapMasterData.TileMap;
         var date = world.GameData.GameDate;
         var lordLocation = StrategyLordHelper.ResolveLocation(world.GameData, meta);
+        var lordResidenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
+            meta.PlayerForceId,
+            world.GameData,
+            meta);
+        var lordResidenceName = world.GameData.Strongholds.TryGetValue(lordResidenceId, out var residenceSh)
+            ? residenceSh.Name
+            : null;
 
         return new StrategyWorldStateDto
         {
             ScenarioId = scenarioId,
             PlayerForceId = meta.PlayerForceId,
+            Difficulty = meta.Difficulty.ToString(),
+            SimulationSeed = world.GameData.SimulationSeed,
             Lord = new StrategyLordStateDto
             {
                 Name = meta.LordName,
                 UnitId = meta.LordUnitId,
                 X = lordLocation.X,
-                Y = lordLocation.Y
+                Y = lordLocation.Y,
+                ResidenceStrongholdName = lordResidenceName
             },
             Map = new StrategyMapStateDto
             {
@@ -550,7 +945,7 @@ public static class StrategyWorldStateMapper
                 RoadCells = MapRoadCells(tileMap, world.GameMapMasterData.Roads),
                 TileTerrainNames = MapTileTerrainNames(tileMap, world.GameMapMasterData.Terrains),
                 TileRegionNames = MapTileRegionNames(tileMap, world.GameMapMasterData),
-                Landmarks = MapLandmarks(world.GameMapMasterData.StrongholdPoints)
+                Landmarks = MapLandmarks(world.GameMapMasterData.Landmarks)
             },
             Date = new StrategyDateStateDto
             {
@@ -558,35 +953,328 @@ public static class StrategyWorldStateMapper
                 Month = date.Month,
                 Day = date.Day
             },
-            Forces = world.GameData.Forces.Values
-                .Select(f => new StrategyForceStateDto
+            Forces = [.. world.GameData.Forces.Values
+                .Select(f =>
                 {
-                    Id = f.Id,
-                    Name = f.Name,
-                    Food = f.Food,
-                    Money = f.Money,
-                    Status = f.Status.ToString(),
-                    SuzerainForceId = f.SuzerainForceId
+                    var realmRootId = TributeRoutingHelper.ResolveRealmRootForceId(f.Id, world.GameData);
+                    return new StrategyForceStateDto
+                    {
+                        Id = f.Id,
+                        Name = f.Name,
+                        Food = f.Food,
+                        Money = f.Money,
+                        Status = f.Status.ToString(),
+                        SuzerainForceId = f.SuzerainForceId,
+                        StrongholdCount = world.GameData.Strongholds.Values.Count(s =>
+                            TributeRoutingHelper.ResolveRealmRootForceId(s.ForceId, world.GameData) == realmRootId),
+                        CharacterCount = world.GameData.Characters.Values.Count(c =>
+                            TributeRoutingHelper.ResolveRealmRootForceId(c.ForceId, world.GameData) == realmRootId),
+                        Prestige = f.Prestige,
+                        Orthodoxy = f.Orthodoxy,
+                        LordResidenceStrongholdId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
+                            f.Id,
+                            world.GameData,
+                            meta),
+                        InternalArrearsFoodGo = f.InternalArrearsFoodGo,
+                        InternalArrearsMoney = f.InternalArrearsMoney,
+                        SuccessorId = f.Successor
+                    };
                 })
-                .OrderBy(f => f.Id)
-                .ToList(),
-            Strongholds = world.GameData.Strongholds.Values
-                .Select(s => MapStronghold(s, meta, world.GameData))
-                .OrderBy(s => s.Id)
-                .ToList(),
-            Units = world.GameData.Units.Values
+                .OrderBy(f => f.Id)],
+            Strongholds = [.. world.GameData.Strongholds.Values
+                .Select(s => MapStronghold(s, meta, world.GameData, world.GameMasterData))
+                .OrderBy(s => s.Id)],
+            Units = [.. world.GameData.Units.Values
+                .Where(u => u.IsMilitary && u.Soldier > 0)
                 .Select(u => MapUnit(u, meta, world.GameData))
-                .OrderBy(u => u.Id)
-                .ToList(),
-            SupplyConvoys = world.GameData.SupplyConvoys.Values
+                .OrderBy(u => u.Id)],
+            Battlefields = [.. world.GameData.Battlefields.Values
+                .Where(b => !b.IsClosed)
+                .Select(b => MapBattlefield(b, world.GameData))
+                .OrderBy(b => b.Id)],
+            SupplyConvoys = [.. world.GameData.SupplyConvoys.Values
                 .Select(c => MapConvoy(c, world.GameData))
-                .OrderBy(c => c.Id)
-                .ToList(),
-            Messengers = world.GameData.Messengers.Values
+                .OrderBy(c => c.Id)],
+            Messengers = [.. world.GameData.Messengers.Values
                 .Select(m => MapMessenger(m, world.GameData))
-                .OrderBy(m => m.Id)
-                .ToList(),
-            Diplomacies = MapPlayerDiplomacies(meta.PlayerForceId, world.GameData)
+                .OrderBy(m => m.Id)],
+            Characters = [.. world.GameData.Characters.Values
+                .Select(c => MapCharacter(c, world.GameData.GameDate))
+                .OrderBy(c => c.Id)],
+            Diplomacies = MapPlayerDiplomacies(meta.PlayerForceId, world.GameData),
+            MasterData = MapMasterData(world.GameMasterData, world.GameMapMasterData)
+        };
+    }
+
+    private static Dictionary<string, string> MasterFields(params (string key, string? value)[] pairs)
+        => pairs
+            .Where(p => !string.IsNullOrWhiteSpace(p.value))
+            .ToDictionary(p => p.key, p => p.value!.Trim());
+
+    private static StrategyMasterDataSnapshotDto MapMasterData(
+        GameMasterData gameMaster,
+        GameMapMasterData mapMaster)
+        => new()
+        {
+            CultureGroups = [.. gameMaster.CultureGroups.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Description = x.Description,
+                    Fields = MasterFields(("description", x.Description))
+                })
+                .OrderBy(x => x.Id)],
+            Cultures = [.. gameMaster.Cultures.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Group = gameMaster.CultureGroups.TryGetValue(x.CultureGroupId, out var g)
+                        ? g.Name
+                        : null,
+                    Description = x.Description,
+                    Fields = MasterFields(
+                        ("cultureGroup", gameMaster.CultureGroups.TryGetValue(x.CultureGroupId, out var cg)
+                            ? cg.Name
+                            : null),
+                        ("cultureGroupId", x.CultureGroupId.ToString()),
+                        ("description", x.Description))
+                })
+                .OrderBy(x => x.Id)],
+            ReligionGroups = [.. gameMaster.ReligionGroups.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Description = x.Description,
+                    Fields = MasterFields(
+                        ("level", x.Level.ToString()),
+                        ("description", x.Description))
+                })
+                .OrderBy(x => x.Id)],
+            Religions = [.. gameMaster.Religions.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Group = gameMaster.ReligionGroups.TryGetValue(x.ReligionGroupId, out var g)
+                        ? g.Name
+                        : null,
+                    Description = x.Description,
+                    Fields = MasterFields(
+                        ("religionGroup", x.ReligionGroupName),
+                        ("religionGroupId", x.ReligionGroupId.ToString()),
+                        ("level", x.Level.ToString()),
+                        ("exclusivism", x.Exclusivism.ToString()),
+                        ("centralization", x.Centralization.ToString()),
+                        ("doctrinalDifference", x.DoctrinalDifference.ToString()),
+                        ("description", x.Description))
+                })
+                .OrderBy(x => x.Id)],
+            StrongholdTypes = [.. gameMaster.StrongholdTypes.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Description = x.Description,
+                    Fields = MasterFields(
+                        ("category", x.Category.ToString()),
+                        ("cultureId", x.CultureId?.ToString()),
+                        ("guardianNumber", x.NecessaryGuardianNumber.ToString()),
+                        ("cost", x.Cost.ToString()),
+                        ("maintenance", x.Maintenance.ToString()),
+                        ("description", x.Description))
+                })
+                .OrderBy(x => x.Id)],
+            DefenseFacilityTypes = [.. gameMaster.DefenseFacilityTypes.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Group = x.Category.ToString(),
+                    Fields = MasterFields(
+                        ("category", x.Category.ToString()),
+                        ("level", x.Level.ToString()),
+                        ("attack", x.Attack.ToString()),
+                        ("defense", x.Defense.ToString()),
+                        ("movement", x.Movement.ToString()),
+                        ("cost", x.Cost.ToString()),
+                        ("maintenance", x.Maintenance.ToString()))
+                })
+                .OrderBy(x => x.Id)],
+            UnitTypes = [.. gameMaster.UnitTypes.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Description = x.Description,
+                    Fields = MasterFields(
+                        ("attack", x.Attack.ToString()),
+                        ("defense", x.Defense.ToString()),
+                        ("attackRange", x.AttackRange.ToString()),
+                        ("movement", x.Movement.ToString()),
+                        ("cultureId", x.CultureId?.ToString()),
+                        ("cost", x.Cost.ToString()),
+                        ("maintenanceMoney", x.MaintenanceMoney.ToString()),
+                        ("maintenanceFood", x.MaintenanceFood.ToString()),
+                        ("description", x.Description))
+                })
+                .OrderBy(x => x.Id)],
+            CharacterDefinitions = [],
+            Terrains = [.. mapMaster.Terrains
+                .Select(kv => new StrategyMasterDataEntryDto
+                {
+                    Id = kv.Key,
+                    Name = kv.Value.Name,
+                    Description = kv.Value.Description,
+                    Fields = MasterFields(
+                        ("terrainType", kv.Value.Type.ToString()),
+                        ("movementCost", kv.Value.MovementCost.ToString()),
+                        ("altitude", kv.Value.Altitude.ToString()),
+                        ("description", kv.Value.Description))
+                })
+                .OrderBy(x => x.Id)],
+            Climates = [.. mapMaster.Climates.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Description = x.Description,
+                    Fields = MasterFields(
+                        ("springTemperature", x.SpringClimate.BaseTemperature.ToString()),
+                        ("springWetness", x.SpringClimate.BaseWet.ToString()),
+                        ("summerTemperature", x.SummerClimate.BaseTemperature.ToString()),
+                        ("summerWetness", x.SummerClimate.BaseWet.ToString()),
+                        ("autumnTemperature", x.AutumnClimate.BaseTemperature.ToString()),
+                        ("autumnWetness", x.AutumnClimate.BaseWet.ToString()),
+                        ("winterTemperature", x.WinterClimate.BaseTemperature.ToString()),
+                        ("winterWetness", x.WinterClimate.BaseWet.ToString()),
+                        ("description", x.Description))
+                })
+                .OrderBy(x => x.Id)],
+            Regions = [.. mapMaster.Regions.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Description = x.Description,
+                    Fields = MasterFields(("description", x.Description))
+                })
+                .OrderBy(x => x.Id)],
+            Roads = [.. mapMaster.Roads.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Description = x.Description,
+                    Fields = MasterFields(
+                        ("speedBonus", x.SpeedBonus.ToString()),
+                        ("movementCost", x.MovementCostOverride?.ToString()),
+                        ("description", x.Description))
+                })
+                .OrderBy(x => x.Id)],
+            Landmarks = [.. mapMaster.Landmarks.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Fields = MasterFields(
+                        ("x", x.Location.X.ToString()),
+                        ("y", x.Location.Y.ToString()))
+                })
+                .OrderBy(x => x.Id)],
+            TerrainVegetationFeatures = [.. mapMaster.TerrainVegatationFeatures
+                .Select(kv => new StrategyMasterDataEntryDto
+                {
+                    Id = kv.Key,
+                    Name = kv.Value.Name,
+                    Description = kv.Value.Description,
+                    Fields = MasterFields(
+                        ("type", kv.Value.Type.ToString()),
+                        ("description", kv.Value.Description))
+                })
+                .OrderBy(x => x.Id)],
+            TerrainSurfaceFeatures = [.. mapMaster.TerrainSurfaceFeatures
+                .Select(kv => new StrategyMasterDataEntryDto
+                {
+                    Id = kv.Key,
+                    Name = kv.Value.Name,
+                    Description = kv.Value.Description,
+                    Fields = MasterFields(
+                        ("type", kv.Value.Type.ToString()),
+                        ("description", kv.Value.Description))
+                })
+                .OrderBy(x => x.Id)],
+            Enums = StrategyMasterDataEnumCatalog.BuildEntries()
+        };
+
+    private static StrategyCharacterSummaryDto MapCharacter(Character c, GameDate gameDate)
+    {
+        var age = Math.Max(0, gameDate.Year - c.Birthday.Year);
+        if (gameDate.Month < c.Birthday.Month
+            || (gameDate.Month == c.Birthday.Month && gameDate.Day < c.Birthday.Day))
+        {
+            age = Math.Max(0, age - 1);
+        }
+
+        return new StrategyCharacterSummaryDto
+        {
+            Id = c.Id,
+            ForceId = c.ForceId,
+            Name = c.Name,
+            StrongholdId = c.LocationType == Character.CharacterLocationType.Stronghold
+                ? c.LocationStrongholdId
+                : c.StrongholdId,
+            LocationType = c.LocationType.ToString(),
+            ForceStatus = c.ForceStatus.ToString(),
+            Leadership = c.Leadership,
+            Power = c.Power,
+            Politics = c.Politics,
+            Strategy = c.Strategy,
+            Charm = c.Charm,
+            CultureName = "日本",
+            ReligionName = "神道",
+            YearsInForce = 0,
+            Sex = c.Sex.ToString(),
+            Age = age,
+            Personality = new StrategyCharacterPersonalityDto
+            {
+                Temper = c.Personality.Temper,
+                Courage = c.Personality.Courage,
+                Principle = c.Personality.Principle,
+                Action = c.Personality.Action,
+                Friendship = c.Personality.Friendship,
+                Ambition = c.Personality.Ambition,
+                Hobby = c.Personality.Hobby,
+                Desire = c.Personality.Desire,
+                Drinking = c.Personality.Drinking,
+                Fortune = c.Personality.Fortune
+            },
+            Proficiency = new StrategyCharacterProficiencyDto
+            {
+                Infantry = c.Proficiency.Infantry.Level,
+                Ride = c.Proficiency.Ride.Level,
+                Archery = c.Proficiency.Archery.Level,
+                Firelock = c.Proficiency.Firelock.Level,
+                Sealing = c.Proficiency.Sealing.Level,
+                Military = c.Proficiency.Military.Level,
+                Fighting = c.Proficiency.Fighting.Level,
+                Spy = c.Proficiency.Spy.Level,
+                Agriculture = c.Proficiency.Agriculture.Level,
+                Commerce = c.Proficiency.Commerce.Level,
+                Construct = c.Proficiency.Construct.Level,
+                Smelt = c.Proficiency.Smelt.Level,
+                Eloquence = c.Proficiency.Eloquence.Level,
+                Court = c.Proficiency.Court.Level,
+                Sociality = c.Proficiency.Sociality.Level,
+                Healing = c.Proficiency.Healing.Level
+            },
+            IsDead = c.IsDead,
+            IsSick = c.IsSick,
+            BirthType = c.Birth.ToString(),
+            TaskRemainingDays = null,
+            Loyalty = c.Personality.Friendship
         };
     }
 
@@ -597,14 +1285,17 @@ public static class StrategyWorldStateMapper
         if (!gameData.Forces.TryGetValue(playerForceId, out var playerForce))
             return [];
 
-        return playerForce.Diplomacies
+        return [.. playerForce.Diplomacies
             .Select(d => new StrategyDiplomacyStateDto
             {
                 TargetForceId = d.TargetForceId,
-                Relation = d.Relation.ToString()
+                Relation = d.Relation.ToString(),
+                Relationship = d.Relationship,
+                Trust = d.Trust,
+                ArrearsFoodGo = d.ArrearsFoodGo,
+                ArrearsMoney = d.ArrearsMoney
             })
-            .OrderBy(d => d.TargetForceId)
-            .ToList();
+            .OrderBy(d => d.TargetForceId)];
     }
 
     private static StrategyMessengerStateDto MapMessenger(Messenger m, GameData gameData)
@@ -700,12 +1391,103 @@ public static class StrategyWorldStateMapper
             Training = 65,
             CultureName = "日本",
             ReligionName = "神道",
-            Money = 0,
+            Money = c.CargoMoney,
             TargetUnitId = c.TargetUnitId,
             TargetUnitName = targetUnit?.Name,
             OriginStrongholdId = c.OriginStrongholdId,
             OriginStrongholdName = origin?.Name,
             IsReturningToOrigin = c.IsReturningToOrigin
+        };
+    }
+
+    private static StrategyBattlefieldStateDto MapBattlefield(Battlefield b, GameData gameData)
+    {
+        var ids = b.SideAUnitIds.Concat(b.SideBUnitIds).Distinct().ToList();
+        var soldiers = 0;
+        var aggressorSoldiers = 0;
+        var participantBuckets = new Dictionary<int, (int Soldiers, int MoraleWeighted, int Money, int Food)>();
+
+        foreach (var id in ids)
+        {
+            if (!gameData.Units.TryGetValue(id, out var u) || u.Soldier <= 0)
+                continue;
+
+            soldiers += u.Soldier;
+
+            var onAggressorSide = gameData.Wars.TryGetValue(b.WarId, out var war)
+                                  && WarRules.IsOnAggressorSide(war, u.ForceId);
+            if (onAggressorSide)
+                aggressorSoldiers += u.Soldier;
+
+            if (!participantBuckets.TryGetValue(u.ForceId, out var bucket))
+                bucket = (0, 0, 0, 0);
+
+            bucket.Soldiers += u.Soldier;
+            bucket.MoraleWeighted += u.Morale * u.Soldier;
+            bucket.Money += u.Money;
+            bucket.Food += u.Food;
+            participantBuckets[u.ForceId] = bucket;
+        }
+
+        if (b.Kind == BattlefieldKind.Siege
+            && b.StrongholdId > 0
+            && gameData.Strongholds.TryGetValue(b.StrongholdId, out var siegeTarget))
+        {
+            var garrisonSoldiers = StrongholdGarrisonRules.GetCityGarrisonSoldiers(siegeTarget);
+            if (garrisonSoldiers > 0 || siegeTarget.ForceActor.Money > 0 || siegeTarget.ForceActor.Food > 0)
+            {
+                if (!participantBuckets.TryGetValue(siegeTarget.ForceId, out var defenderBucket))
+                    defenderBucket = (0, 0, 0, 0);
+
+                defenderBucket.Soldiers += garrisonSoldiers;
+                defenderBucket.MoraleWeighted += siegeTarget.ForceActor.Morale * Math.Max(1, garrisonSoldiers);
+                defenderBucket.Money += siegeTarget.ForceActor.Money;
+                defenderBucket.Food += siegeTarget.ForceActor.Food;
+                participantBuckets[siegeTarget.ForceId] = defenderBucket;
+                soldiers += garrisonSoldiers;
+            }
+        }
+
+        var participants = participantBuckets
+            .OrderByDescending(kv => kv.Value.Soldiers)
+            .Select(kv =>
+            {
+                gameData.Forces.TryGetValue(kv.Key, out var force);
+                var morale = kv.Value.Soldiers > 0
+                    ? (int)Math.Round(kv.Value.MoraleWeighted / (double)kv.Value.Soldiers)
+                    : 0;
+                return new StrategyBattlefieldParticipantDto
+                {
+                    ForceId = kv.Key,
+                    ForceName = force?.Name ?? $"势力#{kv.Key}",
+                    Soldiers = kv.Value.Soldiers,
+                    Morale = morale,
+                    Money = kv.Value.Money,
+                    Food = kv.Value.Food
+                };
+            })
+            .ToList();
+
+        string? siegeThreat = null;
+        if (b.Kind == BattlefieldKind.Siege
+            && b.StrongholdId > 0
+            && gameData.Strongholds.TryGetValue(b.StrongholdId, out var stronghold))
+        {
+            siegeThreat = ResolveStrongholdSiegeThreat(stronghold, gameData);
+        }
+
+        return new StrategyBattlefieldStateDto
+        {
+            Id = b.Id,
+            X = b.Location.X,
+            Y = b.Location.Y,
+            Kind = b.Kind.ToString(),
+            StandoffDays = b.StandoffDays,
+            SiegeThreat = siegeThreat,
+            SoldierTotal = soldiers,
+            AggressorSoldierTotal = aggressorSoldiers,
+            Participants = participants,
+            UnitIds = ids
         };
     }
 
@@ -731,6 +1513,13 @@ public static class StrategyWorldStateMapper
             Movement = u.Movement,
             Status = u.Status.ToString(),
             Directive = u.Directive.ToString(),
+            Stance = u.Stance.ToString(),
+            SiegeMode = u.SiegeMode.ToString(),
+            DirectiveTargetId = u.DirectiveTargetId,
+            TargetStrongholdName = ResolveTargetStrongholdName(u, gameData),
+            TargetUnitId = u.ActionTarget.UnitId,
+            TargetUnitName = ResolveTargetUnitName(u, gameData),
+            BattlefieldId = u.BattlefieldId,
             Route = BuildUnitRoute(u),
             CommanderName = string.IsNullOrWhiteSpace(commander) ? null : commander,
             CommanderId = u.LeaderId > 0 ? u.LeaderId : null,
@@ -748,7 +1537,7 @@ public static class StrategyWorldStateMapper
 
     private static IReadOnlyList<StrategyInTransitSupplyDto> MapInTransitSupplies(Unit u, GameData gameData)
     {
-        return SupplyStatusEvaluator.GetInTransitSummaries(u, gameData)
+        return [.. SupplyStatusEvaluator.GetInTransitSummaries(u, gameData)
             .Select(s =>
             {
                 gameData.Strongholds.TryGetValue(s.OriginStrongholdId, out var origin);
@@ -760,8 +1549,7 @@ public static class StrategyWorldStateMapper
                     IsDeceived = s.IsDeceived,
                     OriginStrongholdName = origin?.Name
                 };
-            })
-            .ToList();
+            })];
     }
 
     private static IReadOnlyList<StrategySubUnitStateDto> MapUnitComposition(Unit u, GameData gameData)
@@ -872,8 +1660,8 @@ public static class StrategyWorldStateMapper
     }
 
     private static IReadOnlyList<StrategyMapLandmarkDto> MapLandmarks(
-        IReadOnlyDictionary<int, StrongholdPoint> points)
-        => points.Values
+        IReadOnlyDictionary<int, Landmark> points)
+        => [.. points.Values
             .Select(p => new StrategyMapLandmarkDto
             {
                 Id = p.Id,
@@ -881,15 +1669,19 @@ public static class StrategyWorldStateMapper
                 X = p.Location.X,
                 Y = p.Location.Y
             })
-            .OrderBy(p => p.Id)
-            .ToList();
+            .OrderBy(p => p.Id)];
 
-    private static StrategyStrongholdStateDto MapStronghold(Stronghold s, StrategyScenarioMeta meta, GameData gameData)
+    private static StrategyStrongholdStateDto MapStronghold(
+        Stronghold s,
+        StrategyScenarioMeta meta,
+        GameData gameData,
+        GameMasterData masterData)
     {
         meta.Intel.Strongholds.TryGetValue(s.Id, out var overlay);
 
         var lordName = StrategyStrongholdLordHelper.ResolveStrongholdLordName(s, meta, gameData);
         var isDirectRule = StrategyStrongholdLordHelper.IsDirectRule(s);
+        var isLordResidence = StrategyStrongholdLordHelper.IsGovernanceResidence(s, meta, gameData);
 
         var mayor = overlay?.MayorName;
         if (string.IsNullOrWhiteSpace(mayor) && s.LeaderId > 0
@@ -897,6 +1689,8 @@ public static class StrategyWorldStateMapper
         {
             mayor = mayorCharacter.Name;
         }
+
+        var facilities = MapDefenseFacilities(s, masterData);
 
         return new StrategyStrongholdStateDto
         {
@@ -907,6 +1701,9 @@ public static class StrategyWorldStateMapper
             Y = s.Location.Y,
             Food = s.ForceActor.Food,
             Population = s.Population,
+            Stability = s.Stability,
+            PopularFeelings = s.CivilianActor.PopularFeelings,
+            IsLordResidence = isLordResidence,
             LordId = s.LordId,
             IsDirectRule = isDirectRule,
             LordName = lordName,
@@ -916,11 +1713,126 @@ public static class StrategyWorldStateMapper
             CultureName = overlay?.CultureName ?? "日本",
             ReligionName = overlay?.ReligionName ?? "神道",
             Money = s.ForceActor.Money,
+            GarrisonSoldiers = s.ForceActor.Soldier,
+            GarrisonWounded = s.ForceActor.Patient,
             PollTaxRate = s.PollTaxRate,
             AgricultureTaxRate = s.AgricultureTaxRate,
             CommerceTaxRate = s.CommerceTaxRate,
-            TariffTaxRate = s.TariffTaxRate
+            TariffTaxRate = s.TariffTaxRate,
+            IsHistorical = s.IsHistorical,
+            Defense = facilities.Sum(f => f.Defense),
+            DefenseFacilities = facilities,
+            LuxuryGoods = s.ForceActor.LuxuryGoods,
+            EconomyFacilities = MapEconomyFacilities(s),
+            SiegeThreat = ResolveStrongholdSiegeThreat(s, gameData)
         };
+    }
+
+    private static string? ResolveStrongholdSiegeThreat(Stronghold stronghold, GameData gameData)
+    {
+        if (!gameData.Forces.TryGetValue(stronghold.ForceId, out var holderForce))
+            return null;
+
+        string? encircle = null;
+        foreach (var unit in gameData.Units.Values)
+        {
+            if (!unit.IsMilitary || unit.Soldier <= 0 || unit.SiegeMode == UnitSiegeMode.None)
+                continue;
+
+            if (!unit.Location.IsSameTile(stronghold.Location))
+                continue;
+
+            if (unit.ForceId == stronghold.ForceId)
+                continue;
+
+            if (!gameData.Forces.TryGetValue(unit.ForceId, out var unitForce))
+                continue;
+
+            if (!DiplomacyRules.IsEnemy(unitForce, holderForce).IsSuccess)
+                continue;
+
+            if (unit.SiegeMode == UnitSiegeMode.Assault)
+                return "Assault";
+
+            if (unit.SiegeMode == UnitSiegeMode.Encircle)
+                encircle = "Encircle";
+        }
+
+        foreach (var battlefield in gameData.Battlefields.Values)
+        {
+            if (battlefield.IsClosed || battlefield.Kind != BattlefieldKind.Siege)
+                continue;
+
+            if (battlefield.Location.X != stronghold.Location.X
+                || battlefield.Location.Y != stronghold.Location.Y)
+                continue;
+
+            return encircle ?? "Assault";
+        }
+
+        return encircle;
+    }
+
+    private static IReadOnlyList<StrategyEconomyFacilityStateDto> MapEconomyFacilities(Stronghold stronghold)
+        => stronghold.EconomyFacilityIds.Count == 0
+            ? []
+            : [.. stronghold.EconomyFacilityIds.Select(id => new StrategyEconomyFacilityStateDto
+            {
+                TypeId = id,
+                Name = EconomyFacilityRules.ResolveFacilityName(id)
+            })];
+
+    private static IReadOnlyList<StrategyDefenseFacilityStateDto> MapDefenseFacilities(
+        Stronghold stronghold,
+        GameMasterData masterData)
+    {
+        if (stronghold.DefenseFacilityIds.Count == 0)
+            return [];
+
+        var rows = new List<StrategyDefenseFacilityStateDto>();
+        foreach (var typeId in stronghold.DefenseFacilityIds)
+        {
+            if (!masterData.DefenseFacilityTypes.TryGetValue(typeId, out var facilityType))
+            {
+                rows.Add(new StrategyDefenseFacilityStateDto
+                {
+                    TypeId = typeId,
+                    Name = $"设施 #{typeId}",
+                    Category = nameof(DefenseFacilityTypeModel.DefenseFacilityCategory.Defender),
+                    Level = 1,
+                    Defense = 0
+                });
+                continue;
+            }
+
+            rows.Add(new StrategyDefenseFacilityStateDto
+            {
+                TypeId = typeId,
+                Name = facilityType.Name,
+                Category = facilityType.Category.ToString(),
+                Level = (int)facilityType.Level,
+                Defense = facilityType.Defense
+            });
+        }
+
+        return rows;
+    }
+
+    private static string? ResolveTargetStrongholdName(Unit u, GameData gameData)
+    {
+        var id = u.ActionTarget.StrongholdId > 0 ? u.ActionTarget.StrongholdId : u.DirectiveTargetId;
+        if (id <= 0)
+            return null;
+
+        return gameData.Strongholds.TryGetValue(id, out var sh) ? sh.Name : null;
+    }
+
+    private static string? ResolveTargetUnitName(Unit u, GameData gameData)
+    {
+        if (u.ActionTarget.UnitId <= 0)
+            return null;
+
+        return gameData.Units.TryGetValue(u.ActionTarget.UnitId, out var target) ? target.Name : null;
     }
 
     private static IReadOnlyList<StrategyMapPointDto> BuildUnitRoute(Unit u)

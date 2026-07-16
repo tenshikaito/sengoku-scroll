@@ -8,7 +8,16 @@ const POLICY_CATEGORIES = new Set([
   "PolicyDelivered",
 ]);
 
-const BATTLE_CATEGORIES = new Set(["BattleReportArrived", "BattleResolved", "BattleLog"]);
+const BATTLE_CATEGORIES = new Set([
+  "BattleReportArrived",
+  "StrategicReportArrived",
+  "BattleResolved",
+  "BattleLog",
+  "UnitDestroyed",
+  "UnitFledToStronghold",
+  "StrongholdCaptured",
+  "SiegeOrderStarted",
+]);
 
 const MESSENGER_CATEGORIES = new Set(["MessengerArrived"]);
 
@@ -29,6 +38,16 @@ export function messageCategoryLabel(category: string): string {
       return "方针·送达";
     case "BattleReportArrived":
       return "战报·抵达";
+    case "StrategicReportArrived":
+      return "情报·抵达";
+    case "StrongholdCaptured":
+      return "据点陷落";
+    case "SiegeOrderStarted":
+      return "围城开始";
+    case "UnitDestroyed":
+      return "部队溃灭";
+    case "UnitFledToStronghold":
+      return "逃入据点";
     case "BattleResolved":
       return "战斗";
     case "BattleLog":

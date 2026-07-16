@@ -279,7 +279,14 @@ function drawEntities() {
     entityLayer.addChild(label);
   }
 
+  const battlefieldTiles = new Set(
+    (props.worldState.battlefields ?? []).map((b) => `${b.x},${b.y}`)
+  );
+
   for (const unit of props.worldState.units) {
+    // 业务：交战格不画单军图标，改由战场标记统一显示
+    if (battlefieldTiles.has(`${unit.x},${unit.y}`)) continue;
+
     const color = entityMapColor(unit.forceId);
     const center = cellCenter(unit.x, unit.y);
     const radius = TILE_SIZE * 0.28;
@@ -308,6 +315,43 @@ function drawEntities() {
     badge.anchor.set(0.5);
     badge.position.set(center.x, center.y);
     entityLayer.addChild(badge);
+  }
+
+  for (const battlefield of props.worldState.battlefields ?? []) {
+    const center = cellCenter(battlefield.x, battlefield.y);
+    const radius = TILE_SIZE * 0.32;
+    const marker = new Graphics();
+    marker
+      .circle(center.x, center.y, radius)
+      .fill(0xffffff)
+      .stroke({ width: 2.5, color: 0xdc2626, alpha: 1 });
+    entityLayer.addChild(marker);
+
+    const label = new Text({
+      text: battlefield.kind === "Siege" ? "围" : "战",
+      style: {
+        fontSize: 14,
+        fill: 0xdc2626,
+        fontWeight: "bold",
+        fontFamily: "serif",
+      },
+    });
+    label.anchor.set(0.5);
+    label.position.set(center.x, center.y - 2);
+    entityLayer.addChild(label);
+
+    // 业务：围城格仅显示攻方兵力；野战格不显示数字
+    const siegeCount =
+      battlefield.kind === "Siege" ? battlefield.aggressorSoldierTotal : 0;
+    if (siegeCount > 0) {
+      const count = new Text({
+        text: String(siegeCount),
+        style: { fontSize: 9, fill: 0xb91c1c, fontFamily: "sans-serif" },
+      });
+      count.anchor.set(0.5);
+      count.position.set(center.x, center.y + radius * 0.55);
+      entityLayer.addChild(count);
+    }
   }
 
   for (const convoy of props.worldState.supplyConvoys) {

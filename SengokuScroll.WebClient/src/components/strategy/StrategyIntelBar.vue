@@ -4,10 +4,14 @@ import { getForceColorCss } from "./forceColors";
 
 defineProps<{
   worldState: StrategyWorldState;
-  x: number;
-  y: number;
+  x: number | null;
+  y: number | null;
   terrainName: string | null;
   regionName: string | null;
+  /** 道路类型名（如「官道」）；无道路时为 null。 */
+  roadName: string | null;
+  /** 道路等级（与 typeId 一致）；无道路时为 null。 */
+  roadLevel: number | null;
   stronghold: StrategyStrongholdState | null;
   landmarkName: string | null;
 }>();
@@ -25,10 +29,14 @@ function forceName(worldState: StrategyWorldState, forceId: number) {
         <template v-if="terrainName"> · </template>{{ regionName }}
       </template>
     </span>
-    <span v-if="stronghold" class="segment">
-      🏯
-      <strong :style="{ color: getForceColorCss(stronghold.forceId) }">{{ stronghold.name }}</strong>
+    <span v-if="stronghold" class="segment stronghold-segment">
+      <span class="stronghold-name" :style="{ color: getForceColorCss(stronghold.forceId) }">
+        🏯 {{ stronghold.name }}
+      </span>
       · {{ forceName(worldState, stronghold.forceId) }}
+    </span>
+    <span v-if="roadName" class="segment road">
+      🛤 {{ roadName }}<template v-if="roadLevel != null"> Lv.{{ roadLevel }}</template>
     </span>
     <span v-if="landmarkName" class="segment landmark">
       📍 {{ landmarkName }}
@@ -57,8 +65,20 @@ function forceName(worldState: StrategyWorldState, forceId: number) {
   white-space: nowrap;
 }
 
-.terrain {
+.stronghold-segment {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+  flex-wrap: wrap;
+}
+
+.terrain,
+.road {
   color: #94a3b8;
+}
+
+.stronghold-name {
+  font-weight: 600;
 }
 
 .landmark {

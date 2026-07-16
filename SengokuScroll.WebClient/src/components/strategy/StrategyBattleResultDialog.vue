@@ -1,21 +1,52 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { StrategyBattleResult } from "@/api/strategy";
-import { displayUnitName } from "@/utils/battleResult";
+import type { StrategyBattleResult, StrategyWorldState } from "@/api/strategy";
+import {
+  battleOutcomeHeadline,
+  displayUnitName,
+} from "@/utils/battleResult";
 import { formatSoldiers } from "@/utils/strategyDisplayUnits";
 
 const props = defineProps<{
   visible: boolean;
   result: StrategyBattleResult | null;
+  playerForceId: number;
+  worldState?: StrategyWorldState | null;
 }>();
 
 defineEmits<{
   "update:visible": [value: boolean];
 }>();
 
+const engagementLabel = computed(() => {
+  if (props.result?.isSurrendered) return "劝降";
+  const k = props.result?.engagementKind ?? "FieldBattle";
+  if (k === "Ambush") return "伏击";
+  if (k === "Siege") return "攻城（简）";
+  return "野战";
+});
+
+const factorNotes = computed(() => props.result?.factorNotes ?? []);
+
+const outcome = computed(() => {
+  if (!props.result) return { text: "", won: false };
+  return battleOutcomeHeadline(
+    props.result,
+    props.playerForceId,
+    props.worldState ?? undefined
+  );
+});
+
 const sortedLogs = computed(() =>
   [...(props.result?.logEntries ?? [])].sort((a, b) => a.order - b.order)
 );
+
+function formatFactorDelta(note: { attackerWinRateDelta: number; defenderWinRateDelta: number }) {
+  const parts: string[] = [];
+  if (note.attackerWinRateDelta !== 0) parts.push(`攻${note.attackerWinRateDelta > 0 ? "+" : ""}${note.attackerWinRateDelta}%`);
+  if (note.defenderWinRateDelta !== 0) parts.push(`守${note.defenderWinRateDelta > 0 ? "+" : ""}${note.defenderWinRateDelta}%`);
+  return parts.join(" · ") || "—";
+}
 
 function sideLabel(side: string) {
   if (side === "attacker") return "攻方";
@@ -37,12 +68,12 @@ function sideClass(side: string) {
     width="520px"
     align-center
     destroy-on-close
-    class="battle-result-dialog"
+    class="battle-result-dialog strategy-dialog-centered-footer"
     @update:model-value="$emit('update:visible', $event)"
   >
     <div v-if="result" class="result">
-      <p class="outcome" :class="result.attackerWon ? 'win' : 'lose'">
-        {{ result.attackerWon ? "⚔ 战斗胜利" : "✖ 战斗失利" }}
+      <p class="outcome" :class="outcome.won ? 'win' : 'lose'">
+        {{ outcome.text }}
       </p>
 
       <div class="summary-grid">
@@ -65,9 +96,20 @@ function sideClass(side: string) {
       </div>
 
       <p class="meta">
-        战前胜率 {{ result.attackerWinRatePercent }}%
+        接敌类型 {{ engagementLabel }} · 战前胜率 {{ result.attackerWinRatePercent }}%
         <span v-if="result.resolutionRoll >= 0"> · 判定值 {{ result.resolutionRoll }}</span>
       </p>
+
+      <div v-if="factorNotes.length" class="factor-panel">
+        <h4 class="log-title">胜负因素</h4>
+        <ul class="factor-list">
+          <li v-for="(note, idx) in factorNotes" :key="`${note.factorId}-${idx}`">
+            <span class="factor-label">{{ note.label }}</span>
+            <span class="factor-delta">{{ formatFactorDelta(note) }}</span>
+            <span v-if="note.detail" class="factor-detail">{{ note.detail }}</span>
+          </li>
+        </ul>
+      </div>
 
       <h4 class="log-title">战斗过程</h4>
       <ol v-if="sortedLogs.length" class="battle-log">
@@ -206,5 +248,47 @@ function sideClass(side: string) {
   margin: 0;
   font-size: 0.85rem;
   color: #64748b;
+}
+
+.factor-panel {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.factor-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.factor-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  font-size: 0.82rem;
+}
+
+.factor-label {
+  font-weight: 600;
+  color: #78350f;
+}
+
+.factor-delta {
+  color: #b45309;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.factor-detail {
+  grid-column: 1 / -1;
+  color: #92400e;
+  font-size: 0.78rem;
 }
 </style>

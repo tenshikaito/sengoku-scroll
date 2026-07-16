@@ -5,11 +5,12 @@ using SengokuScroll.Domain.Rules;
 
 namespace SengokuScroll.Domain.Evaluators;
 
-/// <summary>军事单位移动合法性评估（不含同格敌军拦截，策略/ZOC 扩展见 StrategyUnitMoveEvaluator）。</summary>
+/// <summary>军事单位移动合法性评估（含同格占用校验；策略/ZOC 扩展见 StrategyUnitMoveEvaluator）。</summary>
 public class UnitMoveEvaluator(
     IGameContext context,
     MovementRules movementRules) : EvaluatorBase
 {
+    /// <summary>评估军事单位单步移动是否合法（边界、行动力、邻格、同格占用）。</summary>
     public GameResult Evaluate(IMovable movable, Point2 location)
     {
         GameResult CheckOutOfBounds()
@@ -21,11 +22,15 @@ public class UnitMoveEvaluator(
         GameResult CheckAdjacent()
             => MovementRules.CheckAdjacent(movable, location);
 
+        GameResult CheckMoveToUnit()
+            => movementRules.CheckMoveToUnit(movable, location);
+
         return Evaluate(
         [
             CheckOutOfBounds,
             CheckMovementTileAp,
-            CheckAdjacent
+            CheckAdjacent,
+            CheckMoveToUnit
         ]);
     }
 }

@@ -14,6 +14,7 @@ public static class UnitEconomyActions
     public static int ApplyDailyFoodConsumption(Unit unit)
     {
         var consumption = LogisticsCalculator.CalculateUnitDailyFoodConsumption(unit.Soldier);
+        // 业务：携行粮不足时扣至 0，断粮逃兵由后续系统处理
         var deducted = Math.Min(unit.Food, consumption);
         unit.Food -= deducted;
         return deducted;

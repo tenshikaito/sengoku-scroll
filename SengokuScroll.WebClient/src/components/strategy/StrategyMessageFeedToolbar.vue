@@ -42,10 +42,12 @@ function onAllChange(checked: boolean) {
 <style scoped>
 .message-feed-toolbar {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   flex-shrink: 0;
   pointer-events: auto;
+  width: 100%;
 }
 
 .scope-checks {

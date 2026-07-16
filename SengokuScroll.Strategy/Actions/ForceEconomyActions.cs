@@ -7,6 +7,7 @@ namespace SengokuScroll.Strategy.Actions;
 /// <summary>势力级经济变更（月结等）。</summary>
 public static class ForceEconomyActions
 {
+    /// <summary>单据点月度收支明细行。</summary>
     public sealed record StrongholdSettlementLine(
         int StrongholdId,
         string StrongholdName,
@@ -14,6 +15,7 @@ public static class ForceEconomyActions
         int IncomeFood,
         int ExpenseMoney);
 
+    /// <summary>势力月度维持费结算汇总。</summary>
     public sealed record MonthlySettlementResult(
         int IncomeMoney,
         int IncomeFood,
@@ -49,9 +51,12 @@ public static class ForceEconomyActions
         foreach (var unit in gameData.Units.Values.Where(u => u.ForceId == force.Id))
             armyMaintenance += EconomyCalculator.CalculateUnitMonthlyMaintenanceMoney(unit);
 
+        var salaryExpense = EconomyCalculator.CalculateForceMonthlySalaryExpense(force, gameData);
+        DeductForceMoney(force, gameData, salaryExpense);
+
         SyncForceTreasuryFromStrongholds(force, gameData);
         force.Money = Math.Max(0, force.Money - armyMaintenance);
-        expenseMoney += armyMaintenance;
+        expenseMoney += armyMaintenance + salaryExpense;
 
         return new MonthlySettlementResult(
             0,
@@ -78,5 +83,25 @@ public static class ForceEconomyActions
 
         force.Money = money;
         force.Food = food;
+    }
+
+    private static void DeductForceMoney(Force force, GameData gameData, int amount)
+    {
+        if (amount <= 0)
+            return;
+
+        // 业务：俸禄从旗下据点府库按余额从高到低依次扣款
+        var remaining = amount;
+        foreach (var stronghold in gameData.Strongholds.Values
+                     .Where(s => s.ForceId == force.Id)
+                     .OrderByDescending(s => s.ForceActor.Money))
+        {
+            if (remaining <= 0)
+                break;
+
+            var pay = Math.Min(remaining, stronghold.ForceActor.Money);
+            stronghold.ForceActor.Money -= pay;
+            remaining -= pay;
+        }
     }
 }

@@ -4,15 +4,19 @@ using static SengokuScroll.Domain.GameWorldSnapshot;
 
 namespace SengokuScroll.Application.Extensions;
 
+/// <summary>将运行中 <see cref="GameWorld"/> 转为只读快照（地图索引 + 角色视图）。</summary>
 public static class GameWorldSnapshotExtensions
 {
+    /// <summary>捕获当前世界状态供 UI/存档序列化。</summary>
     public static GameWorldSnapshot ToSnapshot(this GameWorld gameWorld)
     {
         var gameMapView = new GameMapViewModel()
         {
             Characters = new(gameWorld.GameMapData.Characters),
             Strongholds = new(gameWorld.GameMapData.Strongholds),
-            Units = new(gameWorld.GameMapData.Units),
+            Units = gameWorld.GameMapData.Units.ToDictionary(
+                kv => kv.Key,
+                kv => new List<int>(kv.Value)),
         };
 
         var gameDataView = new GameDataViewModel()

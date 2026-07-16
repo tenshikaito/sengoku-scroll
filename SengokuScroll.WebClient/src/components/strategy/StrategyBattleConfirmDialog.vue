@@ -60,6 +60,7 @@ function onConfirm() {
     align-center
     :close-on-click-modal="false"
     destroy-on-close
+    class="strategy-dialog-centered-footer"
     @update:model-value="$emit('update:visible', $event)"
   >
     <div v-if="attacker && preview && defender()" class="battle-confirm">

@@ -4,6 +4,7 @@ using SengokuScroll.Domain;
 using SengokuScroll.Domain.Diagnostics;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Rules;
+using SengokuScroll.Localization;
 
 namespace SengokuScroll.Strategy.Diagnostics;
 
@@ -11,6 +12,7 @@ namespace SengokuScroll.Strategy.Diagnostics;
 public sealed class StrategyUnitMoveTraceObserver(
     StrategyMovementTrace trace,
     MovementRules movementRules,
+    IStrategyDayDebugLog dayDebugLog,
     ILogger<StrategyUnitMoveTraceObserver> logger) : IUnitMoveObserver
 {
     public void OnMoveStepEvaluated(Unit unit, Point2 target, GameResult result)
@@ -37,6 +39,15 @@ public sealed class StrategyUnitMoveTraceObserver(
     {
         var detail = $"AP_left={apRemaining} route_left={routeRemaining} status={unit.Status}";
         trace.Log("MoveDone", "移动完成", unit.Id, from, to, detail);
+        dayDebugLog.LogLocalized(
+            "Move",
+            LocalizationKeys.Debug.MoveStep,
+            unit.Id,
+            from.X,
+            from.Y,
+            to.X,
+            to.Y,
+            detail);
         logger.LogInformation(
             "[StrategyMove] Unit {UnitId} moved ({From})->({To}) {Detail}",
             unit.Id, from, to, detail);
@@ -45,6 +56,13 @@ public sealed class StrategyUnitMoveTraceObserver(
     public void OnMoveSkipped(Unit unit, string reason)
     {
         trace.Log("MoveSkip", reason, unit.Id, unit.Location, detail: $"status={unit.Status} route={unit.ActionTarget.RoutePoints.Count}");
+        dayDebugLog.LogLocalized(
+            "Move",
+            LocalizationKeys.Debug.MoveSkip,
+            unit.Id,
+            unit.Location.X,
+            unit.Location.Y,
+            reason);
         logger.LogInformation("[StrategyMove] Unit {UnitId} skip: {Reason} status={Status} route={RouteCount}",
             unit.Id, reason, unit.Status, unit.ActionTarget.RoutePoints.Count);
     }

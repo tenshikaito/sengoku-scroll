@@ -1,22 +1,18 @@
+using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Types;
+using SengokuScroll.Domain.Entities.Types;
+using SengokuScroll.Strategy.Battle;
 using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Calculators;
 
-/// <summary>瞬间战战力估算与确定性结算（M3-a 简化）。</summary>
-/// <remarks>
-/// <para>算法说明：</para>
-/// <list type="bullet">
-///   <item>有效战力 = 兵数 × (攻+防)/20，未配置攻防时使用默认值。</item>
-///   <item>攻方胜率 = 攻方战力 / (攻+守) × 100，钳制在 5%～95%。</item>
-///   <item>结算：由日期+参战方+目标格生成种子，roll &lt; 胜率则攻方胜；伤亡比例随胜负随机（同种子可复现）。</item>
-/// </list>
-/// </remarks>
+/// <summary>瞬间战战力估算与确定性结算（M3-a，接入 <see cref="BattleFactorEvaluator"/>）。</summary>
 public static class InstantBattleCalculator
 {
-    /// <summary>有效战力 = 兵数 × (攻+防) 权重。</summary>
+    /// <summary>有效战力 = 兵数 × (攻+防)/20，未配置攻防时使用默认值。</summary>
     public static int ComputeEffectivePower(Unit unit)
     {
         var attack = unit.Attack > 0 ? unit.Attack : BattleConstants.DefaultCombatStat;
@@ -24,7 +20,7 @@ public static class InstantBattleCalculator
         return unit.Soldier * (attack + defense) / 20;
     }
 
-    /// <summary>攻方胜率（5%～95%），仅基于双方有效战力比，不含 AP buff。</summary>
+    /// <summary>攻方胜率（5%～95%），仅兵数×攻防（无全因素，供简易测试）。</summary>
     public static int ComputeAttackerWinRatePercent(Unit attacker, Unit defender)
     {
         var atk = ComputeEffectivePower(attacker);
@@ -39,53 +35,131 @@ public static class InstantBattleCalculator
             BattleConstants.MaxWinRatePercent);
     }
 
-    /// <summary>由日期与参战方生成确定性种子（联机预埋）。</summary>
-    public static int ComputeResolutionSeed(GameDate date, int attackerId, int defenderId, int targetX, int targetY)
+    /// <summary>含训练/士气/将领/态势等因素的攻方胜率。</summary>
+    /// <summary>含训练/士气/将领/态势等因素的攻方胜率。</summary>
+    public static int ComputeAttackerWinRatePercent(BattleEvaluationContext ctx)
+        => BattleFactorEvaluator.ComputeAttackerWinRatePercent(ctx);
+
+    /// <summary>构建决战结算用的评估上下文。</summary>
+    public static BattleEvaluationContext CreateResolveContext(
+        Unit attacker,
+        Unit defender,
+        GameData gameData,
+        GameMapMasterData? mapMaster = null,
+        int standoffDays = 0,
+        BattleEngagementKind engagementKind = BattleEngagementKind.FieldBattle)
+        => new()
+        {
+            Attacker = attacker,
+            Defender = defender,
+            GameData = gameData,
+            MapMaster = mapMaster,
+            Phase = BattleEvaluationPhase.Resolve,
+            StandoffDays = standoffDays,
+            EngagementKind = engagementKind
+        };
+
+    /// <summary>由本局种子、日期与参战方生成确定性掷点种子（联机/回放预埋）。</summary>
+    public static int ComputeResolutionSeed(
+        int simulationSeed,
+        GameDate date,
+        int attackerId,
+        int defenderId,
+        int targetX,
+        int targetY)
     {
-        var hash = HashCode.Combine(date.Year, date.Month, date.Day, attackerId, defenderId, targetX, targetY);
+        var hash = HashCode.Combine(
+            simulationSeed,
+            date.Year,
+            date.Month,
+            date.Day,
+            attackerId,
+            defenderId,
+            targetX,
+            targetY);
         return hash == int.MinValue ? 0 : Math.Abs(hash);
     }
+
+    /// <summary>兼容旧调用：未传入本局种子时等同 simulationSeed=0。</summary>
+    public static int ComputeResolutionSeed(GameDate date, int attackerId, int defenderId, int targetX, int targetY)
+        => ComputeResolutionSeed(0, date, attackerId, defenderId, targetX, targetY);
 
     /// <summary>估算伤亡区间（供战前预览）。</summary>
     public static (int AttackerMin, int AttackerMax, int DefenderMin, int DefenderMax) EstimateCasualtyRanges(
         Unit attacker,
         Unit defender,
-        int attackerWinRatePercent)
+        int attackerWinRatePercent,
+        StrategyDifficulty difficulty = StrategyDifficulty.Normal)
     {
         var attackerWins = attackerWinRatePercent >= 50;
-        var attackerMin = attackerWins ? PercentOf(attacker.Soldier, 10) : PercentOf(attacker.Soldier, 30);
-        var attackerMax = attackerWins ? PercentOf(attacker.Soldier, 25) : PercentOf(attacker.Soldier, 60);
-        var defenderMin = attackerWins ? PercentOf(defender.Soldier, 30) : PercentOf(defender.Soldier, 10);
-        var defenderMax = attackerWins ? PercentOf(defender.Soldier, 60) : PercentOf(defender.Soldier, 25);
-        return (attackerMin, attackerMax, defenderMin, defenderMax);
+        if (attackerWins)
+        {
+            var (defMin, defMax, attMin, attMax) = BattleCasualtyRules.EstimateCasualtyRanges(
+                attacker.Soldier,
+                defender.Soldier,
+                attackerWinRatePercent,
+                difficulty);
+            return (attMin, attMax, defMin, defMax);
+        }
+
+        var (attLoserMin, attLoserMax, defWinnerMin, defWinnerMax) = BattleCasualtyRules.EstimateCasualtyRanges(
+            defender.Soldier,
+            attacker.Soldier,
+            100 - attackerWinRatePercent,
+            difficulty);
+        return (attLoserMin, attLoserMax, defWinnerMin, defWinnerMax);
     }
 
-    /// <summary>按种子确定性结算野战结果。</summary>
+    /// <summary>按种子确定性结算野战结果（简化，不含全因素）。</summary>
+    /// <summary>按种子确定性结算野战结果（简化，不含全因素）。</summary>
     public static InstantBattleOutcome Resolve(Unit attacker, Unit defender, int seed)
+        => Resolve(CreateMinimalContext(attacker, defender), seed);
+
+    /// <summary>按种子与全因素上下文结算野战结果（战术子单位模拟）。</summary>
+    public static InstantBattleOutcome Resolve(BattleEvaluationContext ctx, int seed)
     {
-        var attackerSoldiersBefore = attacker.Soldier;
-        var defenderSoldiersBefore = defender.Soldier;
-        var winRate = ComputeAttackerWinRatePercent(attacker, defender);
-        var rng = new Random(seed);
-        var roll = rng.Next(100);
-        var attackerWon = roll < winRate;
-
-        var attackerLossPct = attackerWon ? rng.Next(10, 26) : rng.Next(30, 61);
-        var defenderLossPct = attackerWon ? rng.Next(30, 61) : rng.Next(10, 26);
-
-        var attackerCasualties = Math.Min(attacker.Soldier, PercentOf(attacker.Soldier, attackerLossPct));
-        var defenderCasualties = Math.Min(defender.Soldier, PercentOf(defender.Soldier, defenderLossPct));
-
-        return new InstantBattleOutcome(
-            AttackerWon: attackerWon,
-            AttackerWinRatePercent: winRate,
-            AttackerCasualties: attackerCasualties,
-            DefenderCasualties: defenderCasualties,
-            ResolutionSeed: seed,
-            ResolutionRoll: roll,
-            AttackerSoldiersBefore: attackerSoldiersBefore,
-            DefenderSoldiersBefore: defenderSoldiersBefore);
+        var tactical = TacticalBattleSimulator.Resolve(
+            ctx.Attacker,
+            ctx.Defender,
+            ctx.GameData,
+            seed,
+            ctx.MapMaster);
+        return tactical.Outcome;
     }
+
+    /// <summary>战术模拟完整结果（战报过程 + 多单位伤亡）。</summary>
+    public static TacticalBattleResult ResolveTactical(BattleEvaluationContext ctx, int seed, bool bothOrderedAttack = false, string? commitReason = null)
+        => TacticalBattleSimulator.Resolve(
+            ctx.Attacker,
+            ctx.Defender,
+            ctx.GameData,
+            seed,
+            ctx.MapMaster,
+            bothOrderedAttack,
+            commitReason);
+
+    private static BattleEvaluationContext CreateMinimalContext(Unit attacker, Unit defender)
+        => new()
+        {
+            Attacker = attacker,
+            Defender = defender,
+            GameData = new Domain.GameData
+            {
+                GameDate = new GameDate(1, 1, 1),
+                Forces = [],
+                Strongholds = [],
+                Units = new Dictionary<int, Unit>
+                {
+                    [attacker.Id] = attacker,
+                    [defender.Id] = defender
+                },
+                Characters = [],
+                SupplyConvoys = [],
+                Messengers = [],
+                SubUnits = []
+            },
+            Phase = BattleEvaluationPhase.Resolve
+        };
 
     /// <summary>生成自动战斗过程叙述（供战报 UI）。</summary>
     public static IReadOnlyList<StrategyBattleLogEntryDto> BuildBattleLog(
@@ -93,7 +167,8 @@ public static class InstantBattleCalculator
         Unit defender,
         InstantBattleOutcome outcome,
         bool bothOrderedAttack = false,
-        bool attackerWonApInitiative = false)
+        bool attackerWonMovementInitiative = false,
+        string? commitReason = null)
     {
         var logs = new List<StrategyBattleLogEntryDto>();
         var order = 0;
@@ -108,13 +183,15 @@ public static class InstantBattleCalculator
             });
 
         Add("system", "接触", $"{attacker.Name} 与 {defender.Name} 在野外遭遇。");
+        if (!string.IsNullOrWhiteSpace(commitReason))
+            Add("system", "强袭", commitReason);
         if (bothOrderedAttack)
         {
             Add(
                 "system",
                 "先手",
-                attackerWonApInitiative
-                    ? $"{attacker.Name} 与 {defender.Name} 互下攻击令；{attacker.Name} AP 较高先行动并担任攻方。"
+                attackerWonMovementInitiative
+                    ? $"{attacker.Name} 与 {defender.Name} 互下攻击令；{attacker.Name} 移动力较高先行动并担任攻方。"
                     : $"{attacker.Name} 与 {defender.Name} 互下攻击令；{attacker.Name} 先行动并担任攻方。");
         }
 
@@ -150,16 +227,36 @@ public static class InstantBattleCalculator
     }
 
     private static int PercentOf(int value, int percent)
-        => Math.Max(0, value * percent / 100);
+    {
+        if (value <= 0 || percent <= 0)
+            return 0;
+
+        var casualties = value * percent / 100;
+        // 业务：小股部队百分比截断为 0 时保底 1 伤亡，避免残兵永远打不掉
+        if (casualties == 0)
+            return Math.Min(1, value);
+
+        return casualties;
+    }
 }
 
 /// <summary>瞬间战结算结果。</summary>
 public readonly record struct InstantBattleOutcome(
+    /// <summary>攻方是否获胜。</summary>
     bool AttackerWon,
+    /// <summary>攻方胜率（百分点）。</summary>
     int AttackerWinRatePercent,
+    /// <summary>攻方伤亡人数。</summary>
     int AttackerCasualties,
+    /// <summary>守方伤亡人数。</summary>
     int DefenderCasualties,
+    /// <summary>确定性结算种子。</summary>
     int ResolutionSeed,
+    /// <summary>判定掷骰值（攻方胜需 roll &lt; 胜率）。</summary>
     int ResolutionRoll,
+    /// <summary>开战前攻方兵数。</summary>
     int AttackerSoldiersBefore,
-    int DefenderSoldiersBefore);
+    /// <summary>开战前守方兵数。</summary>
+    int DefenderSoldiersBefore,
+    /// <summary>是否为劝降收编（零战损）。</summary>
+    bool IsSurrendered = false);

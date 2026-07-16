@@ -2,20 +2,28 @@
 import type { StrategyUnitState, StrategyWorldState } from "@/api/strategy";
 import { getForceColorCss } from "./forceColors";
 import StrategyIntelFieldList from "./StrategyIntelFieldList.vue";
-import { directiveLabel, pendingPolicyText } from "@/utils/unitDirective";
+import { pendingPolicyText, siegeModeLabel } from "@/utils/unitDirective";
 import { unitHoverIntelRows } from "@/utils/strategyIntelRows";
+import { isStrategySimpleIntelMode } from "@/utils/strategyUnitLabels";
 
 defineProps<{
   worldState: StrategyWorldState;
   unit: StrategyUnitState;
 }>();
+
+const showDebugFields = isStrategySimpleIntelMode();
 </script>
 
 <template>
   <div class="summary">
     <div class="name" :style="{ color: getForceColorCss(unit.forceId) }">{{ unit.name }}</div>
-    <StrategyIntelFieldList variant="hover" :rows="unitHoverIntelRows(worldState, unit)" />
-    <div class="extra">方针：{{ directiveLabel(unit.directive) }}</div>
+    <StrategyIntelFieldList
+      variant="hover"
+      :rows="unitHoverIntelRows(worldState, unit, { includeDebugFields: showDebugFields })"
+    />
+    <div v-if="unit.siegeMode && unit.siegeMode !== 'None'" class="extra">
+      攻城：{{ siegeModeLabel(unit.siegeMode) }}
+    </div>
     <div v-if="pendingPolicyText(worldState.messengers, unit.id)" class="pending">
       📨 {{ pendingPolicyText(worldState.messengers, unit.id) }}
     </div>

@@ -3,6 +3,7 @@ using SengokuScroll.Domain.Contexts;
 
 namespace SengokuScroll.Application;
 
+/// <summary>游戏启动选项：模式、玩家、世界与 DI 容器。</summary>
 public class GameOptions
 {
     public required GamePlayer GamePlayer { get; init; }

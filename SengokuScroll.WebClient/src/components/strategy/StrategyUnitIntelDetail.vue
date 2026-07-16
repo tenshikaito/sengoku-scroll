@@ -2,20 +2,14 @@
 import type { StrategyUnitState, StrategyWorldState } from "@/api/strategy";
 import { getForceColorCss } from "./forceColors";
 import StrategyIntelFieldList from "./StrategyIntelFieldList.vue";
-import { directiveLabel, pendingPolicyText } from "@/utils/unitDirective";
 import { unitDetailIntelRows } from "@/utils/strategyIntelRows";
 import { formatSoldiers } from "@/utils/strategyDisplayUnits";
 
-const props = defineProps<{
+defineProps<{
   worldState: StrategyWorldState;
   unit: StrategyUnitState;
   compact?: boolean;
 }>();
-
-const routeText = () => {
-  if (!props.unit.route?.length) return "无";
-  return props.unit.route.map((p) => `(${p.x},${p.y})`).join(" → ");
-};
 </script>
 
 <template>
@@ -51,21 +45,6 @@ const routeText = () => {
         </tbody>
       </table>
     </section>
-
-    <dl class="extra extra--columns">
-      <div class="row">
-        <dt>方针</dt>
-        <dd>{{ directiveLabel(unit.directive) }}</dd>
-      </div>
-      <div v-if="pendingPolicyText(worldState.messengers, unit.id)" class="row">
-        <dt>信使</dt>
-        <dd class="pending">{{ pendingPolicyText(worldState.messengers, unit.id) }}</dd>
-      </div>
-      <div v-if="unit.route?.length" class="row">
-        <dt>路径</dt>
-        <dd class="route">{{ routeText() }}</dd>
-      </div>
-    </dl>
   </div>
 </template>
 
@@ -91,26 +70,6 @@ const routeText = () => {
 
 .compact .name {
   font-size: 0.88rem;
-}
-
-.extra {
-  margin: 10px 0 0;
-  display: grid;
-  gap: 6px;
-}
-
-.extra--columns {
-  grid-auto-flow: column;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(2, auto);
-  gap: 12px 16px;
-}
-
-.extra--columns .row {
-  grid-template-columns: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .composition {
@@ -141,29 +100,5 @@ const routeText = () => {
   background: #f8fafc;
   color: #64748b;
   font-weight: 500;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 4.5em 1fr;
-  gap: 10px;
-}
-
-dt {
-  margin: 0;
-  color: #64748b;
-}
-
-dd {
-  margin: 0;
-  color: #0f172a;
-}
-
-.route {
-  word-break: break-all;
-}
-
-.pending {
-  color: #0369a1;
 }
 </style>

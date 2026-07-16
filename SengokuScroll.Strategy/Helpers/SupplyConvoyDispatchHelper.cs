@@ -26,7 +26,8 @@ public class SupplyConvoyDispatchHelper(
     IPathfindingService pathfindingService,
     StrategyScenarioMeta scenarioMeta,
     StrategyDayOutcomeBuffer dayOutcomeBuffer,
-    StrategyTributeLedger tributeLedger)
+    StrategyTributeLedger tributeLedger,
+    MonthlyTaxCollectionLedger monthlyTaxCollectionLedger)
 {
     /// <summary>
     /// 扫描己方单位，为缺粮且尚无在途（含返程）运输队的单位自动派遣补给。
@@ -40,14 +41,18 @@ public class SupplyConvoyDispatchHelper(
 
         foreach (var unit in context.GameWorldContext.EachUnit())
         {
+            // 业务：缺粮且尚无在途运输队时，从最近有粮据点自动发粮
             if (unit.Food >= SupplyDispatchConstants.UnitFoodThresholdGo)
                 continue;
 
             if (HasActiveConvoyForUnit(gameData.SupplyConvoys, unit.Id))
                 continue;
 
-            var stronghold = FindNearestStrongholdWithFood(unit);
+            var stronghold = FindNearestStrongholdWithFood(unit, gameData);
             if (stronghold is null)
+                continue;
+
+            if (GarrisonBehaviorRules.IsStrongholdBlockaded(stronghold, gameData))
                 continue;
 
             var path = pathfindingService.CalculatePath(
@@ -77,6 +82,7 @@ public class SupplyConvoyDispatchHelper(
                 OriginStrongholdId = stronghold.Id,
                 TargetUnitId = unit.Id,
                 CargoFoodGo = cargo,
+                Purpose = TransportPurpose.Supply,
                 PorterCount = LogisticsConstants.DefaultPorterCount,
                 EscortSoldierCount = LogisticsConstants.DefaultEscortSoldierCount,
                 Movement = LogisticsConstants.ConvoyDailyAp,
@@ -93,7 +99,7 @@ public class SupplyConvoyDispatchHelper(
     }
 
     /// <summary>
-    /// 每月 1 日：自势力范围内各据点向目标居城运送上月税赋（运输队到账制）。
+    /// 每月 1 日：自势力范围内各据点向目标居城运送金钱税赋（M4-b；粮税在收粮日另派）。
     /// </summary>
     public int DispatchMonthlyLordTributes()
     {
@@ -120,51 +126,28 @@ public class SupplyConvoyDispatchHelper(
             if (HasActiveTributeConvoy(gameData.SupplyConvoys, origin.Id, targetStrongholdId))
                 continue;
 
-            var foodCargo = EconomyCalculator.CalculateStrongholdMonthlyTaxFood(origin);
-            var moneyCargo = EconomyCalculator.CalculateStrongholdMonthlyTaxMoney(origin);
+            if (GarrisonBehaviorRules.IsStrongholdBlockaded(origin, gameData))
+                continue;
 
-            foodCargo = Math.Min(foodCargo, origin.ForceActor.Food);
+            var moneyCargo = monthlyTaxCollectionLedger.ConsumeMoneyTributeObligation(origin.Id);
+            var obligation = moneyCargo;
             moneyCargo = Math.Min(moneyCargo, origin.ForceActor.Money);
 
-            if (foodCargo <= 0 && moneyCargo <= 0)
-                continue;
-
-            var pathForceId = TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData);
-            var path = pathfindingService.CalculatePath(
-                new MapPathAgent(origin.Location, pathForceId),
-                destination.Location);
-
-            if (path is null || path.Count <= 1)
-                continue;
-
-            origin.ForceActor.Food -= foodCargo;
-            origin.ForceActor.Money -= moneyCargo;
-
-            if (gameData.Forces.TryGetValue(origin.ForceId, out var originForce))
-                ForceEconomyActions.SyncForceTreasuryFromStrongholds(originForce, gameData);
-
-            var convoyId = NextEntityId(gameData.SupplyConvoys.Keys);
-            var convoy = new SupplyConvoy
+        // 业务：府库不足则记欠账，仍尝试按实际库存发运
+            if (moneyCargo <= 0)
             {
-                Id = convoyId,
-                Name = $"{origin.Name}贡纳→{destination.Name}",
-                ForceId = origin.ForceId,
-                LeaderId = ResolveConvoyLeaderId(origin, gameData),
-                Location = origin.Location,
-                OriginStrongholdId = origin.Id,
-                TargetUnitId = 0,
-                TargetStrongholdId = targetStrongholdId,
-                CargoFoodGo = foodCargo,
-                CargoMoney = moneyCargo,
-                PorterCount = LogisticsConstants.DefaultPorterCount,
-                EscortSoldierCount = LogisticsConstants.DefaultEscortSoldierCount,
-                Movement = LogisticsConstants.ConvoyDailyAp,
-                Ap = 0,
-                Status = SupplyConvoyStatus.Moving,
-                RoutePoints = RouteCalculator.ToDailyRouteQueue(path)
-            };
+                if (obligation > 0)
+                    TributeArrearsActions.AccrueShortfall(gameData, origin, 0, obligation);
 
-            gameData.SupplyConvoys[convoyId] = convoy;
+                continue;
+            }
+
+            if (moneyCargo < obligation)
+                TributeArrearsActions.AccrueShortfall(gameData, origin, 0, obligation - moneyCargo);
+
+            if (!TryCreateTributeConvoy(origin, destination, gameData, 0, moneyCargo, TransportPurpose.TaxMoney))
+                continue;
+
             created++;
 
             if (TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData)
@@ -173,15 +156,208 @@ public class SupplyConvoyDispatchHelper(
                 dayOutcomeBuffer.AddEvent(new StrategyEventDto
                 {
                     Category = "LordTributeDispatched",
-                    Brief = $"🌾 贡纳队自 {origin.Name} 出发",
+                    Brief = $"💰 钱纳队自 {origin.Name} 出发",
                     Message =
-                        $"🌾 贡纳运输队自 {origin.Name} 出发，向 {destination.Name} 运送税赋 " +
-                        $"🌾{foodCargo:N0} 💰{moneyCargo:N0}"
+                        $"💰 钱纳运输队自 {origin.Name} 出发，向 {destination.Name} 运送税赋 " +
+                        $"💰{moneyCargo:N0}"
                 });
             }
         }
 
         return created;
+    }
+
+    /// <summary>收粮日：自府库运送贡粮义务至目标居城。</summary>
+    public bool DispatchHarvestFoodTribute(Stronghold origin, int obligationFoodGo)
+    {
+        if (obligationFoodGo <= 0)
+            return false;
+
+        var gameData = context.GameWorldContext.GameWorld.GameData;
+
+        var destinationId = TributeRoutingHelper.ResolveTributeDestinationStrongholdId(
+            origin,
+            gameData,
+            scenarioMeta);
+
+        if (destinationId is not int targetStrongholdId)
+            return false;
+
+        if (!gameData.Strongholds.TryGetValue(targetStrongholdId, out var destination))
+            return false;
+
+        if (HasActiveTributeConvoy(gameData.SupplyConvoys, origin.Id, targetStrongholdId))
+            return false;
+
+        if (GarrisonBehaviorRules.IsStrongholdBlockaded(origin, gameData))
+            return false;
+
+        var foodCargo = Math.Min(obligationFoodGo, origin.ForceActor.Food);
+        if (foodCargo <= 0)
+        {
+            TributeArrearsActions.AccrueShortfall(gameData, origin, obligationFoodGo, 0);
+            return false;
+        }
+
+        if (foodCargo < obligationFoodGo)
+            TributeArrearsActions.AccrueShortfall(gameData, origin, obligationFoodGo - foodCargo, 0);
+
+        if (!TryCreateTributeConvoy(origin, destination, gameData, foodCargo, 0, TransportPurpose.Tribute))
+            return false;
+
+        if (TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData)
+            == scenarioMeta.PlayerForceId)
+        {
+            dayOutcomeBuffer.AddEvent(new StrategyEventDto
+            {
+                Category = "LordTributeDispatched",
+                Brief = $"🌾 贡粮队自 {origin.Name} 出发",
+                Message =
+                    $"🌾 贡粮运输队自 {origin.Name} 出发，向 {destination.Name} 运送 🌾{foodCargo:N0}"
+            });
+        }
+
+        return true;
+    }
+
+    /// <summary>扫描同势力据点间粮价差，派遣贸易运输队（M4-c）。</summary>
+    public int DispatchTradeConvoys()
+    {
+        var gameData = context.GameWorldContext.GameWorld.GameData;
+        var created = 0;
+
+        foreach (var destination in gameData.Strongholds.Values)
+        {
+            foreach (var origin in gameData.Strongholds.Values)
+            {
+                if (!TradeMarketAiHelper.ShouldDispatchTrade(origin, destination, gameData))
+                    continue;
+
+                var cargo = TradeMarketAiHelper.CalculateTradeCargoGo(origin, destination);
+                if (cargo <= 0)
+                    continue;
+
+                if (!TryCreateTradeConvoy(origin, destination, gameData, cargo))
+                    continue;
+
+                created++;
+
+                if (origin.ForceId == scenarioMeta.PlayerForceId)
+                {
+                    dayOutcomeBuffer.AddEvent(new StrategyEventDto
+                    {
+                        Category = "TradeConvoyDispatched",
+                        Brief = $"📦 贸易队 {origin.Name}→{destination.Name}",
+                        Message =
+                            $"📦 贸易运输队自 {origin.Name} 出发，向 {destination.Name} 运送 🌾{cargo:N0}"
+                    });
+                }
+
+                break;
+            }
+        }
+
+        return created;
+    }
+
+    private bool TryCreateTradeConvoy(
+        Stronghold origin,
+        Stronghold destination,
+        GameData gameData,
+        int foodCargo)
+    {
+        if (GarrisonBehaviorRules.IsStrongholdBlockaded(origin, gameData))
+            return false;
+
+        var path = pathfindingService.CalculatePath(
+            new MapPathAgent(origin.Location, TradeMarketAiHelper.ResolvePathForceId(origin, gameData)),
+            destination.Location);
+
+        if (path is null || path.Count <= 1)
+            return false;
+
+        origin.ForceActor.Food -= foodCargo;
+
+        if (gameData.Forces.TryGetValue(origin.ForceId, out var originForce))
+            ForceEconomyActions.SyncForceTreasuryFromStrongholds(originForce, gameData);
+
+        var convoyId = NextEntityId(gameData.SupplyConvoys.Keys);
+        var convoy = new SupplyConvoy
+        {
+            Id = convoyId,
+            Name = $"{origin.Name}贸易→{destination.Name}",
+            ForceId = origin.ForceId,
+            LeaderId = ResolveConvoyLeaderId(origin, gameData),
+            Location = origin.Location,
+            OriginStrongholdId = origin.Id,
+            TargetUnitId = 0,
+            TargetStrongholdId = destination.Id,
+            CargoFoodGo = foodCargo,
+            CargoMoney = 0,
+            Purpose = TransportPurpose.Trade,
+            PorterCount = LogisticsConstants.DefaultPorterCount,
+            EscortSoldierCount = LogisticsConstants.DefaultEscortSoldierCount,
+            Movement = LogisticsConstants.ConvoyDailyAp,
+            Ap = 0,
+            Status = SupplyConvoyStatus.Moving,
+            RoutePoints = RouteCalculator.ToDailyRouteQueue(path)
+        };
+
+        gameData.SupplyConvoys[convoyId] = convoy;
+        return true;
+    }
+
+    private bool TryCreateTributeConvoy(
+        Stronghold origin,
+        Stronghold destination,
+        GameData gameData,
+        int foodCargo,
+        int moneyCargo,
+        TransportPurpose purpose)
+    {
+        if (GarrisonBehaviorRules.IsStrongholdBlockaded(origin, gameData))
+            return false;
+
+        var pathForceId = TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData);
+        var path = pathfindingService.CalculatePath(
+            new MapPathAgent(origin.Location, pathForceId),
+            destination.Location);
+
+        if (path is null || path.Count <= 1)
+            return false;
+
+        origin.ForceActor.Food -= foodCargo;
+        origin.ForceActor.Money -= moneyCargo;
+
+        if (gameData.Forces.TryGetValue(origin.ForceId, out var originForce))
+            ForceEconomyActions.SyncForceTreasuryFromStrongholds(originForce, gameData);
+
+        var convoyId = NextEntityId(gameData.SupplyConvoys.Keys);
+        var convoy = new SupplyConvoy
+        {
+            Id = convoyId,
+            Name = foodCargo > 0
+                ? $"{origin.Name}贡粮→{destination.Name}"
+                : $"{origin.Name}钱纳→{destination.Name}",
+            ForceId = origin.ForceId,
+            LeaderId = ResolveConvoyLeaderId(origin, gameData),
+            Location = origin.Location,
+            OriginStrongholdId = origin.Id,
+            TargetUnitId = 0,
+            TargetStrongholdId = destination.Id,
+            CargoFoodGo = foodCargo,
+            CargoMoney = moneyCargo,
+            Purpose = purpose,
+            PorterCount = LogisticsConstants.DefaultPorterCount,
+            EscortSoldierCount = LogisticsConstants.DefaultEscortSoldierCount,
+            Movement = LogisticsConstants.ConvoyDailyAp,
+            Ap = 0,
+            Status = SupplyConvoyStatus.Moving,
+            RoutePoints = RouteCalculator.ToDailyRouteQueue(path)
+        };
+
+        gameData.SupplyConvoys[convoyId] = convoy;
+        return true;
     }
 
     /// <summary>
@@ -196,6 +372,7 @@ public class SupplyConvoyDispatchHelper(
             if (convoy.Status != SupplyConvoyStatus.Arrived)
                 continue;
 
+            // 业务：返程抵达出发据点后移除实体，结束运输循环
             if (convoy.IsReturningToOrigin)
             {
                 gameData.SupplyConvoys.Remove(convoy.Id);
@@ -206,6 +383,31 @@ public class SupplyConvoyDispatchHelper(
             {
                 if (gameData.Strongholds.TryGetValue(convoy.TargetStrongholdId, out var destination))
                 {
+                    if (convoy.Purpose == TransportPurpose.Trade
+                        && gameData.Strongholds.TryGetValue(convoy.OriginStrongholdId, out var tradeOrigin))
+                    {
+                        var revenue = TradeEconomyActions.CompleteTradeArrival(
+                            convoy,
+                            tradeOrigin,
+                            destination,
+                            gameData);
+
+                        if (tradeOrigin.ForceId == scenarioMeta.PlayerForceId && revenue > 0)
+                        {
+                            dayOutcomeBuffer.AddEvent(new StrategyEventDto
+                            {
+                                Category = "TradeConvoyArrived",
+                                Brief = $"📦 贸易队抵达 {destination.Name}",
+                                Message =
+                                    $"📦 贸易队 {convoy.Name} 抵达 {destination.Name}，" +
+                                    $"贸易收入 💰{revenue:N0}"
+                            });
+                        }
+
+                        ScheduleReturnToOrigin(convoy, gameData);
+                        continue;
+                    }
+
                     var deliveredFood = convoy.CargoFoodGo;
                     var deliveredMoney = convoy.CargoMoney;
 
@@ -218,6 +420,7 @@ public class SupplyConvoyDispatchHelper(
                             gameData,
                             scenarioMeta);
 
+                        // 业务：贡纳抵达玩家居城时记入贡纳台账并推送事件
                         if (destination.Id == playerCapitalId
                             && TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData)
                             == scenarioMeta.PlayerForceId)
@@ -301,7 +504,7 @@ public class SupplyConvoyDispatchHelper(
             RouteCalculator.ToDailyRouteQueue(path));
     }
 
-    private Stronghold? FindNearestStrongholdWithFood(Unit unit)
+    private Stronghold? FindNearestStrongholdWithFood(Unit unit, GameData gameData)
     {
         Stronghold? best = null;
         var bestSteps = int.MaxValue;
@@ -309,6 +512,9 @@ public class SupplyConvoyDispatchHelper(
         foreach (var stronghold in context.GameWorldContext.EachStronghold())
         {
             if (stronghold.ForceId != unit.ForceId)
+                continue;
+
+            if (GarrisonBehaviorRules.IsStrongholdBlockaded(stronghold, gameData))
                 continue;
 
             if (stronghold.ForceActor.Food < SupplyDispatchConstants.StrongholdMinFoodGo)

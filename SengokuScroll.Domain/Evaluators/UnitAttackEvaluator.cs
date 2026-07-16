@@ -6,6 +6,7 @@ using static SengokuScroll.Domain.GameError;
 
 namespace SengokuScroll.Domain.Evaluators;
 
+/// <summary>军事单位攻击合法性评估：边界、距离、行动力、敌对目标（单位或据点）。</summary>
 public class UnitAttackEvaluator(
     IGameContext context,
     CommonRules commonRules,
@@ -13,21 +14,18 @@ public class UnitAttackEvaluator(
     DiplomacyRules diplomacyRules)
     : EvaluatorBase
 {
+    /// <summary>评估单位能否攻击目标格（须为相邻敌方单位或敌方据点）。</summary>
     public GameResult Evaluate(Unit unit, Point2 location)
     {
-        // 检查边界
         GameResult CheckOutOfBounds()
             => commonRules.CheckOutOfBounds(location);
 
-        // 检查攻击所需行动点
         GameResult CheckAttackAp()
             => unitRules.CheckAttackAp(unit);
 
-        // 检查攻击范围
         GameResult CheckAttackRange()
             => UnitRules.CheckAttackRange(unit, location);
 
-        // 检查攻击目标
         GameResult CheckAttackTarget()
         {
             GameResult CheckAttackUnit()
@@ -50,6 +48,7 @@ public class UnitAttackEvaluator(
                 return diplomacyRules.IsEnemy(unit, ts);
             }
 
+            // 业务：优先尝试攻击格内军事单位，无单位时再尝试攻城
             var r = CheckAttackUnit();
 
             if (r)
@@ -65,13 +64,9 @@ public class UnitAttackEvaluator(
 
         return Evaluate(
             [
-                // 检查边界
                 CheckOutOfBounds,
-                // 检查攻击范围
                 CheckAttackRange,
-                // 检查攻击所需行动点
                 CheckAttackAp,
-                // 检查攻击目标
                 CheckAttackTarget,
             ]);
     }

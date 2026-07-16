@@ -12,7 +12,7 @@ export interface StrategyPendingNotification {
   battleResult?: StrategyBattleResult;
 }
 
-const props = defineProps<{
+defineProps<{
   notifications: StrategyPendingNotification[];
 }>();
 
@@ -44,14 +44,18 @@ function onClick(notification: StrategyPendingNotification) {
 .notification-tray {
   display: flex;
   flex-direction: row-reverse;
-  flex-wrap: nowrap;
+  flex-wrap: wrap-reverse;
+  align-content: flex-start;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px;
+  width: 100%;
   padding: 0;
   min-height: 0;
   background: transparent;
   border: none;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .notification-icon {
@@ -65,6 +69,7 @@ function onClick(notification: StrategyPendingNotification) {
   border-radius: 8px;
   background: #1e293b;
   cursor: pointer;
+  flex-shrink: 0;
   transition:
     background 0.15s ease,
     border-color 0.15s ease,

@@ -42,6 +42,7 @@ public class MessengerDispatchHelper(
         Unit targetUnit,
         UnitDirective directive)
     {
+        // 业务：同格或寻路失败则即时生效，不生成信使实体
         if (!MessengerRules.RequiresMessenger(issuerLocation, targetUnit.Location))
         {
             MessengerActions.ApplyPolicyChange(targetUnit, directive);
@@ -84,25 +85,27 @@ public class MessengerDispatchHelper(
     }
 
     /// <summary>从己方部队所在格向当主所在格派出战报信使（异格时生成实体）。</summary>
-    public void DispatchBattleReport(
+    /// <returns>新建信使 Id；同格或路径不可达时返回 null。</returns>
+    public int? DispatchBattleReport(
         Point3 origin,
         int forceId,
         int sourceStrongholdId,
         Point3 lordLocation)
     {
-        if (!MessengerRules.RequiresMessenger(origin, lordLocation))
-            return;
-
         var path = pathfindingService.CalculatePath(
             new MapPathAgent(origin, forceId),
             lordLocation);
 
-        if (path is null || path.Count <= 1)
-            return;
+        if (path is null)
+            return null;
 
         var gameData = context.GameWorldContext.GameWorld.GameData;
         var messengerId = NextEntityId(gameData.Messengers.Keys);
         gameData.Strongholds.TryGetValue(sourceStrongholdId, out var stronghold);
+
+        var route = path.Count <= 1
+            ? new Queue<Point3>()
+            : RouteCalculator.ToDailyRouteQueue(path);
 
         var messenger = new Messenger
         {
@@ -116,16 +119,64 @@ public class MessengerDispatchHelper(
             EscortSoldierCount = LogisticsConstants.DefaultMessengerEscortCount,
             PayloadType = MessengerPayloadType.BattleReport,
             Status = MessengerStatus.Moving,
-            RoutePoints = RouteCalculator.ToDailyRouteQueue(path)
+            RoutePoints = route
         };
 
         gameData.Messengers[messengerId] = messenger;
+        return messengerId;
+    }
+
+    /// <summary>从战场/据点向当主所在格派出战略情报信使。</summary>
+    public int? DispatchStrategicReport(
+        Point3 origin,
+        int forceId,
+        int sourceStrongholdId,
+        Point3 lordLocation)
+    {
+        var path = pathfindingService.CalculatePath(
+            new MapPathAgent(origin, forceId),
+            lordLocation);
+
+        if (path is null)
+            return null;
+
+        var gameData = context.GameWorldContext.GameWorld.GameData;
+        var messengerId = NextEntityId(gameData.Messengers.Keys);
+        gameData.Strongholds.TryGetValue(sourceStrongholdId, out var stronghold);
+
+        var route = path.Count <= 1
+            ? new Queue<Point3>()
+            : RouteCalculator.ToDailyRouteQueue(path);
+
+        var messenger = new Messenger
+        {
+            Id = messengerId,
+            Name = BuildStrategicReportMessengerName(stronghold?.Name),
+            ForceId = forceId,
+            Location = origin,
+            SourceStrongholdId = sourceStrongholdId,
+            TargetUnitId = 0,
+            CourierCount = LogisticsConstants.DefaultMessengerCourierCount,
+            EscortSoldierCount = LogisticsConstants.DefaultMessengerEscortCount,
+            PayloadType = MessengerPayloadType.StrategicReport,
+            Status = MessengerStatus.Moving,
+            RoutePoints = route
+        };
+
+        gameData.Messengers[messengerId] = messenger;
+        return messengerId;
     }
 
     private static string BuildPolicyMessengerName(string? originName, string targetUnitName)
     {
         var origin = string.IsNullOrWhiteSpace(originName) ? "据点" : originName.Trim();
         return $"{origin}信使→{targetUnitName}";
+    }
+
+    private static string BuildStrategicReportMessengerName(string? originName)
+    {
+        var origin = string.IsNullOrWhiteSpace(originName) ? "前线" : originName.Trim();
+        return $"{origin}情报信使";
     }
 
     private static string BuildBattleReportMessengerName(string? originName)

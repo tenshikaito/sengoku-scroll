@@ -5,13 +5,18 @@ import type {
   StrategyStrongholdState,
   StrategySupplyConvoyState,
   StrategyUnitState,
+  StrategyBattlefieldState,
   StrategyWorldState,
 } from "@/api/strategy";
 import type { AnchorSide } from "@/utils/mapCellAnchor";
+import type { CompactCellEntityEntry } from "@/utils/strategyIntelRows";
 import StrategyConvoyIntelSummary from "./StrategyConvoyIntelSummary.vue";
+import StrategyIntelPanel from "./StrategyIntelPanel.vue";
 import StrategyMessengerIntelSummary from "./StrategyMessengerIntelSummary.vue";
 import StrategyStrongholdIntelSummary from "./StrategyStrongholdIntelSummary.vue";
 import StrategyUnitIntelSummary from "./StrategyUnitIntelSummary.vue";
+import StrategyBattlefieldIntelSummary from "./StrategyBattlefieldIntelSummary.vue";
+import StrategyCellEntitiesCompactSummary from "./StrategyCellEntitiesCompactSummary.vue";
 
 const props = defineProps<{
   worldState: StrategyWorldState;
@@ -25,8 +30,9 @@ const props = defineProps<{
 
 type StrongholdEntry = { kind: "stronghold"; key: string; stronghold: StrategyStrongholdState };
 
-type OtherEntry =
-  | { kind: "unit"; key: string; unit: StrategyUnitState }
+type MilitaryEntry = { kind: "unit"; key: string; unit: StrategyUnitState };
+
+type CivilEntry =
   | { kind: "convoy"; key: string; convoy: StrategySupplyConvoyState }
   | { kind: "messenger"; key: string; messenger: StrategyMessengerState };
 
@@ -42,11 +48,44 @@ const strongholdEntries = computed((): StrongholdEntry[] =>
   }))
 );
 
-const otherEntries = computed((): OtherEntry[] => {
-  const list: OtherEntry[] = [];
-  for (const unit of atCell(props.worldState.units)) {
-    list.push({ kind: "unit", key: `u-${unit.id}`, unit });
+const battlefieldAtCell = computed((): StrategyBattlefieldState | null => {
+  const bf = props.worldState.battlefields?.find((b) => b.x === props.x && b.y === props.y);
+  return bf ?? null;
+});
+
+const siegeBattlefield = computed((): StrategyBattlefieldState | null =>
+  battlefieldAtCell.value?.kind === "Siege" ? battlefieldAtCell.value : null
+);
+
+const fieldBattlefield = computed((): StrategyBattlefieldState | null =>
+  battlefieldAtCell.value?.kind === "Field" ? battlefieldAtCell.value : null
+);
+
+/** 兵队（军事单位）；已入战场的单位由战场面板汇总，未参战同格部队仍单独展示。 */
+const militaryEntries = computed((): MilitaryEntry[] => {
+  const bf = battlefieldAtCell.value;
+  const units = atCell(props.worldState.units);
+  if (!bf) {
+    return units.map((unit) => ({
+      kind: "unit" as const,
+      key: `u-${unit.id}`,
+      unit,
+    }));
   }
+
+  const inBattleIds = new Set(bf.unitIds ?? []);
+  return units
+    .filter((unit) => !inBattleIds.has(unit.id))
+    .map((unit) => ({
+      kind: "unit" as const,
+      key: `u-${unit.id}`,
+      unit,
+    }));
+});
+
+/** 运输队、信使等非兵队实体。 */
+const civilEntries = computed((): CivilEntry[] => {
+  const list: CivilEntry[] = [];
   for (const convoy of atCell(props.worldState.supplyConvoys)) {
     list.push({ kind: "convoy", key: `c-${convoy.id}`, convoy });
   }
@@ -56,13 +95,66 @@ const otherEntries = computed((): OtherEntry[] => {
   return list;
 });
 
-const totalCount = computed(
-  () => strongholdEntries.value.length + otherEntries.value.length
+/** 同格全部可移动实体（兵队、运输、信使），按 id 排序。 */
+const allEntityEntries = computed((): CompactCellEntityEntry[] => {
+  const list: CompactCellEntityEntry[] = [];
+  for (const entry of militaryEntries.value) {
+    list.push({
+      kind: "unit",
+      key: entry.key,
+      forceId: entry.unit.forceId,
+      unit: entry.unit,
+    });
+  }
+  for (const entry of civilEntries.value) {
+    if (entry.kind === "convoy") {
+      list.push({
+        kind: "convoy",
+        key: entry.key,
+        forceId: entry.convoy.forceId,
+        convoy: entry.convoy,
+      });
+    } else {
+      list.push({
+        kind: "messenger",
+        key: entry.key,
+        forceId: entry.messenger.forceId,
+        messenger: entry.messenger,
+      });
+    }
+  }
+  return list.sort((a, b) => a.key.localeCompare(b.key));
+});
+
+/** 仅一个兵队且无其他同格实体时，保持原有详细悬浮布局。 */
+const useCompactEntityPanel = computed(() => allEntityEntries.value.length > 1);
+
+const singleMilitaryEntry = computed(() =>
+  !useCompactEntityPanel.value && militaryEntries.value.length === 1
+    ? militaryEntries.value[0]
+    : null
 );
 
-const dualLayout = computed(
-  () => strongholdEntries.value.length > 0 && otherEntries.value.length > 0
+const singleCivilEntry = computed(() =>
+  !useCompactEntityPanel.value && civilEntries.value.length === 1 && militaryEntries.value.length === 0
+    ? civilEntries.value[0]
+    : null
 );
+
+const panelCount = computed(() => {
+  let count = 0;
+  if (strongholdEntries.value.length) count += 1;
+  if (siegeBattlefield.value) count += 1;
+  if (fieldBattlefield.value) count += 1;
+  if (useCompactEntityPanel.value && allEntityEntries.value.length) count += 1;
+  else {
+    if (singleMilitaryEntry.value) count += 1;
+    if (singleCivilEntry.value) count += 1;
+  }
+  return count;
+});
+
+const multiBoxLayout = computed(() => panelCount.value > 1);
 
 const stackClass = computed(() => {
   const side = props.anchorSide ?? "right";
@@ -70,92 +162,84 @@ const stackClass = computed(() => {
   return [
     "cell-intel-stack",
     `cell-intel-stack--${side}`,
-    dualLayout.value ? "cell-intel-stack--dual" : "",
-    dualLayout.value && vAlign === "end" ? "cell-intel-stack--valign-end" : "",
+    multiBoxLayout.value ? "cell-intel-stack--multi" : "",
+    multiBoxLayout.value && vAlign === "end" ? "cell-intel-stack--valign-end" : "",
   ];
 });
 </script>
 
 <template>
   <div :class="stackClass">
-    <!-- 据点 + 同格其他实体：两框横向并排（据点靠格、其他向外） -->
-    <template v-if="dualLayout">
-      <div class="intel-box intel-box--stronghold" aria-label="据点">
-        <div class="coord">格点 ({{ x }}, {{ y }}) · {{ totalCount }} 项</div>
-        <div class="panel-title">据点</div>
-        <template v-for="(entry, index) in strongholdEntries" :key="entry.key">
-          <div v-if="index > 0" class="entity-divider" role="separator" />
-          <div class="block">
-            <StrategyStrongholdIntelSummary
-              :world-state="worldState"
-              :stronghold="entry.stronghold"
-            />
-          </div>
-        </template>
-      </div>
-
-      <div class="intel-box intel-box--other" aria-label="单位与后勤">
-        <div class="panel-title">单位</div>
-        <template v-for="(entry, index) in otherEntries" :key="entry.key">
-          <div v-if="index > 0" class="entity-divider" role="separator" />
-          <div class="block">
-            <StrategyUnitIntelSummary
-              v-if="entry.kind === 'unit'"
-              :world-state="worldState"
-              :unit="entry.unit"
-            />
-            <StrategyConvoyIntelSummary
-              v-else-if="entry.kind === 'convoy'"
-              :world-state="worldState"
-              :convoy="entry.convoy"
-            />
-            <StrategyMessengerIntelSummary
-              v-else-if="entry.kind === 'messenger'"
-              :world-state="worldState"
-              :messenger="entry.messenger"
-            />
-          </div>
-        </template>
-      </div>
-    </template>
-
-    <!-- 单类实体：单个悬浮框 -->
-    <div v-else class="intel-box">
-      <div class="coord">格点 ({{ x }}, {{ y }}) · {{ totalCount }} 项</div>
-      <template v-if="strongholdEntries.length">
-        <template v-for="(entry, index) in strongholdEntries" :key="entry.key">
-          <div v-if="index > 0" class="entity-divider" role="separator" />
-          <div class="block">
-            <StrategyStrongholdIntelSummary
-              :world-state="worldState"
-              :stronghold="entry.stronghold"
-            />
-          </div>
-        </template>
+    <StrategyIntelPanel
+      v-if="strongholdEntries.length"
+      variant="stronghold"
+      ariaLabel="据点情报"
+    >
+      <template v-for="(entry, index) in strongholdEntries" :key="entry.key">
+        <div v-if="index > 0" class="entity-divider" role="separator" />
+        <div class="block">
+          <StrategyStrongholdIntelSummary
+            :world-state="worldState"
+            :stronghold="entry.stronghold"
+          />
+        </div>
       </template>
-      <template v-else>
-        <template v-for="(entry, index) in otherEntries" :key="entry.key">
-          <div v-if="index > 0" class="entity-divider" role="separator" />
-          <div class="block">
-            <StrategyUnitIntelSummary
-              v-if="entry.kind === 'unit'"
-              :world-state="worldState"
-              :unit="entry.unit"
-            />
-            <StrategyConvoyIntelSummary
-              v-else-if="entry.kind === 'convoy'"
-              :world-state="worldState"
-              :convoy="entry.convoy"
-            />
-            <StrategyMessengerIntelSummary
-              v-else-if="entry.kind === 'messenger'"
-              :world-state="worldState"
-              :messenger="entry.messenger"
-            />
-          </div>
-        </template>
-      </template>
-    </div>
+    </StrategyIntelPanel>
+
+    <StrategyIntelPanel
+      v-if="siegeBattlefield"
+      variant="battlefield"
+      ariaLabel="围城战场情报"
+    >
+      <StrategyBattlefieldIntelSummary :battlefield="siegeBattlefield" />
+    </StrategyIntelPanel>
+
+    <StrategyIntelPanel
+      v-if="fieldBattlefield"
+      variant="battlefield"
+      ariaLabel="野战战场情报"
+    >
+      <StrategyBattlefieldIntelSummary :battlefield="fieldBattlefield" />
+    </StrategyIntelPanel>
+
+    <StrategyIntelPanel
+      v-if="useCompactEntityPanel && allEntityEntries.length"
+      variant="military"
+      ariaLabel="同格单位情报"
+    >
+      <StrategyCellEntitiesCompactSummary
+        :world-state="worldState"
+        :entries="allEntityEntries"
+      />
+    </StrategyIntelPanel>
+
+    <StrategyIntelPanel
+      v-else-if="singleMilitaryEntry"
+      variant="military"
+      ariaLabel="兵队情报"
+    >
+      <StrategyUnitIntelSummary
+        :world-state="worldState"
+        :unit="singleMilitaryEntry.unit"
+      />
+    </StrategyIntelPanel>
+
+    <StrategyIntelPanel
+      v-else-if="singleCivilEntry"
+      variant="civil"
+      ariaLabel="运输与信使"
+    >
+      <StrategyConvoyIntelSummary
+        v-if="singleCivilEntry.kind === 'convoy'"
+        :world-state="worldState"
+        :convoy="singleCivilEntry.convoy"
+      />
+      <StrategyMessengerIntelSummary
+        v-else-if="singleCivilEntry.kind === 'messenger'"
+        :world-state="worldState"
+        :messenger="singleCivilEntry.messenger"
+      />
+    </StrategyIntelPanel>
   </div>
 </template>
 
@@ -167,45 +251,19 @@ const stackClass = computed(() => {
   width: max-content;
 }
 
-.cell-intel-stack--dual {
+.cell-intel-stack--multi {
   flex-direction: row;
 }
 
-.cell-intel-stack--dual.cell-intel-stack--left,
-.cell-intel-stack--dual.cell-intel-stack--top {
+.cell-intel-stack--multi.cell-intel-stack--left,
+.cell-intel-stack--multi.cell-intel-stack--top {
   flex-direction: row-reverse;
 }
 
-/* 在格块下方/上方时：两框以底边对齐，避免矮框顶对齐产生与格块之间的空隙 */
-.cell-intel-stack--dual.cell-intel-stack--bottom,
-.cell-intel-stack--dual.cell-intel-stack--top,
-.cell-intel-stack--dual.cell-intel-stack--valign-end {
+.cell-intel-stack--multi.cell-intel-stack--bottom,
+.cell-intel-stack--multi.cell-intel-stack--top,
+.cell-intel-stack--multi.cell-intel-stack--valign-end {
   align-items: flex-end;
-}
-
-.coord {
-  font-size: 0.72rem;
-  color: #94a3b8;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #475569;
-}
-
-.panel-title {
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #64748b;
-  margin-bottom: 6px;
-}
-
-.intel-box--stronghold .panel-title {
-  color: #7dd3fc;
-}
-
-.intel-box--other .panel-title {
-  color: #fbbf24;
 }
 
 .entity-divider {
@@ -239,7 +297,15 @@ const stackClass = computed(() => {
   border-color: #38bdf8;
 }
 
-.cell-intel-stack .intel-box--other {
+.cell-intel-stack .intel-box--military {
   border-color: #fbbf24;
+}
+
+.cell-intel-stack .intel-box--civil {
+  border-color: #4ade80;
+}
+
+.cell-intel-stack .intel-box--battlefield {
+  border-color: #f87171;
 }
 </style>

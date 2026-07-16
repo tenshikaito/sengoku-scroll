@@ -19,7 +19,11 @@ public interface IGameWorldContext
 
     Stronghold? GetStrongholdOrDefault(Point2 location);
 
+    /// <summary>取格点上任一军事单位（兼容旧调用；堆叠时取列表首个）。</summary>
     Unit? GetUnitOrDefault(Point2 location);
+
+    /// <summary>取格点上全部军事单位。</summary>
+    IReadOnlyList<Unit> GetUnitsAt(Point2 location);
 
     Character? GetCharacterOrDefault(int characterId);
 

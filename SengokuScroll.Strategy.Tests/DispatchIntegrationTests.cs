@@ -30,7 +30,7 @@ public class SupplyConvoyDispatchIntegrationTests
         ctx.TimeController.AdvanceDay(ctx.World, ctx.Engine);
         // 次日恢复 AP 后推进一格（两日各扣一日在途自耗）
         Assert.Equal(new Common.Types.Point3(1, 0), convoy.Location);
-        Assert.Equal(LogisticsConstants.DefaultConvoyCargoGo - 230, convoy.CargoFoodGo);
+        Assert.Equal(LogisticsConstants.DefaultConvoyCargoGo - 270, convoy.CargoFoodGo);
     }
 
     [Fact]

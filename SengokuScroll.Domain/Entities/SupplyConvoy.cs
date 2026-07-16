@@ -40,6 +40,9 @@ public class SupplyConvoy : IHasForce, IMapObject, IHasLeader
     /// <summary>运载金钱（贯）；月初贡纳等。</summary>
     public int CargoMoney { get; set; }
 
+    /// <summary>运输任务类型。</summary>
+    public TransportPurpose Purpose { get; set; } = TransportPurpose.Supply;
+
     /// <summary>当前载粮量（合）。在途每日由人夫/护卫消耗从此扣除。</summary>
     public int CargoFoodGo { get; set; }
 

@@ -1,5 +1,6 @@
 using SengokuScroll.Common.Types;
 using SengokuScroll.Domain.Contexts;
+using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Abstraction;
 using SengokuScroll.Domain.Rules;
 
@@ -46,6 +47,9 @@ public class PathfindingService(IGameContext context, MovementRules movementRule
                 var moveCost = movementRules.GetTileMovementApCost(movable, next);
 
                 if (moveCost < 0)
+                    continue;
+
+                if (IsBlockedByOccupyingMilitaryUnit(movable, next, target))
                     continue;
 
                 var tentativeG = gScore[current] + moveCost;
@@ -101,5 +105,14 @@ public class PathfindingService(IGameContext context, MovementRules movementRule
         yield return new Point2(p.X - 1, p.Y);
         yield return new Point2(p.X, p.Y + 1);
         yield return new Point2(p.X, p.Y - 1);
+    }
+
+    private bool IsBlockedByOccupyingMilitaryUnit(IMovable movable, Point2 location, Point2 pathTarget)
+    {
+        // 业务：最终目标格可进入敌军（开战）；途中仍不可穿越
+        if (location.X == pathTarget.X && location.Y == pathTarget.Y)
+            return false;
+
+        return movementRules.IsPathTileBlockedByMilitary(movable, location);
     }
 }

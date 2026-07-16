@@ -17,7 +17,7 @@ public class StrategyScenarioLoaderTests
         Assert.Equal("mini_kanto", world.Name);
         Assert.Equal(4, world.GameData.Forces.Count);
         Assert.Equal(10, world.GameData.Strongholds.Count);
-        Assert.Equal(2, world.GameData.Units.Count);
+        Assert.Equal(3, world.GameData.Units.Count);
         Assert.Equal(1560, world.GameData.GameDate.Year);
     }
 
@@ -31,13 +31,13 @@ public class StrategyScenarioLoaderTests
         using var ctx = StrategyTestWorldFactory.CreateFromWorld(world);
         var odaUnit = world.GameData.Units[1];
 
-        // 织田先锋 100 兵、2000 合粮
-        Assert.Equal(100, odaUnit.Soldier);
-        Assert.Equal(2000, odaUnit.Food);
+        // 织田先锋 3000 兵、6000000 合粮
+        Assert.Equal(3000, odaUnit.Soldier);
+        Assert.Equal(6_000_000, odaUnit.Food);
 
         ctx.TimeController.AdvanceDay(ctx.World, ctx.Engine);
 
-        // 日推进后应扣日耗粮 200 合
-        Assert.Equal(1800, odaUnit.Food);
+        // 日推进后应扣日耗粮 9000 合（3000 兵 × 3 合/日）
+        Assert.Equal(5_991_000, odaUnit.Food);
     }
 }

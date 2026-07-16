@@ -23,6 +23,9 @@ public sealed record StrategyEconomySettlementDetailDto
 
     public required int TreasuryFood { get; init; }
 
+    /// <summary>结算期内抵达的运输批次数。</summary>
+    public required int ConvoyCount { get; init; }
+
     public required IReadOnlyList<StrategyTributeLineDto> TributeLines { get; init; }
 }
 
@@ -30,6 +33,10 @@ public sealed record StrategyEconomySettlementDetailDto
 public sealed record StrategyTributeLineDto
 {
     public required string OriginName { get; init; }
+
+    public required string ForceName { get; init; }
+
+    public required string LordName { get; init; }
 
     public required int Food { get; init; }
 

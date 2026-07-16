@@ -50,7 +50,7 @@ public sealed class StrategyMapDefinition
     /// </summary>
     public List<string>? PoliticalRegionGrid { get; init; }
 
-    /// <summary>地图地标（对应 Domain <see cref="Entities.StrongholdPoint"/>）。</summary>
+    /// <summary>地图地标（对应 Domain <see cref="Entities.Landmark"/>）。</summary>
     public List<StrategyMapLandmarkDefinition> Landmarks { get; init; } = [];
 }
 
@@ -96,6 +96,22 @@ public sealed class StrategyPoliticalRegionDefinition
     public required string Key { get; init; }
 
     public required string Name { get; init; }
+
+    /// <summary>作型：Single | Double | Triple；省略则 Single。</summary>
+    public string? CropPattern { get; init; }
+
+    /// <summary>收粮事件；省略则按 CropPattern 使用默认日历。</summary>
+    public List<StrategyHarvestEventDefinition>? HarvestEvents { get; init; }
+}
+
+/// <summary>收粮事件 JSON。</summary>
+public sealed class StrategyHarvestEventDefinition
+{
+    public required int Month { get; init; }
+
+    public int Day { get; init; } = 1;
+
+    public int ShareBasisPoints { get; init; } = 10_000;
 }
 
 /// <summary>地图地标（非 playable 据点）。</summary>
@@ -129,6 +145,12 @@ public sealed class StrategyScenarioDefinition
 
     /// <summary>玩家操控势力 Id。</summary>
     public int PlayerForceId { get; init; } = 1;
+
+    /// <summary>难度：Easy | Normal | Hard | Legendary；省略则 Normal。</summary>
+    public string? Difficulty { get; init; }
+
+    /// <summary>本局固定随机种子；0 或省略则开局按剧本 Id+起始日期派生。</summary>
+    public int SimulationSeed { get; init; }
 
     /// <summary>当主配置；省略则默认玩家势力首个据点。</summary>
     public StrategyLordDefinition? Lord { get; init; }
@@ -218,6 +240,9 @@ public sealed class StrategyStrongholdDefinition
 
     public int Money { get; init; }
 
+    /// <summary>城内驻军士兵数（非地图单位）。</summary>
+    public int GarrisonSoldiers { get; init; } = 0;
+
     /// <summary>人头税率（%）。</summary>
     public byte PollTaxRate { get; init; } = 10;
 
@@ -229,6 +254,24 @@ public sealed class StrategyStrongholdDefinition
 
     /// <summary>关税率（%）。</summary>
     public byte TariffTaxRate { get; init; } = 8;
+
+    /// <summary>治安（0–100）；省略时默认 50。</summary>
+    public byte Stability { get; init; }
+
+    /// <summary>民心（0–100）；省略时默认 50。</summary>
+    public byte PopularFeelings { get; init; }
+
+    /// <summary>城防设施类型 Id 列表；省略时按人口分配默认设施。</summary>
+    public List<int> DefenseFacilityIds { get; init; } = [];
+
+    /// <summary>经济设施类型 Id 列表；省略时按商业值推断（Market/奢侈品工坊）。</summary>
+    public List<int> EconomyFacilityIds { get; init; } = [];
+
+    /// <summary>城防（0–100）；已废弃，仅兼容旧剧本，实际城防由设施累加。</summary>
+    public byte Defense { get; init; }
+
+    /// <summary>是否史实据点；省略时按同格是否存在地图地标推断。</summary>
+    public bool? IsHistorical { get; init; }
 }
 
 /// <summary>剧本角色（M3-b：指挥官/领主/代官等）。</summary>
@@ -311,6 +354,9 @@ public sealed class StrategyUnitDefinition
     /// 各段可选队将见 <see cref="StrategySubUnitCompositionDefinition.CommanderId"/>。
     /// </summary>
     public List<StrategySubUnitCompositionDefinition> Composition { get; init; } = [];
+
+    /** 开局方针（UnitDirective 枚举名）；驻军建议 Support。 */
+    public string? Directive { get; init; }
 }
 
 /// <summary>单位内子编制（兵种/备队）开局配置。</summary>

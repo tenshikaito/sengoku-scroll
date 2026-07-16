@@ -1,0 +1,22 @@
+{
+  "battle.engagement.field": "Field battle",
+  "battle.engagement.ambush": "Ambush",
+  "battle.engagement.siege": "Siege",
+
+  "debug.day.begin": "======== Day advance start {0}-{1:D2}-{2:D2} ========",
+  "debug.day.end": "======== Day advance end {0}-{1:D2}-{2:D2} | battles={3} events={4} ========",
+  "debug.system.start": ">> System #{0} {1} start",
+  "debug.system.end": "<< System #{0} {1} end",
+  "debug.ai.directive": "[AI/Directive] force#{0} unit#{1} {2} | {3}→{4} | {5}",
+  "debug.ai.action": "[AI/Action] force#{0} unit#{1} {2} directive={3} | {4}: {5}",
+  "debug.ai.skip": "[AI/Skip] force#{0} unit#{1} {2} | {3}",
+  "debug.move.step": "[Move] unit#{0} ({1},{2})→({3},{4}) | {5}",
+  "debug.move.skip": "[Move/Skip] unit#{0} ({1},{2}) | {3}",
+  "debug.engagement.queue": "[Engage] {0}#{1} → {2}#{3} | mutual={4}",
+  "debug.battle.resolve": "[Battle] {0} | {1} vs {2} | outcome={3} | losses {4}/{5}",
+  "debug.battle.standoff": "[Standoff] {0} vs {1} day {2}",
+  "debug.battle.outcome.surrender": "Surrender",
+  "debug.battle.outcome.attacker_win": "Attacker win",
+  "debug.battle.outcome.defender_win": "Defender win",
+  "debug.garrison.defense": "[Garrison] stronghold#{0} {1} | {2}"
+}

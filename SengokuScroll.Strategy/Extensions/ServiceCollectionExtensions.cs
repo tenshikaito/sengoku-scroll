@@ -1,7 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using SengokuScroll.Application.Constants;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Systems;
+using SengokuScroll.Localization;
+using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Hosting;
 using SengokuScroll.Strategy.Systems;
@@ -14,6 +18,10 @@ public static class ServiceCollectionExtensions
     /// <summary>注册策略仿真宿主（WebApi / 单机 M1-e）。</summary>
     public static IServiceCollection AddStrategySimulationHost(this IServiceCollection services)
     {
+        services.AddSengokuLocalization();
+        services.TryAddSingleton<IOptions<StrategyDayDebugOptions>>(
+            _ => Options.Create(new StrategyDayDebugOptions()));
+        services.TryAddSingleton<IStrategyDayDebugLog, StrategyDayDebugLog>();
         services.AddSingleton<StrategySimulationHost>();
         return services;
     }
@@ -31,6 +39,23 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<SupplyConvoyDispatchHelper>();
         services.AddSingleton<MessengerDispatchHelper>();
+        services.AddSingleton<StrategyPendingBattleReportStore>();
+        services.AddSingleton<StrategyPendingEventStore>();
+        services.AddSingleton<BattleReportDeliveryHelper>();
+        services.AddSingleton<StrategyFieldEngagementRegistry>();
+        services.AddSingleton<StrategyWarOccupationRegistry>();
+        services.AddSingleton<StrategyForceLordRegistry>();
+        services.AddSingleton<StrongholdCaptureHelper>();
+        services.AddSingleton<BattleAftermathHelper>();
+
+        services.AddSingleton<StrategyTributeLedger>();
+        services.AddSingleton<StrategyIntelligenceLedger>();
+        services.AddSingleton<MerchantTaxLedger>();
+        services.AddSingleton<TariffTaxLedger>();
+        services.AddSingleton<MonthlyTaxCollectionLedger>();
+
+        services.AddSingleton<StrategyMarketSystem>();
+        services.AddSingleton<IStrategyMarketSystem>(sp => sp.GetRequiredService<StrategyMarketSystem>());
 
         services.AddSingleton<StrategyEconomySystem>();
         services.AddSingleton<IStrategyEconomySystem>(sp => sp.GetRequiredService<StrategyEconomySystem>());
@@ -45,24 +70,48 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IStrategyBattleResolutionSystem>(
             sp => sp.GetRequiredService<StrategyBattleResolutionSystem>());
 
+        services.AddSingleton<StrategyMoveEngagementSystem>();
+        services.AddSingleton<IStrategyMoveEngagementSystem>(
+            sp => sp.GetRequiredService<StrategyMoveEngagementSystem>());
+
+        services.AddSingleton<StrategySiegeSystem>();
+        services.AddSingleton<IStrategySiegeSystem>(sp => sp.GetRequiredService<StrategySiegeSystem>());
+
+        services.AddSingleton<StrategyStrongholdOccupationSystem>();
+        services.AddSingleton<IStrategyStrongholdOccupationSystem>(
+            sp => sp.GetRequiredService<StrategyStrongholdOccupationSystem>());
+
         services.AddSingleton<StrategyAISystem>();
         services.AddSingleton<IStrategyAISystem>(sp => sp.GetRequiredService<StrategyAISystem>());
         services.AddSingleton<IAISystem>(sp => sp.GetRequiredService<StrategyAISystem>());
 
         services.AddKeyedSingleton<IGameEngine>(ServiceConstants.StrategyGameEngine, (sp, _) =>
-            new ConfigurableGameEngine(
-            [
-                sp.GetRequiredService<IStrategyTimeSystem>(),
-                sp.GetRequiredService<IClimateSystem>(),
-                sp.GetRequiredService<IEconomySystem>(),
-                sp.GetRequiredService<IStrategySupplySystem>(),
-                sp.GetRequiredService<IUnitSystem>(),
-                sp.GetRequiredService<IStrategyBattleResolutionSystem>(),
-                sp.GetRequiredService<IStrategyMessengerSystem>(),
-                sp.GetRequiredService<ICharacterSystem>(),
-                sp.GetRequiredService<IAISystem>()
-            ]));
+        {
+            var systems = BuildStrategySystems(sp);
+            var debugLog = sp.GetRequiredService<IStrategyDayDebugLog>();
+            return debugLog.IsEnabled
+                ? new StrategyDebugGameEngine(systems, debugLog)
+                : new StrategyGameEngineCore(systems);
+        });
 
         return services;
     }
+
+    private static IEnumerable<IGameSystem> BuildStrategySystems(IServiceProvider sp)
+        =>
+        [
+            sp.GetRequiredService<IStrategyTimeSystem>(),
+            sp.GetRequiredService<IClimateSystem>(),
+            sp.GetRequiredService<IStrategyMarketSystem>(),
+            sp.GetRequiredService<IEconomySystem>(),
+            sp.GetRequiredService<IStrategySupplySystem>(),
+            sp.GetRequiredService<IAISystem>(),
+            sp.GetRequiredService<IUnitSystem>(),
+            sp.GetRequiredService<IStrategySiegeSystem>(),
+            sp.GetRequiredService<IStrategyMoveEngagementSystem>(),
+            sp.GetRequiredService<IStrategyStrongholdOccupationSystem>(),
+            sp.GetRequiredService<IStrategyMessengerSystem>(),
+            sp.GetRequiredService<IStrategyBattleResolutionSystem>(),
+            sp.GetRequiredService<ICharacterSystem>()
+        ];
 }

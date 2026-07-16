@@ -36,7 +36,8 @@ public class ExampleGameDataProcessor : IGameDataProcessor
                 TerrainSurfaceFeatures = [],
                 Climates = [],
                 Regions = [],
-                StrongholdPoints = []
+                Roads = [],
+                Landmarks = []
             },
 
             GameMapData = new()

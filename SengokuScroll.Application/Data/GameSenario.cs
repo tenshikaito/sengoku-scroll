@@ -2,6 +2,7 @@
 
 namespace SengokuScroll.Application.Data;
 
+/// <summary>剧本静态数据：地图主数据、势力开局与可变 <see cref="GameData"/>。</summary>
 public sealed class GameSenario
 {
     public int Id { get; set; }

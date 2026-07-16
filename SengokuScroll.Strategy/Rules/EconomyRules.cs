@@ -10,6 +10,19 @@ public static class EconomyRules
     public static bool ShouldConsumeDailyFood(Unit unit)
         => unit.IsMilitary && unit.Soldier > 0;
 
+    /// <summary>人口 &gt; 0 的据点参与市民日耗粮。</summary>
+    public static bool ShouldConsumeDailyCivilianFood(Stronghold stronghold)
+        => stronghold.Population > 0;
+
+    /// <summary>城内驻军（ForceActor.Soldier）参与每日口粮消耗。</summary>
+    public static bool ShouldConsumeDailyGarrisonFood(Stronghold stronghold)
+        => stronghold.ForceActor.Soldier > 0;
+
+    /// <summary>是否参与每日生产入库（M4-a：有产出配置即参与）。</summary>
+    public static bool ShouldApplyDailyProduction(Stronghold stronghold)
+        => stronghold.CivilianActor.AgricultureProduction > 0
+           || stronghold.CivilianActor.CommerceProduction > 0;
+
     /// <summary>是否为每月 1 日（月结触发日，M1-d 仅占位判定）。</summary>
     public static bool IsMonthlySettlementDay(GameDate date)
         => date.Day == 1;

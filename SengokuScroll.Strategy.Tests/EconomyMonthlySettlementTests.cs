@@ -3,6 +3,7 @@ using SengokuScroll.Strategy.Data;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Helpers;
+using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Rules;
 using SengokuScroll.Strategy.Tests.Fixtures;
 
@@ -23,8 +24,8 @@ public class EconomyMonthlySettlementTests
         stronghold.CommerceTaxRate = 12;
         stronghold.TariffTaxRate = 8;
 
-        Assert.Equal(1440, EconomyCalculator.CalculateStrongholdMonthlyTaxMoney(stronghold));
-        Assert.Equal(2000, EconomyCalculator.CalculateStrongholdMonthlyTaxFood(stronghold));
+        Assert.Equal(22_400, EconomyCalculator.CalculateStrongholdMonthlyTaxMoney(stronghold));
+        Assert.Equal(50_000, EconomyCalculator.CalculateStrongholdMonthlyTaxFood(stronghold));
     }
 
     [Fact]
@@ -95,6 +96,51 @@ public class EconomyMonthlySettlementTests
         Assert.NotNull(annual);
         Assert.NotNull(annual!.EconomySettlement);
         Assert.Equal("Annual", annual.EconomySettlement!.Period);
+    }
+
+    [Fact]
+    public void TributeLedger_AggregatesMultipleArrivalsFromSameOrigin()
+    {
+        var ledger = new StrategyTributeLedger();
+        ledger.RecordArrival(1560, 1, "清洲", 100, 50);
+        ledger.RecordArrival(1560, 1, "清洲", 200, 30);
+
+        var summary = ledger.ConsumeMonthlySettlement(1560, 1);
+
+        Assert.Equal(2, summary.ConvoyCount);
+        Assert.Single(summary.Lines);
+        Assert.Equal(300, summary.TotalFood);
+        Assert.Equal(80, summary.TotalMoney);
+        Assert.Equal("清洲", summary.Lines[0].OriginName);
+    }
+
+    [Fact]
+    public void MapConvoy_ExposesCargoMoney()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Maps", "mini_kanto.json");
+        var loaded = StrategyScenarioLoader.LoadFromFile(path);
+        var gameData = loaded.World.GameData;
+        gameData.SupplyConvoys.Clear();
+        gameData.SupplyConvoys[99] = new Domain.Entities.SupplyConvoy
+        {
+            Id = 99,
+            Name = "测试贡纳",
+            ForceId = 1,
+            Location = new SengokuScroll.Common.Types.Point3(1, 4, 0),
+            OriginStrongholdId = 1,
+            TargetStrongholdId = 1,
+            CargoFoodGo = 500,
+            CargoMoney = 1200,
+            PorterCount = 10,
+            EscortSoldierCount = 5,
+            Status = Domain.Entities.Types.SupplyConvoyStatus.Moving
+        };
+
+        var dto = StrategyWorldStateMapper.ToDto(loaded.World, "mini_kanto", loaded.Meta);
+        var mapped = dto.SupplyConvoys.Single(c => c.Id == 99);
+
+        Assert.Equal(1200, mapped.Money);
+        Assert.Equal(500, mapped.Food);
     }
 
     [Fact]

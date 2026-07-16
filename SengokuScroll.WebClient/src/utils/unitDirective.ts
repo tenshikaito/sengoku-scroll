@@ -34,3 +34,26 @@ export function pendingPolicyText(
   if (!pending?.pendingDirective) return null;
   return `信使传递中：${directiveLabel(pending.pendingDirective)}`;
 }
+
+export function siegeModeLabel(value: string | undefined | null): string {
+  switch (value) {
+    case "Encircle":
+      return "包围";
+    case "Assault":
+      return "强攻";
+    case "None":
+    default:
+      return "—";
+  }
+}
+
+export function unitTargetSummary(unit: {
+  targetStrongholdName?: string | null;
+  targetUnitName?: string | null;
+  directiveTargetId?: number;
+}): string {
+  if (unit.targetUnitName) return `部队·${unit.targetUnitName}`;
+  if (unit.targetStrongholdName) return `据点·${unit.targetStrongholdName}`;
+  if (unit.directiveTargetId && unit.directiveTargetId > 0) return `目标#${unit.directiveTargetId}`;
+  return "—";
+}

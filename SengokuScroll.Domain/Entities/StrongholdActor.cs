@@ -10,8 +10,9 @@ public class StrongholdActor : Actor
     /// </summary>
     public int AgricultureProduction { get; set; }
 
-    /// <summary>
-    /// 商业产出
-    /// </summary>
+    /// <summary>商业产出</summary>
     public int CommerceProduction { get; set; }
+
+    /// <summary>奢侈品库存（官办/商户；M4-d）。</summary>
+    public int LuxuryGoods { get; set; }
 }

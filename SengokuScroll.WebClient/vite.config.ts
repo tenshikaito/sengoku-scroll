@@ -12,6 +12,9 @@ export default defineConfig(() => {
       },
     },
     server: {
+      // 同时响应 localhost 与 127.0.0.1（Windows 上 localhost 常解析到 IPv6 ::1）
+      host: true,
+      port: 5173,
       proxy: {
         "/api": {
           target: "http://127.0.0.1:5100",

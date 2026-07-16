@@ -1,6 +1,6 @@
 # SengokuScroll（战国绘卷）设计文档索引
 
-> 版本：1.2 | 日期：2026-07-09
+> 版本：1.3 | 日期：2026-07-10
 
 本目录包含项目的全部基本设计与详细设计文档。本文档为**总索引**，说明文档体系、阅读顺序、数据来源及实现对照。
 
@@ -17,7 +17,7 @@
 | 后端 | .NET 10 / ASP.NET Core / SignalR |
 | 前端 | Vue 3 + TypeScript + Vite（地图层规划 PixiJS） |
 | **开发顺序** | **策略单机 → RPG → 策略联机 → MMO** |
-| **当前阶段** | **策略模式 M3-d**（单机可玩收尾） |
+| **当前阶段** | **策略模式 M4**（经济重构 M4-a/b 已实装，M4-c 进行中） |
 
 ### 1.1 三种游戏模式
 
@@ -36,6 +36,7 @@
 docs/
 ├── README.md                      ← 本文档（总索引）
 ├── design-document.md             ← 基本设计（架构总览、原则、技术栈）
+├── game-concepts.md               ← 【维护】游戏概念词典（名词/枚举/实装对照）
 ├── strategy-development-plan.md   ← 【当前】策略模式开发计划（待确认）
 │
 ├── shared-detail-design.md        ← 共同详细设计（领域、规则、网络、存档）
@@ -54,6 +55,7 @@ docs/
 | 层级 | 文档 | 职责 |
 |------|------|------|
 | **基本设计** | [design-document.md](./design-document.md) | 项目定位、设计原则、三模式对比、解决方案结构、技术栈、重构计划 |
+| **游戏概念词典** | [game-concepts.md](./game-concepts.md) | 概念词典；**§3.0 堆叠/战场、§5.5 战争**（2026-07-15） |
 | **共同详细设计** | [shared-detail-design.md](./shared-detail-design.md) | 三模式共享的领域模型、规则、时间、事件、指令、网络、存档 |
 | **模式详细设计** | `*-detail-design.md` | 各模式专属 System、玩法循环、模式特有机制 |
 | **开发计划** | [strategy-development-plan.md](./strategy-development-plan.md) | 里程碑、范围、确认清单（策略·草案） |
@@ -102,7 +104,19 @@ flowchart TB
 
 ---
 
-### 3.0 [strategy-development-plan.md](./strategy-development-plan.md) — 策略模式开发计划（当前）
+### 3.0 [game-concepts.md](./game-concepts.md) — 游戏概念词典
+
+**版本 1.0** | 开发与策划的**概念权威清单**
+
+| 章节 | 内容 |
+|------|------|
+| §0 | **维护约定** — 何时更新、变更影响检查清单 |
+| §1–§11 | 策略模式已实装/设计中的全部概念（实体、战斗、经济、外交、驻军、占城、信使等） |
+| 附录 A–C | 枚举速查、Rules/Systems 索引、文档交叉引用 |
+
+> 变更 Domain/Strategy/剧本/存档/前端游戏术语时，须同步更新本文档。Cursor 规则：`.cursor/rules/game-concepts-maintenance.mdc`
+
+### 3.0a [strategy-development-plan.md](./strategy-development-plan.md) — 策略模式开发计划（当前）
 
 **版本 0.3** | 实装前必读
 
@@ -255,7 +269,7 @@ flowchart TB
 
 | 角色 | 阅读路径 |
 |------|----------|
-| 后端 / 领域 | 基本设计 → 共同详细设计 → 目标模式详细设计 |
+| 后端 / 领域 | 基本设计 → **游戏概念词典** → 共同详细设计 → 目标模式详细设计 |
 | 前端 / UI | 基本设计 §1 → 共通界面 → 目标模式界面设计 |
 | 联机 / 网络 | 共同详细设计 §8 → 策略 §11 / MMO §5 |
 | 策划 / 数值 | 共同详细设计 §1.0（数据定义）+ 根目录 xlsx 源表 |
@@ -326,6 +340,10 @@ flowchart TB
 |------|------|------|
 | 2026-06-19 | — | 初始 9 篇设计文档 |
 | 2026-06-28 | 1.2 | 联机延后至 RPG 后；明确 RPG 为策略增量 |
+| 日期 | 版本 | 变更摘要 |
+|------|------|----------|
+| 2026-07-15 | — | 冻结同格堆叠/战场/战争规格写入 [game-concepts.md](./game-concepts.md) v1.3、[strategy-detail-design.md](./strategy-detail-design.md) §5.1/§10 |
+| 2026-07-13 | 1.4 | 新增 [game-concepts.md](./game-concepts.md) 游戏概念词典 |
 | 2026-07-09 | 1.3 | 策略 M3-d：地图地标/政治区域、底栏与 overlay UI |
 | 2026-07-09 | 1.2 | 更新实现对照；策略 M3-d 进行中 |
 | 2026-06-28 | 1.1 | 新增策略开发计划；开发顺序改为策略优先 |

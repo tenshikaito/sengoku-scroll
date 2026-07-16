@@ -1,0 +1,138 @@
+import type { IntelTableColumnDef } from "./strategyIntelSystemColumns";
+
+const idName = (extra: IntelTableColumnDef[] = []): IntelTableColumnDef[] => [
+  { prop: "id", label: "ID", width: 56, align: "center" },
+  { prop: "name", label: "名称", minWidth: 96 },
+  ...extra,
+];
+
+function fieldCol(prop: string, label: string, width = 72): IntelTableColumnDef {
+  return { prop, label, width, align: "center" };
+}
+
+export const MASTER_DATA_FIELD_COLUMN_LABELS: Record<string, string> = {
+  description: "描述",
+  cultureGroup: "文化组",
+  cultureGroupId: "文化组ID",
+  religionGroup: "宗教",
+  religionGroupId: "宗教ID",
+  level: "等级",
+  exclusivism: "排他",
+  centralization: "中央化",
+  doctrinalDifference: "教义差",
+  category: "类别",
+  cultureId: "文化ID",
+  guardianNumber: "守备数",
+  cost: "造价",
+  maintenance: "维持费",
+  attack: "攻击",
+  defense: "防御",
+  movement: "移动",
+  attackRange: "射程",
+  maintenanceMoney: "金钱维持",
+  maintenanceFood: "粮食维持",
+  terrainType: "地形类型",
+  movementCost: "移动消耗",
+  altitude: "海拔",
+  springTemperature: "春温",
+  springWetness: "春湿",
+  summerTemperature: "夏温",
+  summerWetness: "夏湿",
+  autumnTemperature: "秋温",
+  autumnWetness: "秋湿",
+  winterTemperature: "冬温",
+  winterWetness: "冬湿",
+  speedBonus: "速度加成",
+  x: "X",
+  y: "Y",
+  type: "类型",
+  member: "成员",
+  value: "值",
+};
+
+export const MASTER_DATA_COLUMN_PRESETS: Record<string, IntelTableColumnDef[]> = {
+  cultureGroups: idName([fieldCol("description", "描述", 160)]),
+  cultures: idName([
+    fieldCol("cultureGroup", "文化组", 88),
+    fieldCol("cultureGroupId", "文化组ID", 80),
+    fieldCol("description", "描述", 160),
+  ]),
+  religionGroups: idName([
+    fieldCol("level", "等级", 64),
+    fieldCol("description", "描述", 160),
+  ]),
+  religions: idName([
+    fieldCol("religionGroup", "宗教", 88),
+    fieldCol("religionGroupId", "宗教ID", 80),
+    fieldCol("level", "等级", 64),
+    fieldCol("exclusivism", "排他", 64),
+    fieldCol("centralization", "中央化", 72),
+    fieldCol("doctrinalDifference", "教义差", 72),
+    fieldCol("description", "描述", 120),
+  ]),
+  strongholdTypes: idName([
+    fieldCol("category", "类别", 72),
+    fieldCol("cultureId", "文化ID", 72),
+    fieldCol("guardianNumber", "守备数", 72),
+    fieldCol("cost", "造价", 72),
+    fieldCol("maintenance", "维持费", 72),
+    fieldCol("description", "描述", 120),
+  ]),
+  defenseFacilityTypes: idName([
+    fieldCol("category", "类别", 72),
+    fieldCol("level", "等级", 64),
+    fieldCol("attack", "攻击", 64),
+    fieldCol("defense", "防御", 64),
+    fieldCol("movement", "移动", 64),
+    fieldCol("cost", "造价", 64),
+    fieldCol("maintenance", "维持费", 72),
+  ]),
+  unitTypes: idName([
+    fieldCol("attack", "攻击", 64),
+    fieldCol("defense", "防御", 64),
+    fieldCol("attackRange", "射程", 64),
+    fieldCol("movement", "移动", 64),
+    fieldCol("cultureId", "文化ID", 72),
+    fieldCol("cost", "造价", 64),
+    fieldCol("maintenanceMoney", "金钱维持", 88),
+    fieldCol("maintenanceFood", "粮食维持", 88),
+    fieldCol("description", "描述", 120),
+  ]),
+  terrains: idName([
+    fieldCol("terrainType", "地形类型", 88),
+    fieldCol("movementCost", "移动消耗", 80),
+    fieldCol("altitude", "海拔", 64),
+    fieldCol("description", "描述", 120),
+  ]),
+  climates: idName([
+    fieldCol("springTemperature", "春温", 64),
+    fieldCol("springWetness", "春湿", 64),
+    fieldCol("summerTemperature", "夏温", 64),
+    fieldCol("summerWetness", "夏湿", 64),
+    fieldCol("autumnTemperature", "秋温", 64),
+    fieldCol("autumnWetness", "秋湿", 64),
+    fieldCol("winterTemperature", "冬温", 64),
+    fieldCol("winterWetness", "冬湿", 64),
+    fieldCol("description", "描述", 120),
+  ]),
+  regions: idName([fieldCol("description", "描述", 160)]),
+  roads: idName([
+    fieldCol("speedBonus", "速度加成", 80),
+    fieldCol("movementCost", "移动消耗", 80),
+    fieldCol("description", "描述", 120),
+  ]),
+  landmarks: idName([fieldCol("x", "X", 56), fieldCol("y", "Y", 56)]),
+  terrainVegetationFeatures: idName([
+    fieldCol("type", "类型", 72),
+    fieldCol("description", "描述", 160),
+  ]),
+  terrainSurfaceFeatures: idName([
+    fieldCol("type", "类型", 72),
+    fieldCol("description", "描述", 160),
+  ]),
+  enums: idName([
+    fieldCol("category", "枚举", 120),
+    fieldCol("member", "成员", 96),
+    fieldCol("value", "值", 56),
+  ]),
+};

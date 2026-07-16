@@ -32,15 +32,15 @@ public class EconomyRulesAndActionsTests
     [Fact]
     public void ApplyDailyFoodConsumption_DeductsFromUnitFood()
     {
-        // 100 兵 × 2 合/日 = 200 合
+        // 100 兵 × 3 合/日 = 300 合
         var unit = StrategyTestWorldBuilder.CreateTestUnit(1, 1, new Common.Types.Point3(0, 0), food: 1000);
         unit.IsMilitary = true;
         unit.Soldier = 100;
 
         var deducted = UnitEconomyActions.ApplyDailyFoodConsumption(unit);
 
-        Assert.Equal(200, deducted);
-        Assert.Equal(800, unit.Food);
+        Assert.Equal(300, deducted);
+        Assert.Equal(700, unit.Food);
     }
 
     [Fact]
@@ -74,5 +74,19 @@ public class StrategyEconomyIntegrationTests
 
         var expected = 1000 - LogisticsCalculator.CalculateUnitDailyFoodConsumption(100);
         Assert.Equal(expected, unit.Food);
+    }
+
+    [Fact]
+    public void ApplyDailyGarrisonFoodConsumption_800Soldiers_DeductsAboutTwoPointFourKoku()
+    {
+        var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(10, 1, new Common.Types.Point3(1, 1));
+        stronghold.ForceActor.Soldier = 800;
+        stronghold.ForceActor.Food = 10_000;
+
+        var deducted = StrongholdEconomyActions.ApplyDailyGarrisonFoodConsumption(stronghold);
+
+        // 800 人 × 3 合/日 = 2400 合 ≈ 2.4 石
+        Assert.Equal(2400, deducted);
+        Assert.Equal(7600, stronghold.ForceActor.Food);
     }
 }

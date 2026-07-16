@@ -19,7 +19,7 @@ public class GameWorldSnapshot
 
         public required Dictionary<int, int> Strongholds { get; set; }
 
-        public required Dictionary<int, int> Units { get; set; }
+        public required Dictionary<int, List<int>> Units { get; set; }
     }
 
     public class GameDataViewModel

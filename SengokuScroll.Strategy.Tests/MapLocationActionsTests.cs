@@ -21,12 +21,12 @@ public class MapLocationActionsTests
         var indexOrigin = tileMap.GetIndex(new Point3(0, 0));
         var indexTarget = tileMap.GetIndex(new Point3(2, 0));
 
-        Assert.Equal(1, world.GameMapData.Units[indexOrigin]);
+        Assert.Equal([1], world.GameMapData.Units[indexOrigin]);
 
         MapLocationActions.SetUnitLocation(worldContext, unit, new Point3(2, 0));
 
         Assert.False(world.GameMapData.Units.ContainsKey(indexOrigin));
-        Assert.Equal(1, world.GameMapData.Units[indexTarget]);
+        Assert.Equal([1], world.GameMapData.Units[indexTarget]);
         Assert.Equal(new Point3(2, 0), unit.Location);
         Assert.Same(unit, worldContext.GetUnitOrDefault(new Point2(2, 0)));
     }
@@ -52,7 +52,7 @@ public class MapLocationActionsTests
 
         Assert.Equal(new Point3(1, 0), unit.Location);
         Assert.False(world.GameMapData.Units.ContainsKey(indexOrigin));
-        Assert.Equal(1, world.GameMapData.Units[indexTarget]);
+        Assert.Equal([1], world.GameMapData.Units[indexTarget]);
         Assert.Same(unit, worldContext.GetUnitOrDefault(new Point2(1, 0)));
     }
 }

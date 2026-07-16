@@ -14,4 +14,13 @@ public sealed record StrategyEventDto
 
     /// <summary>收支结算结构化明细（Category=EconomyMonthly | EconomyAnnual 时）。</summary>
     public StrategyEconomySettlementDetailDto? EconomySettlement { get; init; }
+
+    /// <summary>Category=BattleReportArrived 时附带的完整战报（信使抵达或同格即时送达）。</summary>
+    public StrategyBattleResultDto? BattleResult { get; init; }
+
+    /// <summary>Category=StrategicReportArrived 时附带的原始事件分类（UnitDestroyed 等）。</summary>
+    public string? DetailCategory { get; init; }
+
+    /// <summary>Category=StrategicReportArrived 时附带的完整详情文案。</summary>
+    public string? DetailMessage { get; init; }
 }

@@ -6,6 +6,8 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Types;
 using SengokuScroll.Domain.World;
+using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Tests.Fixtures;
@@ -49,7 +51,7 @@ public static class StrategyTestWorldBuilder
                 Climates = [],
                 Regions = [],
                 Roads = [],
-                StrongholdPoints = []
+                Landmarks = []
             },
             GameMapData = new GameMapData
             {
@@ -82,6 +84,17 @@ public static class StrategyTestWorldBuilder
         };
 
         MapLocationActions.RegisterUnit(world, units[1]);
+        return world;
+    }
+
+    /// <summary>两军相邻的最小测试世界（野战对峙/决战用）。</summary>
+    public static GameWorld BuildAdjacentBattleWorld(Unit attacker, Unit defender)
+    {
+        var world = BuildMinimalWorld();
+        world.GameData.Forces[defender.ForceId] = CreateTestForce(defender.ForceId);
+        world.GameData.Units[attacker.Id] = attacker;
+        world.GameData.Units[defender.Id] = defender;
+        MapLocationActions.RegisterUnit(world, defender);
         return world;
     }
 
@@ -119,12 +132,41 @@ public static class StrategyTestWorldBuilder
             Name = "测试城",
             ForceId = forceId,
             Location = location,
+            Population = 1000,
+            CommerceValue = 2000,
             ForceActor = CreateTestStrongholdActor(id * 10, forceId, id, food),
-            CivilianActor = CreateTestStrongholdActor(id * 10 + 1, forceId, id),
+            CivilianActor = CreateTestCivilianActor(id * 10 + 1, forceId, id, population: 1000),
+            Market = new StrongholdMarket(),
             MerchantActors = [],
             ReligionActors = [],
             DefenseFacilityIds = [],
+            EconomyFacilityIds =
+            [
+                EconomyFacilityConstants.MarketFacilityTypeId,
+                EconomyFacilityConstants.LuxuryWorkshopTypeId
+            ],
             HasCoreForceIds = [forceId]
+        };
+
+    /// <summary>创建市民 Actor（含默认月产能）。</summary>
+    public static StrongholdActor CreateTestCivilianActor(
+        int id,
+        int forceId,
+        int strongholdId,
+        int population = 1000,
+        int food = 50_000)
+        => new()
+        {
+            Id = id,
+            Name = "民间",
+            Type = ActorType.Force,
+            ForceId = forceId,
+            StrongholdId = strongholdId,
+            CharacterIds = [],
+            SubUnitIds = [],
+            Food = food,
+            AgricultureProduction = population * 15,
+            CommerceProduction = population * 10
         };
 
     /// <summary>创建据点内官府/民间 Actor。</summary>
@@ -150,6 +192,7 @@ public static class StrategyTestWorldBuilder
         => new()
         {
             Id = id,
+            ForceId = id,
             Name = "测试势力",
             AcceptedCultureIds = [],
             Provinces = [],
@@ -157,6 +200,23 @@ public static class StrategyTestWorldBuilder
             Diplomacies = [],
             SubUnitIds = []
         };
+
+    /// <summary>为两势力添加双向敌对外交。</summary>
+    public static void LinkEnemyForces(Force forceA, Force forceB)
+    {
+        forceA.Diplomacies.Add(new Diplomacy
+        {
+            ForceId = forceA.Id,
+            TargetForceId = forceB.Id,
+            Relation = Diplomacy.DiplomacyRelation.Enemy
+        });
+        forceB.Diplomacies.Add(new Diplomacy
+        {
+            ForceId = forceB.Id,
+            TargetForceId = forceA.Id,
+            Relation = Diplomacy.DiplomacyRelation.Enemy
+        });
+    }
 
     /// <summary>
     /// 创建测试用军事单位，默认移动力 10、当前 AP 10、平地移动消耗 2。
@@ -174,6 +234,7 @@ public static class StrategyTestWorldBuilder
             IsMilitary = true,
             IsReadyToMove = true,
             Status = UnitStatus.Waiting,
+            Morale = 60,
             SubUnitIds = [],
             ActionTarget = new UnitActionTarget
             {

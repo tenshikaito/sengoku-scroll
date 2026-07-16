@@ -26,10 +26,19 @@ public class UnitMoveAction(
             return;
         }
 
+        var tilesMovedToday = 0;
+        var maxTilesPerDay = Math.Max(1, context.GameRuleConfig.MaxTilesMovedPerDay);
+
         while (true)
         {
             if (o.Status != UnitStatus.Moving)
                 break;
+
+            if (tilesMovedToday >= maxTilesPerDay)
+            {
+                moveObserver.OnMoveSkipped(o, "daily_tile_cap");
+                break;
+            }
 
             if (!routes.TryPeek(out var p))
             {
@@ -48,6 +57,7 @@ public class UnitMoveAction(
                 routes.Dequeue();
 
                 o.Ap -= movementRules.GetTileMovementApCost(o, p);
+                tilesMovedToday++;
 
                 eventDispatcher.Publish(new UnitMovedEvent()
                 {

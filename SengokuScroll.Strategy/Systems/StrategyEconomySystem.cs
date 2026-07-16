@@ -2,8 +2,11 @@ using SengokuScroll.Domain.Contexts;
 using SengokuScroll.Domain.Systems;
 using SengokuScroll.Domain.Types;
 using SengokuScroll.Strategy.Actions;
+using SengokuScroll.Strategy.Calculators;
+using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
+using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Rules;
 
@@ -15,23 +18,98 @@ public interface IStrategyEconomySystem : IEconomySystem
 }
 
 /// <summary>
-/// 策略经济系统：每日军事单位粮耗；每月 1 日维持费结算，并汇总上月/上年贡纳到账（M3-d）。
+/// 策略经济系统：每日生产/口粮、收粮税、月钱税；每月维持费与贡纳报告（M4-b）。
 /// </summary>
 public class StrategyEconomySystem(
     IGameContext context,
     StrategyScenarioMeta scenarioMeta,
     StrategyDayOutcomeBuffer dayOutcomeBuffer,
-    StrategyTributeLedger tributeLedger) : IStrategyEconomySystem
+    StrategyTributeLedger tributeLedger,
+    MerchantTaxLedger merchantTaxLedger,
+    TariffTaxLedger tariffTaxLedger,
+    MonthlyTaxCollectionLedger monthlyTaxCollectionLedger,
+    SupplyConvoyDispatchHelper dispatchHelper) : IStrategyEconomySystem
 {
-    /// <summary>在气候系统之后、后勤系统之前执行。</summary>
+    /// <summary>在市场系统之后、后勤系统之前执行。</summary>
     public int Order { get; } = 10;
 
     /// <inheritdoc />
     public void Update()
     {
-        var gameData = context.GameWorldContext.GameWorld.GameData;
+        var world = context.GameWorldContext.GameWorld;
+        var gameData = world.GameData;
         var gameDate = gameData.GameDate;
 
+        // 阶段1：逐据点日更——日产、收粮税、市民口粮
+        foreach (var stronghold in context.GameWorldContext.EachStronghold())
+        {
+            var regionId = RegionLocationHelper.ResolvePoliticalRegionId(world, stronghold.Location);
+            // 业务：收粮日跳过农业日产，避免与收粮结算重复计粮
+            var skipFoodProduction = HarvestRules.ShouldSkipDailyFoodProduction(
+                stronghold,
+                gameDate,
+                scenarioMeta.RegionHarvestProfiles,
+                regionId);
+
+            if (EconomyRules.ShouldApplyDailyProduction(stronghold))
+            {
+                StrongholdEconomyActions.ApplyDailyProduction(
+                    stronghold,
+                    gameData,
+                    skipFoodProduction);
+            }
+
+            if (HarvestRules.ResolveTodayEvent(gameDate, scenarioMeta.RegionHarvestProfiles, regionId)
+                is { } harvestEvent)
+            {
+                var settlement = HarvestEconomyActions.ApplyHarvestSettlement(
+                    stronghold,
+                    harvestEvent,
+                    HarvestConstants.DefaultInternalTributeFoodBp);
+
+                if (gameData.Forces.TryGetValue(stronghold.ForceId, out var force))
+                    ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);
+
+                if (settlement.TributeObligationGo > 0)
+                    dispatchHelper.DispatchHarvestFoodTribute(stronghold, settlement.TributeObligationGo);
+            }
+
+            if (EconomyRules.ShouldConsumeDailyCivilianFood(stronghold))
+                StrongholdEconomyActions.ApplyDailyCivilianFoodConsumption(stronghold);
+
+            if (EconomyRules.ShouldConsumeDailyGarrisonFood(stronghold))
+            {
+                StrongholdEconomyActions.ApplyDailyGarrisonFoodConsumption(stronghold);
+                if (gameData.Forces.TryGetValue(stronghold.ForceId, out var garrisonForce))
+                    ForceEconomyActions.SyncForceTreasuryFromStrongholds(garrisonForce, gameData);
+            }
+        }
+
+        // 阶段2：月初逐据点征收钱税、店铺维持费
+        if (EconomyRules.IsMonthlySettlementDay(gameDate))
+        {
+            foreach (var stronghold in context.GameWorldContext.EachStronghold())
+            {
+                var (poll, commerce, trade, tariff) = StrongholdEconomyActions.ApplyMonthlyMoneyTaxes(
+                    stronghold,
+                    merchantTaxLedger,
+                    tariffTaxLedger);
+
+                monthlyTaxCollectionLedger.RecordMonthlyMoneyTaxes(
+                    stronghold.Id,
+                    poll,
+                    commerce,
+                    trade,
+                    tariff);
+
+                StrongholdEconomyActions.ApplyMerchantShopMaintenance(stronghold);
+
+                if (gameData.Forces.TryGetValue(stronghold.ForceId, out var force))
+                    ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);
+            }
+        }
+
+        // 阶段3：逐军事单位扣除携行粮
         foreach (var unit in context.GameWorldContext.EachUnit())
         {
             if (!EconomyRules.ShouldConsumeDailyFood(unit))
@@ -40,6 +118,7 @@ public class StrategyEconomySystem(
             UnitEconomyActions.ApplyDailyFoodConsumption(unit);
         }
 
+        // 阶段4：月初势力维持费与玩家收支报告；1 月追加年度人口与年报
         if (!EconomyRules.IsMonthlySettlementDay(gameDate))
             return;
 
@@ -69,6 +148,7 @@ public class StrategyEconomySystem(
 
         if (gameDate.Month == 1)
         {
+            ApplyAnnualPopulationChange(gameData);
             EmitAnnualSettlement(
                 gameDate.Year - 1,
                 playerMaintenance,
@@ -101,9 +181,9 @@ public class StrategyEconomySystem(
             Message =
                 $"📋 月度收支结算（{reportYear}年{reportMonth}月）\n" +
                 $"共 {tributeSummary.ConvoyCount} 批运输队抵达当主居城。\n" +
-                $"合计收入 🌾{tributeSummary.TotalFood:N0} 💰{tributeSummary.TotalMoney:N0}\n" +
-                $"支出 💰{playerMaintenance:N0}（含军队维护 💰{playerArmyMaintenance:N0}）\n" +
-                $"库藏 💰{playerForce.Money:N0} 🌾{playerForce.Food:N0}\n" +
+                $"上月贡纳收入 🌾{tributeSummary.TotalFood:N0}合 💰{tributeSummary.TotalMoney:N0}文\n" +
+                $"本月维持费支出 💰{playerMaintenance:N0}文（含军队维护 💰{playerArmyMaintenance:N0}文）\n" +
+                $"结算后库藏 💰{playerForce.Money:N0}文 🌾{playerForce.Food:N0}合\n" +
                 detailLines,
             EconomySettlement = settlement
         });
@@ -132,21 +212,24 @@ public class StrategyEconomySystem(
             Message =
                 $"📋 年度收支结算（{reportYear}年）\n" +
                 $"共 {tributeSummary.ConvoyCount} 批运输队抵达当主居城。\n" +
-                $"合计收入 🌾{tributeSummary.TotalFood:N0} 💰{tributeSummary.TotalMoney:N0}\n" +
-                $"支出 💰{playerMaintenance:N0}（含军队维护 💰{playerArmyMaintenance:N0}）\n" +
-                $"库藏 💰{playerForce.Money:N0} 🌾{playerForce.Food:N0}\n" +
+                $"年度贡纳收入 🌾{tributeSummary.TotalFood:N0}合 💰{tributeSummary.TotalMoney:N0}文\n" +
+                $"本月维持费支出 💰{playerMaintenance:N0}文（含军队维护 💰{playerArmyMaintenance:N0}文）\n" +
+                $"结算后库藏 💰{playerForce.Money:N0}文 🌾{playerForce.Food:N0}合\n" +
                 detailLines,
             EconomySettlement = settlement
         });
     }
 
-    private static StrategyEconomySettlementDetailDto BuildSettlementDetail(
+    private StrategyEconomySettlementDetailDto BuildSettlementDetail(
         string period,
         StrategyTributeLedger.TributeSettlementSummary tributeSummary,
         int playerMaintenance,
         int playerArmyMaintenance,
         Domain.Entities.Force playerForce)
-        => new()
+    {
+        var gameData = context.GameWorldContext.GameWorld.GameData;
+
+        return new StrategyEconomySettlementDetailDto
         {
             Period = period,
             ReportingYear = tributeSummary.ReportingYear,
@@ -157,15 +240,44 @@ public class StrategyEconomySystem(
             ArmyMaintenanceMoney = playerArmyMaintenance,
             TreasuryMoney = playerForce.Money,
             TreasuryFood = playerForce.Food,
-            TributeLines = tributeSummary.Lines
-                .Select(l => new StrategyTributeLineDto
-                {
-                    OriginName = l.OriginName,
-                    Food = l.Food,
-                    Money = l.Money
-                })
-                .ToList()
+            ConvoyCount = tributeSummary.ConvoyCount,
+            TributeLines = [.. tributeSummary.Lines.Select(l => MapTributeLine(l, gameData))]
         };
+    }
+
+    private StrategyTributeLineDto MapTributeLine(
+        StrategyTributeLedger.TributeArrivalRecord line,
+        Domain.GameData gameData)
+    {
+        if (!gameData.Strongholds.TryGetValue(line.OriginStrongholdId, out var stronghold))
+        {
+            return new StrategyTributeLineDto
+            {
+                OriginName = line.OriginName,
+                ForceName = "—",
+                LordName = "—",
+                Food = line.Food,
+                Money = line.Money
+            };
+        }
+
+        var forceName = gameData.Forces.TryGetValue(stronghold.ForceId, out var force)
+            ? force.Name
+            : "未知势力";
+        var lordName = StrategyStrongholdLordHelper.ResolveStrongholdLordName(
+            stronghold,
+            scenarioMeta,
+            gameData);
+
+        return new StrategyTributeLineDto
+        {
+            OriginName = stronghold.Name,
+            ForceName = forceName,
+            LordName = lordName,
+            Food = line.Food,
+            Money = line.Money
+        };
+    }
 
     private static string FormatDetailLines(
         StrategyTributeLedger.TributeSettlementSummary tributeSummary,
@@ -181,5 +293,17 @@ public class StrategyEconomySystem(
             return (gameDate.Year - 1, 12);
 
         return (gameDate.Year, gameDate.Month - 1);
+    }
+
+    private static void ApplyAnnualPopulationChange(Domain.GameData gameData)
+    {
+        foreach (var stronghold in gameData.Strongholds.Values)
+        {
+            var delta = EconomyCalculator.CalculateAnnualPopulationGrowth(stronghold);
+            if (delta == 0)
+                continue;
+
+            stronghold.Population = Math.Max(100, stronghold.Population + delta);
+        }
     }
 }

@@ -22,12 +22,36 @@ const title = computed(() => {
   return `${props.detail.reportingYear}年${props.detail.reportingMonth}月月度收支结算`;
 });
 
-const incomeLabel = computed(() => (isAnnual.value ? "年度收入" : "月度收入"));
+const incomeLabel = computed(() => (isAnnual.value ? "年度贡纳收入" : "上月贡纳收入"));
 const emptyHint = computed(() =>
   isAnnual.value ? "上年无运输队抵达当主居城。" : "上月无运输队抵达当主居城。"
 );
 
 const tableRows = computed(() => props.detail?.tributeLines ?? []);
+
+const tableFoodTotal = computed(() =>
+  tableRows.value.reduce((sum, row) => sum + row.food, 0)
+);
+
+const tableMoneyTotal = computed(() =>
+  tableRows.value.reduce((sum, row) => sum + row.money, 0)
+);
+
+const netMoney = computed(() => {
+  if (!props.detail) return 0;
+  return props.detail.totalMoney - props.detail.expenseMoney;
+});
+
+function tributeSummaryMethod(param: { columns: unknown[] }) {
+  const sums: string[] = [];
+  param.columns.forEach((_, index) => {
+    if (index === 0) sums[index] = "合计";
+    else if (index === 3) sums[index] = formatFoodGo(tableFoodTotal.value);
+    else if (index === 4) sums[index] = formatMoney(tableMoneyTotal.value);
+    else sums[index] = "";
+  });
+  return sums;
+}
 
 function onClose() {
   emit("update:visible", false);
@@ -40,6 +64,7 @@ function onClose() {
     :title="title"
     width="min(720px, 92vw)"
     destroy-on-close
+    class="strategy-dialog-centered-footer"
     @update:model-value="emit('update:visible', $event)"
   >
     <template v-if="detail">
@@ -53,22 +78,28 @@ function onClose() {
           <span class="value">💰 {{ formatMoney(detail.totalMoney) }}</span>
         </div>
         <div class="summary-item">
-          <span class="label">{{ isAnnual ? "年度支出" : "月度支出" }}</span>
+          <span class="label">本月维持费（总）</span>
           <span class="value">💰 {{ formatMoney(detail.expenseMoney) }}</span>
         </div>
         <div class="summary-item">
-          <span class="label">军队维护</span>
+          <span class="label">其中军队维护</span>
           <span class="value">💰 {{ formatMoney(detail.armyMaintenanceMoney) }}</span>
         </div>
         <div class="summary-item">
-          <span class="label">库藏</span>
+          <span class="label">贡纳减维持（金）</span>
+          <span class="value" :class="{ negative: netMoney < 0 }">
+            💰 {{ formatMoney(netMoney) }}
+          </span>
+        </div>
+        <div class="summary-item">
+          <span class="label">结算后库藏</span>
           <span class="value">
             💰 {{ formatMoney(detail.treasuryMoney) }} · 🌾 {{ formatFoodGo(detail.treasuryFood) }}
           </span>
         </div>
         <div class="summary-item">
           <span class="label">运输批次</span>
-          <span class="value">{{ detail.tributeLines.length }} 批</span>
+          <span class="value">{{ detail.convoyCount }} 批</span>
         </div>
       </div>
 
@@ -78,13 +109,17 @@ function onClose() {
         size="small"
         stripe
         class="tribute-table"
+        show-summary
+        :summary-method="tributeSummaryMethod"
         :empty-text="emptyHint"
       >
-        <el-table-column prop="originName" label="来源据点" min-width="120" />
-        <el-table-column label="贡粮（合）" min-width="120" align="right">
+        <el-table-column prop="originName" label="据点" min-width="96" />
+        <el-table-column prop="forceName" label="势力" min-width="88" />
+        <el-table-column prop="lordName" label="领主" min-width="88" />
+        <el-table-column label="贡粮（石）" min-width="100" align="right">
           <template #default="{ row }">{{ formatFoodGo(row.food) }}</template>
         </el-table-column>
-        <el-table-column label="贡金（文）" min-width="120" align="right">
+        <el-table-column label="贡金（贯）" min-width="100" align="right">
           <template #default="{ row }">{{ formatMoney(row.money) }}</template>
         </el-table-column>
       </el-table>
@@ -124,6 +159,10 @@ function onClose() {
 .summary-item .value {
   font-size: 0.9rem;
   color: #e2e8f0;
+}
+
+.summary-item .value.negative {
+  color: #f87171;
 }
 
 .tribute-table {

@@ -10,11 +10,14 @@ const props = withDefaults(
     labelWidth?: string;
     /** dialog 模式下字段列数（单位/据点详情为 3 列）。 */
     columns?: 1 | 2 | 3;
+    /** 开发字段标题样式。 */
+    devLabelStyle?: "text" | "background";
   }>(),
   {
     variant: "hover",
     labelWidth: "4.2em",
     columns: 1,
+    devLabelStyle: undefined,
   }
 );
 
@@ -32,11 +35,20 @@ const gridStyle = computed(() =>
 <template>
   <dl
     class="intel-fields"
-    :class="[variant, columns > 1 ? `columns-${columns}` : '']"
+    :class="[
+      variant,
+      columns > 1 ? `columns-${columns}` : '',
+      devLabelStyle ? `dev-label-${devLabelStyle}` : '',
+    ]"
     :style="gridStyle"
   >
     <div v-for="(row, index) in rows" :key="`${row.label}-${index}`" class="row">
-      <dt :style="columns === 1 ? { width: labelWidth } : undefined">{{ row.label }}</dt>
+      <dt
+        :class="{ 'is-dev-field': row.dev }"
+        :style="columns === 1 ? { width: labelWidth } : undefined"
+      >
+        {{ row.label }}
+      </dt>
       <dd>{{ row.value }}</dd>
     </div>
   </dl>
@@ -87,6 +99,33 @@ dd {
 
 .dialog dd {
   color: #0f172a;
+}
+
+.dialog.columns-2 {
+  grid-auto-flow: column;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows-per-col), auto);
+  gap: 6px 20px;
+}
+
+.dialog.columns-2 .row {
+  gap: 8px;
+}
+
+.dialog.columns-2 dt {
+  width: 3.2em;
+  flex-shrink: 0;
+}
+
+.dialog.dev-label-background dt.is-dev-field {
+  background: #f8fafc;
+  border-radius: 2px;
+  padding: 0 4px;
+  color: #64748b;
+}
+
+.dialog.dev-label-text dt.is-dev-field {
+  color: #cbd5e1;
 }
 
 .dialog.columns-3 {

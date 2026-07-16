@@ -5,6 +5,7 @@ using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Systems;
 using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Diagnostics;
+using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Systems;
@@ -31,20 +32,32 @@ public class StrategyTimeSystem(
     {
         var recovery = context.GameRuleConfig.NextTurnApRecovery;
 
+        // 阶段1：恢复军事单位行动力，并根据路径修正移动/待机状态
         foreach (var unit in context.GameWorldContext.EachUnit())
         {
             var apBefore = unit.Ap;
             var statusBefore = unit.Status;
             var routeCount = unit.ActionTarget.RoutePoints.Count;
 
-            unit.Ap = Math.Min(unit.Movement, unit.Ap + recovery);
-            unit.IsReadyToMove = true;
+            var movementCap = Math.Min(unit.Movement, context.GameRuleConfig.MilitaryMaxMovement);
+            unit.Ap = Math.Min(movementCap, unit.Ap + recovery);
+            unit.IsReadyToMove = !SiegeOrderRules.IsSiegeMovementLocked(unit);
 
-            if (unit.Status == UnitStatus.Waiting && unit.ActionTarget.RoutePoints.Count > 0)
-                unit.Status = UnitStatus.Moving;
+            if (SiegeOrderRules.IsSiegeMovementLocked(unit))
+            {
+                unit.ActionTarget.RoutePoints.Clear();
+                if (unit.Status == UnitStatus.Moving)
+                    unit.Status = UnitStatus.Waiting;
+            }
+            else
+            {
+                // 业务：有剩余路径且处于待机则恢复移动；无路径且标记移动则转待机
+                if (unit.Status == UnitStatus.Waiting && unit.ActionTarget.RoutePoints.Count > 0)
+                    unit.Status = UnitStatus.Moving;
 
-            if (unit.Status == UnitStatus.Moving && unit.ActionTarget.RoutePoints.Count == 0)
-                unit.Status = UnitStatus.Waiting;
+                if (unit.Status == UnitStatus.Moving && unit.ActionTarget.RoutePoints.Count == 0)
+                    unit.Status = UnitStatus.Waiting;
+            }
 
             if (statusBefore != unit.Status || apBefore != unit.Ap || routeCount > 0)
             {
@@ -57,6 +70,7 @@ public class StrategyTimeSystem(
             }
         }
 
+        // 阶段2：恢复在途运输队行动力
         var gameData = context.GameWorldContext.GameWorld.GameData;
         foreach (var convoy in gameData.SupplyConvoys.Values)
         {

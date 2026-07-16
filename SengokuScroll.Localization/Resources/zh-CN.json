@@ -1,0 +1,22 @@
+{
+  "battle.engagement.field": "野战",
+  "battle.engagement.ambush": "伏击",
+  "battle.engagement.siege": "攻城战",
+
+  "debug.day.begin": "======== 日推进开始 {0}-{1:D2}-{2:D2} ========",
+  "debug.day.end": "======== 日推进结束 {0}-{1:D2}-{2:D2} | 战斗={3} 事件={4} ========",
+  "debug.system.start": ">> 系统 #{0} {1} 开始",
+  "debug.system.end": "<< 系统 #{0} {1} 结束",
+  "debug.ai.directive": "[AI/方针] 势力#{0} 单位#{1} {2} | {3}→{4} | {5}",
+  "debug.ai.action": "[AI/行动] 势力#{0} 单位#{1} {2} 方针={3} | {4}: {5}",
+  "debug.ai.skip": "[AI/跳过] 势力#{0} 单位#{1} {2} | {3}",
+  "debug.move.step": "[移动] 单位#{0} ({1},{2})→({3},{4}) | {5}",
+  "debug.move.skip": "[移动/跳过] 单位#{0} ({1},{2}) | {3}",
+  "debug.engagement.queue": "[接敌] {0}#{1} → {2}#{3} | 互攻={4}",
+  "debug.battle.resolve": "[战斗] {0} | {1} vs {2} | 结果={3} | 兵损 {4}/{5}",
+  "debug.battle.standoff": "[对峙] {0} vs {1} 第{2}日",
+  "debug.battle.outcome.surrender": "劝降",
+  "debug.battle.outcome.attacker_win": "攻胜",
+  "debug.battle.outcome.defender_win": "守胜",
+  "debug.garrison.defense": "[守军] 据点#{0} {1} | {2}"
+}

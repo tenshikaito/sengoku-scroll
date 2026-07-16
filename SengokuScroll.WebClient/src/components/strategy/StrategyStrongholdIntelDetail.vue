@@ -1,27 +1,47 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import type { StrategyStrongholdState, StrategyWorldState } from "@/api/strategy";
 import { getForceColorCss } from "./forceColors";
 import StrategyIntelFieldList from "./StrategyIntelFieldList.vue";
-import { strongholdDetailIntelRows } from "@/utils/strategyIntelRows";
+import StrategyStrongholdTitle from "./StrategyStrongholdTitle.vue";
+import {
+  strongholdDefenseIntelRows,
+  strongholdDetailIntelRows,
+} from "@/utils/strategyIntelRows";
 
 defineProps<{
   worldState: StrategyWorldState;
   stronghold: StrategyStrongholdState;
 }>();
+
+const activeTab = ref("basic");
 </script>
 
 <template>
   <div class="stronghold-intel">
     <div class="header">
       <span class="name" :style="{ color: getForceColorCss(stronghold.forceId) }">
-        🏯 {{ stronghold.name }}
+        <StrategyStrongholdTitle :stronghold="stronghold" :world-state="worldState" size="dialog" />
       </span>
     </div>
-    <StrategyIntelFieldList
-      variant="dialog"
-      :columns="3"
-      :rows="strongholdDetailIntelRows(worldState, stronghold)"
-    />
+
+    <el-tabs v-model="activeTab" class="intel-tabs">
+      <el-tab-pane label="基本信息" name="basic">
+        <StrategyIntelFieldList
+          variant="dialog"
+          :columns="3"
+          :rows="strongholdDetailIntelRows(worldState, stronghold)"
+        />
+      </el-tab-pane>
+      <el-tab-pane label="城防信息" name="defense">
+        <StrategyIntelFieldList
+          variant="dialog"
+          :columns="1"
+          label-width="5em"
+          :rows="strongholdDefenseIntelRows(stronghold)"
+        />
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
@@ -33,11 +53,18 @@ defineProps<{
 }
 
 .header {
-  margin-bottom: 10px;
+  margin-bottom: 4px;
 }
 
 .name {
-  font-weight: 600;
-  font-size: 1rem;
+  display: block;
+}
+
+.intel-tabs :deep(.el-tabs__header) {
+  margin-bottom: 12px;
+}
+
+.intel-tabs :deep(.el-tabs__item) {
+  font-size: 0.88rem;
 }
 </style>

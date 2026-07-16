@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SengokuScroll.Application;
 using SengokuScroll.Application.Constants;
 using SengokuScroll.Application.Contexts;
@@ -7,9 +8,11 @@ using SengokuScroll.Application.Extensions;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Contexts;
 using SengokuScroll.Domain.Diagnostics;
+using SengokuScroll.Localization;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Extensions;
+using SengokuScroll.Strategy.Helpers;
 
 namespace SengokuScroll.Strategy.Hosting;
 
@@ -17,12 +20,22 @@ namespace SengokuScroll.Strategy.Hosting;
 public static class StrategySimulationBootstrap
 {
     /// <summary>为指定 <see cref="GameWorld"/> 构建策略模式仿真作用域。</summary>
-    public static StrategySimulationScope CreateScope(GameWorld world, StrategyScenarioMeta scenarioMeta)
+    public static StrategySimulationScope CreateScope(
+        GameWorld world,
+        StrategyScenarioMeta scenarioMeta,
+        StrategyDayDebugOptions? dayDebugOptions = null)
     {
         var services = new ServiceCollection();
         var worldContext = new GameWorldContext(world);
 
         services.AddLogging(b => b.AddConsole());
+        services.AddSengokuLocalization();
+        services.AddSingleton(Options.Create(dayDebugOptions ?? new StrategyDayDebugOptions
+        {
+            Enabled = false,
+            WriteToFile = false
+        }));
+        services.AddSingleton<IStrategyDayDebugLog, StrategyDayDebugLog>();
         services.AddGameDomain();
         services.AddStrategyMode();
         services.AddSingleton(worldContext);
@@ -31,8 +44,12 @@ public static class StrategySimulationBootstrap
         services.AddSingleton(new GameSystemConfig());
         services.AddSingleton<IGameContext, GameContext>();
         services.AddSingleton<StrategyMovementTrace>();
+        services.AddSingleton<StrategyAiDecisionTrace>();
         services.AddSingleton<StrategyDayOutcomeBuffer>();
-        services.AddSingleton<StrategyTributeLedger>();
+        services.AddSingleton<StrategyPendingBattleReportStore>();
+        services.AddSingleton<StrategyPendingEventStore>();
+        services.AddSingleton<StrategyFieldEngagementRegistry>();
+        services.AddSingleton<StrategyForceLordRegistry>();
         services.AddSingleton(scenarioMeta);
         services.AddSingleton<StrategyUnitMoveTraceObserver>();
         services.AddSingleton<IUnitMoveObserver>(sp => sp.GetRequiredService<StrategyUnitMoveTraceObserver>());
@@ -40,6 +57,8 @@ public static class StrategySimulationBootstrap
         var root = services.BuildServiceProvider();
         var scope = root.CreateScope();
         var sp = scope.ServiceProvider;
+
+        sp.GetRequiredService<StrategyForceLordRegistry>().Initialize(scenarioMeta);
 
         return new StrategySimulationScope(
             root,

@@ -1,21 +1,42 @@
 import type {
+  StrategyBattlefieldState,
   StrategyMessengerState,
   StrategyStrongholdState,
   StrategySupplyConvoyState,
   StrategyUnitState,
   StrategyWorldState,
 } from "@/api/strategy";
-import { messengerMissionLabel, messengerStatusLabel } from "@/utils/logisticsLabels";
+import {
+  convoyMissionLabel,
+  convoyStatusLabel,
+  messengerMissionLabel,
+  messengerStatusLabel,
+} from "@/utils/logisticsLabels";
 import {
   formatFoodGo,
   formatMoney,
   formatSoldiers,
 } from "@/utils/strategyDisplayUnits";
 import { formatInTransitSupplies, supplyStatusLabel } from "@/utils/strategySupplyLabels";
+import { unitStanceLabel, unitStatusLabel } from "@/utils/strategyUnitLabels";
+import { directiveLabel, pendingPolicyText, siegeModeLabel, unitTargetSummary } from "@/utils/unitDirective";
 
 export interface IntelFieldRow {
   label: string;
   value: string;
+  /** 开发阶段字段（描述列表标题格样式区分）。 */
+  dev?: boolean;
+}
+
+function siegeThreatLabel(value: string | undefined | null): string {
+  switch (value) {
+    case "Assault":
+      return "强攻";
+    case "Encircle":
+      return "围城";
+    default:
+      return "—";
+  }
 }
 
 function dash(value: string | null | undefined): string {
@@ -43,23 +64,125 @@ function safePopulation(value: unknown): string {
   return Number.isFinite(n) ? Math.trunc(n).toLocaleString() : "—";
 }
 
+function formatRoute(points: Array<{ x: number; y: number }> | null | undefined): string {
+  if (!points?.length) return "—";
+  return points.map((p) => `(${p.x},${p.y})`).join(" → ");
+}
+
+function formatFoodDays(value: unknown): string {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${Math.max(0, Math.trunc(n))} 日` : "—";
+}
+
+function findBattlefieldAtCell(
+  worldState: StrategyWorldState,
+  x: number,
+  y: number
+): StrategyBattlefieldState | null {
+  return worldState.battlefields?.find((b) => b.x === x && b.y === y) ?? null;
+}
+
+function findBattlefieldById(
+  worldState: StrategyWorldState,
+  battlefieldId: number | null | undefined
+): StrategyBattlefieldState | null {
+  if (!battlefieldId || battlefieldId <= 0) return null;
+  return worldState.battlefields?.find((b) => b.id === battlefieldId) ?? null;
+}
+
+function battlefieldKindLabel(kind: string | undefined | null): string {
+  switch (kind) {
+    case "Siege":
+      return "攻城战";
+    case "Field":
+      return "野战";
+    default:
+      return textOrDash(kind);
+  }
+}
+
+function battlefieldIntelRows(battlefield: StrategyBattlefieldState): IntelFieldRow[] {
+  const rows: IntelFieldRow[] = [{ label: "战场", value: battlefieldKindLabel(battlefield.kind) }];
+
+  if (battlefield.kind === "Siege") {
+    rows.push({ label: "攻城", value: siegeThreatLabel(battlefield.siegeThreat) });
+    if (battlefield.standoffDays > 0) {
+      rows.push({ label: "持续", value: `${battlefield.standoffDays} 日` });
+    }
+  } else {
+    rows.push({
+      label: "对峙",
+      value: battlefield.standoffDays > 0 ? `${battlefield.standoffDays} 日` : "当日",
+    });
+  }
+
+  if (battlefield.participants?.length) {
+    rows.push({
+      label: "参战",
+      value: battlefield.participants
+        .map((p) => `${p.forceName} ${formatSoldiers(p.soldiers)}`)
+        .join(" / "),
+    });
+  }
+
+  return rows;
+}
+
+function cellEnemyUnitRows(
+  worldState: StrategyWorldState,
+  x: number,
+  y: number,
+  ownForceId: number
+): IntelFieldRow[] {
+  const enemyUnits = worldState.units.filter(
+    (u) => u.x === x && u.y === y && u.forceId !== ownForceId
+  );
+  if (!enemyUnits.length) return [];
+
+  return [
+    {
+      label: "同格敌军",
+      value: enemyUnits
+        .map(
+          (u) =>
+            `${u.name}（${forceName(worldState, u.forceId)}·${formatSoldiers(u.soldiers)}）`
+        )
+        .join("、"),
+    },
+  ];
+}
+
 /** 悬浮框：单位核心情报（竖向）。 */
 export function unitHoverIntelRows(
   worldState: StrategyWorldState,
-  unit: StrategyUnitState
+  unit: StrategyUnitState,
+  options?: { includeDebugFields?: boolean }
 ): IntelFieldRow[] {
-  return [
+  const rows: IntelFieldRow[] = [
     { label: "势力", value: forceName(worldState, unit.forceId) },
     { label: "总将", value: dash(unit.commanderName) },
     { label: "兵数", value: formatSoldiers(unit.soldiers) },
+    { label: "状态", value: unitStatusLabel(unit.status) },
+  ];
+
+  if (options?.includeDebugFields) {
+    rows.push({ label: "姿态", value: textOrDash(unit.stance) });
+  }
+
+  rows.push(
     { label: "士气", value: statPercent(unit.morale) },
     { label: "训练度", value: statPercent(unit.training) },
+    { label: "方针", value: directiveLabel(unit.directive) },
+    { label: "目标", value: unitTargetSummary(unit) },
+    { label: "攻城", value: siegeModeLabel(unit.siegeMode) },
     { label: "文化", value: textOrDash(unit.cultureName) },
     { label: "信仰", value: textOrDash(unit.religionName) },
     { label: "金钱", value: formatMoney(unit.money) },
     { label: "粮草", value: formatFoodGo(unit.food) },
-    { label: "补给", value: supplyStatusLabel(unit.supplyStatus) },
-  ];
+    { label: "补给", value: supplyStatusLabel(unit.supplyStatus) }
+  );
+
+  return rows;
 }
 
 /** 对话框：单位完整情报。 */
@@ -69,35 +192,89 @@ export function unitDetailIntelRows(
 ): IntelFieldRow[] {
   const stronghold =
     worldState.strongholds.find((s) => s.x === unit.x && s.y === unit.y) ?? null;
+  const battlefield = findBattlefieldById(worldState, unit.battlefieldId);
+  const pending = pendingPolicyText(worldState.messengers, unit.id);
 
-  return [
-    ...unitHoverIntelRows(worldState, unit),
-    { label: "位置", value: `(${unit.x}, ${unit.y})` },
-    { label: "移动力", value: statPercent(unit.movement) },
-    { label: "AP", value: statPercent(unit.ap) },
-    { label: "状态", value: textOrDash(unit.status) },
-    ...(stronghold ? [{ label: "所在据点", value: stronghold.name }] : []),
-    { label: "携粮日数", value: `${unit.foodDaysRemaining} 日` },
-    {
-      label: "运输中",
-      value: formatInTransitSupplies(unit.inTransitSupplies),
-    },
+  const rows: IntelFieldRow[] = [
+    { label: "势力", value: forceName(worldState, unit.forceId) },
+    { label: "总将", value: dash(unit.commanderName) },
+    { label: "兵数", value: formatSoldiers(unit.soldiers) },
+    { label: "士气", value: statPercent(unit.morale) },
+    { label: "训练度", value: statPercent(unit.training) },
+    { label: "文化", value: textOrDash(unit.cultureName) },
+    { label: "信仰", value: textOrDash(unit.religionName) },
+    { label: "状态", value: unitStatusLabel(unit.status) },
+    { label: "姿态", value: unitStanceLabel(unit.stance) },
+    { label: "方针", value: directiveLabel(unit.directive) },
+    { label: "目标", value: unitTargetSummary(unit) },
+    { label: "攻城", value: siegeModeLabel(unit.siegeMode) },
   ];
+
+  if (pending) {
+    rows.push({ label: "信使", value: pending });
+  }
+
+  if (unit.route?.length) {
+    rows.push({ label: "路径", value: formatRoute(unit.route) });
+  }
+
+  if (battlefield) {
+    rows.push(...battlefieldIntelRows(battlefield));
+  }
+
+  rows.push(
+    { label: "金钱", value: formatMoney(unit.money) },
+    { label: "粮草", value: formatFoodGo(unit.food) },
+    { label: "补给", value: supplyStatusLabel(unit.supplyStatus) },
+    { label: "携粮日数", value: formatFoodDays(unit.foodDaysRemaining) },
+    { label: "运输中", value: formatInTransitSupplies(unit.inTransitSupplies) },
+    { label: "位置", value: `(${unit.x}, ${unit.y})` },
+    ...(stronghold ? [{ label: "所在据点", value: stronghold.name }] : []),
+    { label: "移动力", value: statPercent(unit.movement) },
+    { label: "AP", value: statPercent(unit.ap) }
+  );
+
+  return rows;
 }
 
-/** 悬浮框：据点核心情报（竖向）。 */
-export function strongholdHoverIntelRows(
+function formatDefense(value: unknown): string {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n).toLocaleString() : "—";
+}
+
+function appendStrongholdDefenseRow(rows: IntelFieldRow[], stronghold: StrategyStrongholdState): void {
+  rows.push({ label: "城防", value: formatDefense(stronghold.defense) });
+}
+
+function strongholdGarrisonSoldiers(
+  worldState: StrategyWorldState,
+  stronghold: StrategyStrongholdState
+): number {
+  const city = Number.isFinite(Number(stronghold.garrisonSoldiers))
+    ? Math.max(0, Math.trunc(Number(stronghold.garrisonSoldiers)))
+    : 0;
+  const field = worldState.units
+    .filter(
+      (u) =>
+        u.x === stronghold.x &&
+        u.y === stronghold.y &&
+        u.forceId === stronghold.forceId
+    )
+    .reduce(
+      (sum, u) => sum + (Number.isFinite(Number(u.soldiers)) ? Math.max(0, Math.trunc(Number(u.soldiers))) : 0),
+      0
+    );
+  return city + field;
+}
+
+/** 据点核心情报（不含城防）。 */
+function strongholdCoreIntelRows(
   worldState: StrategyWorldState,
   stronghold: StrategyStrongholdState
 ): IntelFieldRow[] {
   const rows: IntelFieldRow[] = [
     { label: "势力", value: forceName(worldState, stronghold.forceId) },
-    {
-      label: "领主",
-      value: stronghold.isDirectRule
-        ? `${stronghold.lordName}（当主直辖）`
-        : stronghold.lordName,
-    },
+    { label: "领主", value: stronghold.lordName },
   ];
 
   if (stronghold.mayorName) {
@@ -105,14 +282,32 @@ export function strongholdHoverIntelRows(
   }
 
   rows.push(
+    { label: "人口", value: safePopulation(stronghold.population) },
+    { label: "治安", value: statPercent(stronghold.stability) },
+    { label: "民心", value: statPercent(stronghold.popularFeelings) },
+    { label: "兵力", value: formatSoldiers(strongholdGarrisonSoldiers(worldState, stronghold)) },
     { label: "士气", value: statPercent(stronghold.morale) },
     { label: "训练度", value: statPercent(stronghold.training) },
     { label: "文化", value: textOrDash(stronghold.cultureName) },
     { label: "信仰", value: textOrDash(stronghold.religionName) },
     { label: "金钱", value: formatMoney(stronghold.money) },
-    { label: "粮草", value: formatFoodGo(stronghold.food) }
+    { label: "粮食", value: formatFoodGo(stronghold.food) }
   );
 
+  if (stronghold.siegeThreat) {
+    rows.push({ label: "被攻状态", value: siegeThreatLabel(stronghold.siegeThreat) });
+  }
+
+  return rows;
+}
+
+/** 悬浮框：据点核心情报（竖向）。 */
+export function strongholdHoverIntelRows(
+  worldState: StrategyWorldState,
+  stronghold: StrategyStrongholdState
+): IntelFieldRow[] {
+  const rows = strongholdCoreIntelRows(worldState, stronghold);
+  appendStrongholdDefenseRow(rows, stronghold);
   return rows;
 }
 
@@ -125,33 +320,130 @@ function strongholdTaxIntelRows(stronghold: StrategyStrongholdState): IntelField
   ];
 }
 
-/** 对话框：据点完整情报。 */
+/** 对话框「基本信息」Tab。 */
 export function strongholdDetailIntelRows(
   worldState: StrategyWorldState,
-  stronghold: StrategyStrongholdState
+  stronghold: StrategyStrongholdState,
+  options?: { includeBattleIntel?: boolean }
 ): IntelFieldRow[] {
-  const garrison = worldState.units.filter(
-    (u) => u.x === stronghold.x && u.y === stronghold.y
-  );
+  const includeBattleIntel = options?.includeBattleIntel ?? true;
+  const cityGarrison = Number.isFinite(Number(stronghold.garrisonSoldiers))
+    ? Math.max(0, Math.trunc(Number(stronghold.garrisonSoldiers)))
+    : 0;
 
   const rows: IntelFieldRow[] = [
-    ...strongholdHoverIntelRows(worldState, stronghold),
+    ...strongholdCoreIntelRows(worldState, stronghold).filter((row) => row.label !== "兵力"),
     ...strongholdTaxIntelRows(stronghold),
-    { label: "位置", value: `(${stronghold.x}, ${stronghold.y})` },
-    { label: "人口", value: safePopulation(stronghold.population) },
+    { label: "虚构", value: stronghold.isHistorical ? "×" : "○" },
   ];
 
-  if (garrison.length) {
-    rows.push({
-      label: "驻军",
-      value: garrison
-        .map((u) => `${u.name}（${formatSoldiers(u.soldiers)}）`)
-        .join("、"),
-    });
+  if (includeBattleIntel) {
+    const fieldGarrison = worldState.units.filter(
+      (u) => u.x === stronghold.x && u.y === stronghold.y && u.forceId === stronghold.forceId
+    );
+
+    if (cityGarrison > 0) {
+      rows.push({ label: "城内兵", value: formatSoldiers(cityGarrison) });
+    }
+
+    const garrisonParts: string[] = [];
+    if (fieldGarrison.length) {
+      garrisonParts.push(
+        ...fieldGarrison.map((u) => `${u.name}（${formatSoldiers(u.soldiers)}）`)
+      );
+    }
+    if (garrisonParts.length) {
+      rows.push({ label: "地图驻军", value: garrisonParts.join("、") });
+    } else if (cityGarrison <= 0) {
+      rows.push({ label: "兵力", value: "无" });
+    }
+
+    rows.push(...cellEnemyUnitRows(worldState, stronghold.x, stronghold.y, stronghold.forceId));
+
+    const battlefield = findBattlefieldAtCell(worldState, stronghold.x, stronghold.y);
+    if (battlefield) {
+      rows.push(...battlefieldIntelRows(battlefield));
+    }
+  } else if (cityGarrison > 0) {
+    rows.push({ label: "兵力", value: formatSoldiers(cityGarrison) });
+  } else {
+    rows.push({ label: "兵力", value: "无" });
   }
 
   return rows;
 }
+
+/** 对话框「城防信息」Tab。 */
+export function strongholdDefenseIntelRows(
+  stronghold: StrategyStrongholdState
+): IntelFieldRow[] {
+  return [
+    { label: "城防", value: formatDefense(stronghold.defense) },
+    ...strongholdDefenseFacilityRows(stronghold),
+  ];
+}
+
+const defenseFacilityCategoryLabels: Record<string, string> = {
+  Castle: "城堡",
+  Wall: "城墙",
+  Gate: "城门",
+  Moat: "护城河",
+  Defender: "防御设施",
+};
+
+/** 城防设施类别显示名。 */
+export function defenseFacilityCategoryLabel(category: string): string {
+  return defenseFacilityCategoryLabels[category] ?? category;
+}
+
+/** 对话框「城防信息」Tab：设施列表行。 */
+export function strongholdDefenseFacilityRows(
+  stronghold: StrategyStrongholdState
+): IntelFieldRow[] {
+  if (!stronghold.defenseFacilities.length) {
+    return [{ label: "设施", value: "暂无城防设施" }];
+  }
+
+  return stronghold.defenseFacilities.map((facility) => ({
+    label: defenseFacilityCategoryLabel(facility.category),
+    value: `${facility.name} · Lv.${facility.level} · 城防+${facility.defense}`,
+  }));
+}
+
+/** 多单位同格紧凑悬浮：名称、势力、将领、兵数。 */
+export function compactCellEntityRows(
+  worldState: StrategyWorldState,
+  entry: CompactCellEntityEntry
+): IntelFieldRow[] {
+  switch (entry.kind) {
+    case "unit":
+      return [
+        { label: "名称", value: entry.unit.name },
+        { label: "势力", value: forceName(worldState, entry.unit.forceId) },
+        { label: "将领", value: dash(entry.unit.commanderName) },
+        { label: "兵数", value: formatSoldiers(entry.unit.soldiers) },
+      ];
+    case "convoy":
+      return [
+        { label: "名称", value: entry.convoy.name },
+        { label: "势力", value: forceName(worldState, entry.convoy.forceId) },
+        { label: "将领", value: dash(entry.convoy.commanderName) },
+        { label: "兵数", value: formatSoldiers(entry.convoy.soldiers) },
+      ];
+    case "messenger":
+      return [
+        { label: "名称", value: entry.messenger.name },
+        { label: "势力", value: forceName(worldState, entry.messenger.forceId) },
+        { label: "将领", value: "—" },
+        { label: "兵数", value: formatSoldiers(entry.messenger.soldiers) },
+      ];
+  }
+}
+
+export type CompactCellEntityEntry =
+  | { kind: "unit"; key: string; forceId: number; unit: StrategyUnitState }
+  | { kind: "convoy"; key: string; forceId: number; convoy: StrategySupplyConvoyState }
+  | { kind: "messenger"; key: string; forceId: number; messenger: StrategyMessengerState };
 
 /** 悬浮框：运输队（精简字段）。 */
 export function convoyHoverIntelRows(
@@ -163,6 +455,7 @@ export function convoyHoverIntelRows(
     { label: "总将", value: dash(convoy.commanderName) },
     { label: "兵数", value: formatSoldiers(convoy.soldiers) },
     { label: "士气", value: statPercent(convoy.morale) },
+    { label: "金钱", value: formatMoney(convoy.money) },
     { label: "粮草", value: formatFoodGo(convoy.food) },
   ];
 }
@@ -172,17 +465,53 @@ export function convoyDetailIntelRows(
   worldState: StrategyWorldState,
   convoy: StrategySupplyConvoyState
 ): IntelFieldRow[] {
-  return [
+  const rows: IntelFieldRow[] = [
     ...convoyHoverIntelRows(worldState, convoy),
+    { label: "任务", value: convoyMissionLabel(convoy) },
+    {
+      label: "状态",
+      value: convoyStatusLabel(convoy.status, convoy.isReturningToOrigin),
+    },
+    { label: "载粮", value: formatFoodGo(convoy.cargoFoodGo) },
     { label: "位置", value: `(${convoy.x}, ${convoy.y})` },
     { label: "移动力", value: statPercent(convoy.movement) },
     { label: "AP", value: statPercent(convoy.ap) },
-    { label: "状态", value: textOrDash(convoy.status) },
     { label: "人夫", value: formatSoldiers(convoy.porterCount) },
     { label: "护卫", value: formatSoldiers(convoy.escortSoldierCount) },
     { label: "出发", value: dash(convoy.originStrongholdName) },
     { label: "目标", value: dash(convoy.targetUnitName) },
   ];
+
+  if (convoy.route?.length) {
+    rows.push({ label: "路径", value: formatRoute(convoy.route) });
+  }
+
+  return rows;
+}
+
+/** 对话框：信使完整情报。 */
+export function messengerDetailIntelRows(
+  worldState: StrategyWorldState,
+  messenger: StrategyMessengerState
+): IntelFieldRow[] {
+  const rows: IntelFieldRow[] = [
+    ...messengerHoverIntelRows(worldState, messenger),
+    { label: "位置", value: `(${messenger.x}, ${messenger.y})` },
+    { label: "移动力", value: statPercent(messenger.movement) },
+    { label: "AP", value: statPercent(messenger.ap) },
+    { label: "出发", value: dash(messenger.originStrongholdName) },
+    { label: "目标部队", value: dash(messenger.targetUnitName) },
+  ];
+
+  if (messenger.pendingDirective) {
+    rows.push({ label: "待传达", value: directiveLabel(messenger.pendingDirective) });
+  }
+
+  if (messenger.route?.length) {
+    rows.push({ label: "路径", value: formatRoute(messenger.route) });
+  }
+
+  return rows;
 }
 
 /** 悬浮框：信使（非军事单位，无总将；NPC 传令兵/护卫）。 */

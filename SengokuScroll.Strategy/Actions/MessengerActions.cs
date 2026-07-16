@@ -16,6 +16,7 @@ public static class MessengerActions
     /// </summary>
     public static void ApplyFalseIntelligence(SupplyConvoy convoy, Messenger messenger)
     {
+        // 业务：迷惑状态使运输队进入误导目标并清空原路径
         convoy.IsDeceived = true;
         convoy.Status = SupplyConvoyStatus.Deceived;
         convoy.DeceivedHoldDaysRemaining = Constants.LogisticsConstants.FalseIntelligenceHoldDays;

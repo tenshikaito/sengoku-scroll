@@ -16,8 +16,10 @@ using SengokuScroll.Domain.Systems;
 
 namespace SengokuScroll.Application.Extensions;
 
+/// <summary>应用层 DI 扩展：注册导演、循环、领域规则/系统与命令处理器。</summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>一次性注册领域与应用服务（世界上下文 + 玩家会话）。</summary>
     public static IServiceCollection AddGameServices(this IServiceCollection services, GameWorldContext gameWorldContext, GameSession gameSession)
     {
         services.AddGameDomain();
@@ -28,6 +30,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注册应用层：双模式导演/循环、上下文、命令与事件处理器。</summary>
     public static IServiceCollection AddGameApplication(
         this IServiceCollection services,
         GameSession gameSession,
@@ -69,6 +72,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注册领域层：事件总线、双模式引擎、规则、评估器、系统与行动。</summary>
     public static IServiceCollection AddGameDomain(this IServiceCollection services)
     {
         services.AddSingleton<GameEventDispatcher>();
@@ -84,6 +88,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注册寻路等领域服务。</summary>
     public static IServiceCollection AddGameDomainServices(this IServiceCollection services)
     {
         services.AddSingleton<IPathfindingService, PathfindingService>();
@@ -91,6 +96,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注册通用/外交/移动/单位游戏规则。</summary>
     public static IServiceCollection AddGameRules(this IServiceCollection services)
     {
         services.AddSingleton<CommonRules, CommonRules>();
@@ -101,6 +107,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注册移动/攻击等行动合法性评估器。</summary>
     public static IServiceCollection AddGameEvaluators(this IServiceCollection services)
     {
         services.AddSingleton<UnitMoveEvaluator, UnitMoveEvaluator>();
@@ -110,6 +117,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注册气候、经济、单位、角色、AI 等日推进系统。</summary>
     public static IServiceCollection AddGameSystems(this IServiceCollection services)
     {
         services.AddSingleton<IClimateSystem, ClimateSystem>();
@@ -121,6 +129,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>注册单位/角色移动行动与观察者。</summary>
     public static IServiceCollection AddGameActions(this IServiceCollection services)
     {
         services.AddSingleton<IUnitMoveObserver, NullUnitMoveObserver>();

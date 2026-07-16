@@ -65,7 +65,7 @@ export function enrichStrategyMapState(
       map.tileRegionNames.some((name) => Boolean(name))
         ? map.tileRegionNames
         : defaults.tileRegionNames,
-    landmarks: mergeLandmarkLists(map.landmarks, defaults.landmarks),
+    landmarks: mergeLandmarkLists(map.landmarks, defaults.landmarks ?? []),
   };
 
   if (mapTileDataComplete(map)) return merged;

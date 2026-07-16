@@ -1,9 +1,12 @@
 ﻿namespace SengokuScroll.Domain.Entities;
 
+/// <summary>两势力间的一对外交记录：关系值、信任、同盟/敌对状态与贡赋义务。</summary>
 public class Diplomacy
 {
+    /// <summary>本方势力 Id。</summary>
     public int ForceId { get; set; }
 
+    /// <summary>对方势力 Id。</summary>
     public int TargetForceId { get; set; }
 
     /// <summary>
@@ -37,21 +40,28 @@ public class Diplomacy
     /// </summary>
     public int? SuzerainId { get; set; }
 
-    /// <summary>
-    /// 是从属势力
-    /// </summary>
+    /// <summary>是否为从属势力（有宗主时不可独立宣战等）。</summary>
     public bool IsSubordinate => SuzerainId.HasValue;
 
-    /// <summary>
-    /// 停战中
-    /// 由系统根据时长更新状态123
-    /// </summary>
+    /// <summary>停战中；由系统按 <see cref="TrucePeriod"/> 自动更新。</summary>
     public bool IsTruce { get; set; }
 
     /// <summary>
     /// 停战期
     /// </summary>
     public ushort TrucePeriod { get; set; }
+
+    /// <summary>贡赋义务：粮（产出比例，万分比）。</summary>
+    public int TributeFoodBasisPoints { get; set; }
+
+    /// <summary>贡赋义务：钱（产出比例，万分比）。</summary>
+    public int TributeMoneyBasisPoints { get; set; }
+
+    /// <summary>尚未运完的贡赋欠粮（合）。</summary>
+    public int ArrearsFoodGo { get; set; }
+
+    /// <summary>尚未运完的贡赋欠钱（文）。</summary>
+    public int ArrearsMoney { get; set; }
 
     public enum DiplomacyStrategy : byte
     {
@@ -91,10 +101,16 @@ public class Diplomacy
         Submit,
     }
 
+    /// <summary>两势力当前外交立场（中立/同盟/敌对）。</summary>
     public enum DiplomacyRelation : byte
     {
+        /// <summary>中立，可自由变更关系。</summary>
         Neutral = 0,
+
+        /// <summary>同盟，不可互相攻击。</summary>
         Allied = 1,
+
+        /// <summary>敌对，可交战并阻挡移动。</summary>
         Enemy = 2,
     }
 }

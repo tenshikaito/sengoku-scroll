@@ -1,7 +1,7 @@
 # SengokuScroll（战国绘卷）大战略模式开发计划
 
 > 版本：0.6 | 日期：2026-07-09  
-> 状态：**M3-d 接近完成**（经济/AI/存档/地图 overlay/地标与区域 **纵切** ✅）→ **M3 试玩验收** → **M4**  
+> 状态：**M4 进行中**（经济系统重构：民间/市场/贡赋设计 §4 ✅ 文档；M4-a 基础实装）→ M3 试玩验收并行  
 > 上一级：[基本设计](./design-document.md) | 详细设计：[strategy-detail-design.md](./strategy-detail-design.md) | 界面：[strategy-ui-design.md](./strategy-ui-design.md)
 
 ---
@@ -237,7 +237,7 @@ M0 计划确认（✅）→ M1 领域与引擎（下一步）→ M2 策略单机
 
 | 优先级 | 内容 | 说明 |
 |--------|------|------|
-| **P0** | **据点 ↔ 地标关联** | `Stronghold` 增 `LandmarkId?` / `StrongholdKind`（史实/虚拟）；建造时检测格点 `StrongholdPoints` |
+| **P0** | **据点 ↔ 地标关联** | `Stronghold.IsHistorical` 贯通；建造时检测格点 `GameMapMasterData.Landmarks` |
 | **P0** | **虚拟据点收入减益** | `EconomyRules` 按难度档位对无地标背书据点施加税收系数；史实据点不变 |
 | **P1** | 更多剧本/区域网格/地标数据 | 编辑器或 JSON 批量维护 `politicalRegionGrid`、`landmarks` |
 | **P1** | 兵种 `UnitTypes` 配置化 | 见 §M4 原列表 |
@@ -283,7 +283,7 @@ M0 计划确认（✅）→ M1 领域与引擎（下一步）→ M2 策略单机
 | 单人战术地图 | 战术地图在 **RPG 阶段** 首做（RPG 为策略增量） |
 | 完整外交（CB、战争分数和谈、联姻） | M4 打磨或更后 |
 | 气候/灾害 | M4 或更后 |
-| 贸易路线/关税细节 | M4 或更后 |
+| 贸易路线/官办企业/关税（运输队货值） | M4-c |
 | 信使截获/篡改 | M4 可选 |
 | **亲自指挥战术地图** | **RPG 阶段**（策略 M3 仅 UI 占位） |
 | 角色忠诚/叛变/人事全套 | M4 或更后 |
@@ -382,7 +382,7 @@ FalseIntelligence → SupplyConvoy
 | 类型 | M3 行为 |
 |------|---------|
 | 方针/远程指令 | 异格 **必须** 经信使（从 **当主所在格** 出发）；同格即时 |
-| 战斗结果 | 攻击命令 **日推进** 结算 → 战报 **对话框** 即时弹出 → **战报信使** 自 **己方参战部队格** 向当主回程（**当日不移动**，次日出发）→ 抵达后左上 **消息区** 一行摘要 |
+| 战斗结果 | 攻击命令 **日推进** 结算 → **战报信使** 自 **己方参战部队格** 向当主回程（**当日不移动**，次日出发）→ 抵达后 **解锁战报对话框** + 左上消息区一行摘要；同格免信使则即时送达 |
 | 外交 | 文书经信使（M3 可简化为固定延迟公式）；同格会面即时 |
 | 运输粮草 | **仅运输队**，不经信使 |
 | **假情报** | 信使 `FalseIntelligence` 可作用于 **在途运输队**（改向/停留，§6.2.1） |
@@ -399,8 +399,8 @@ FalseIntelligence → SupplyConvoy
 ├── 攻击：选相邻敌军 → preview-battle → 战斗确认对话框
 ├── 确认 → POST attack-order（排队，不即时开战、不扣 AP）
 ├── 推进日期 → StrategyBattleResolutionSystem 结算（扣 AP、单方/互攻 AP 先手定攻方）
-├── 战报对话框弹出；双方各派战报信使（自各自部队格 → 当主，次日移动）
-└── 信使抵达 → StrategyDayOutcomeBuffer.events → 左上消息区
+├── 双方各派战报信使（自各自部队格 → 当主，次日移动）；败方 AI 按方针撤退
+└── 信使抵达当主 → Events[].BattleResult → 通知托盘打开战报对话框
 ```
 
 AP 不足：preview/attack-order 返回 `ApNotEnough`；前端 **对话框 + 信息栏** 提示（攻击按钮仍可点）。
@@ -409,17 +409,57 @@ AP 不足：preview/attack-order 返回 `ApNotEnough`；前端 **对话框 + 信
 
 详见 [strategy-detail-design §6–§9](./strategy-detail-design.md#6-自动战斗系统)。
 
-### 6.5 经济（M3 最小）
+### 6.5 经济
+
+**M3-d（已实现，过渡）**
 
 ```
-每月：
-  收入 = Σ(据点基础税收)
-  支出 = Σ(军队维护 + 据点维持)
-每日：
-  出征单位耗粮（从势力粮库或据点粮库扣减）
+每月：ForceActor 扣税 → 贡纳运输队 → 居城
+每日：军事单位耗粮（Unit.Food）
 ```
 
-建设/多种资源（铁木马）→ M5。
+**M4-a（进行中）**
+
+```
+每日：市民/商业产出入 CivilianActor；市民口粮；军队口粮（整型 milli-go）
+实体：StrongholdMarket、Diplomacy 贡赋欠账、StrategyIntelligenceLedger（脚手架）
+```
+
+**M4-b（已实现）**
+
+```
+StrategyMarketSystem：连续撮合、日 K、MerchantTaxLedger
+收粮日：Harvest 农业税 → 府库；贡粮运输队
+月 1 日：市民钱税 + 贸易税汇总 + 店铺维持费；钱纳运输队
+TransportPurpose + 软拦截检定
+```
+
+**M4-c（已实现）**
+
+```
+关税：Trade 运输队过境按载货价值计税 ✅
+钱纳义务：当月钱税 × 贡赋比例 ✅
+官办卖单：ForceActor 余粮挂 TaxExempt 卖单 → 贸易收入 ✅
+跨据点贸易 AI：同势力粮价差 → Trade 运输队 → 到港交割 ✅
+Diplomacy.Arrears：贡粮/钱纳运送不足时累加（内藩→宗主）✅
+```
+
+**M4-d（已实现）**
+
+```
+Market 设施绑定（EconomyFacilityIds；CanTrade 优先认 Market 设施）
+奢侈品工坊：日产 LuxuryGoods → 官办高价卖单（贸易收入）
+商户 AI：余粮/奢侈品挂卖单
+同盟/非敌对势力跨据点 Trade 运输队
+运输队被毁：贡纳欠账 + 敌军缴获（掠夺收入）
+势力内直辖欠账：Force.InternalArrears*
+角色俸禄：月结自府库扣（Character.Salary）
+缺粮降民心 / 年度人口变化（简化）
+```
+
+**M5+（计划）**
+
+定额制、建设投资、外交赠金、多种物资（铁木马）玩法、店铺设施荒废、AI 经济政策。
 
 ### 6.6 路径可见性与战争迷雾
 

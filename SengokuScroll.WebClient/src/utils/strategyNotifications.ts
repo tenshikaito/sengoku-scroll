@@ -1,5 +1,6 @@
-import type { StrategyBattleResult, StrategyEvent } from "@/api/strategyTypes";
+import type { StrategyBattleResult, StrategyEvent, StrategyWorldState } from "@/api/strategyTypes";
 import type { StrategyPendingNotification } from "@/components/strategy/StrategyNotificationTray.vue";
+import { battleOutcomeBrief } from "@/utils/battleResult";
 import { messageCategoryLabel } from "@/utils/messageCategories";
 
 let notificationSeq = 0;
@@ -13,9 +14,27 @@ export function eventBriefText(event: StrategyEvent): string {
   return event.brief?.trim() || event.message;
 }
 
-export function battleBriefText(result: StrategyBattleResult): string {
-  const outcome = result.attackerWon ? "攻方胜" : "守方胜";
+export function battleBriefText(
+  result: StrategyBattleResult,
+  playerForceId: number,
+  worldState?: StrategyWorldState
+): string {
+  const outcome = battleOutcomeBrief(result, playerForceId, worldState);
   return `⚔ ${result.attackerName} vs ${result.defenderName}（${outcome}）`;
+}
+
+export function notificationFromBattle(
+  result: StrategyBattleResult,
+  playerForceId: number,
+  worldState?: StrategyWorldState
+): StrategyPendingNotification {
+  return {
+    id: nextNotificationId(),
+    kind: "battle",
+    icon: "⚔",
+    brief: battleBriefText(result, playerForceId, worldState),
+    battleResult: result,
+  };
 }
 
 const SETTLEMENT_CATEGORIES = new Set(["EconomyMonthly", "EconomyAnnual"]);
@@ -24,7 +43,46 @@ export function isSettlementEvent(event: StrategyEvent): boolean {
   return SETTLEMENT_CATEGORIES.has(event.category);
 }
 
-export function notificationFromEvent(event: StrategyEvent): StrategyPendingNotification | null {
+/** 战略情报抵达后的详情文案（溃灭、占城、围城开始等）。 */
+export function strategicReportDetailText(event: StrategyEvent): string {
+  if (event.detailMessage?.trim()) return event.detailMessage.trim();
+  if (event.detailCategory === "SiegeEncircle" || event.detailCategory === "SiegeAssault") {
+    return event.message;
+  }
+  return event.message;
+}
+
+export function notificationFromEvent(
+  event: StrategyEvent,
+  playerForceId?: number,
+  worldState?: StrategyWorldState
+): StrategyPendingNotification | null {
+  if (event.category === "BattleReportArrived" && event.battleResult && playerForceId != null) {
+    return notificationFromBattle(event.battleResult, playerForceId, worldState);
+  }
+
+  if (event.category === "StrategicReportArrived") {
+    const icon =
+      event.detailCategory === "SiegeOrderStarted" || event.detailCategory === "SiegeEncircle"
+        ? "⭕"
+        : event.detailCategory === "SiegeAssault"
+          ? "⚔"
+          : event.detailCategory === "StrongholdCaptured"
+            ? "🏯"
+            : event.detailCategory === "UnitDestroyed"
+              ? "💥"
+              : event.detailCategory === "UnitFledToStronghold"
+                ? "🏯"
+                : "📨";
+    return {
+      id: nextNotificationId(),
+      kind: "message",
+      icon,
+      brief: eventBriefText(event),
+      event,
+    };
+  }
+
   if (isSettlementEvent(event)) {
     return {
       id: nextNotificationId(),
@@ -36,16 +94,6 @@ export function notificationFromEvent(event: StrategyEvent): StrategyPendingNoti
   }
 
   return null;
-}
-
-export function notificationFromBattle(result: StrategyBattleResult): StrategyPendingNotification {
-  return {
-    id: nextNotificationId(),
-    kind: "battle",
-    icon: "⚔",
-    brief: battleBriefText(result),
-    battleResult: result,
-  };
 }
 
 export function messengerFeedBrief(event: StrategyEvent): string {
@@ -69,6 +117,8 @@ function simplifyLegacyMessage(event: StrategyEvent): string {
       return "年度收支结算";
     case "BattleReportArrived":
       return "战报信使抵达";
+    case "StrategicReportArrived":
+      return "情报信使抵达";
     case "MessengerArrived":
       return "信使抵达";
     default:

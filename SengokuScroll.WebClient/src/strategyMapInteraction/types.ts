@@ -44,7 +44,9 @@ export type StrategyMapPopupMode =
   | "foreignStrongholdCommand"
   | "convoyCommand"
   | "moveSelect"
-  | "attackSelect";
+  | "attackSelect"
+  | "mergeSelect"
+  | "splitSelect";
 
 /** 状态类可读写的 UI 上下文；状态切换通过 transitionTo 完成。 */
 export interface StrategyMapInteractionContext {
@@ -81,6 +83,20 @@ export interface StrategyMapInteractionContext {
   isValidMovePathCell(x: number, y: number): boolean;
 
   isValidAttackTarget(x: number, y: number): boolean;
+
+  isValidMergeTarget(unitId: number): boolean;
+
+  isValidSplitSpawnCell(x: number, y: number): boolean;
+
+  getPendingMergeTargetUnitId(): number | null;
+
+  setPendingMergeTargetUnitId(unitId: number | null): void;
+
+  getPendingSplitSubUnitIds(): readonly number[];
+
+  setPendingSplitSubUnitIds(subUnitIds: readonly number[]): void;
+
+  clearPendingSplitSubUnitIds(): void;
 
   isPlayerUnit(unitId: number): boolean;
 

@@ -3,6 +3,7 @@ import type {
   StrategyEvent,
   StrategyTributeLine,
 } from "@/api/strategyTypes";
+import { normalizeBattleResult } from "@/utils/battleResult";
 
 function pick(obj: Record<string, unknown>, ...keys: string[]): unknown {
   for (const key of keys) {
@@ -26,6 +27,8 @@ function normalizeTributeLine(raw: unknown): StrategyTributeLine {
   const row = raw as Record<string, unknown>;
   return {
     originName: String(pick(row, "originName", "OriginName") ?? "未知据点"),
+    forceName: String(pick(row, "forceName", "ForceName") ?? "—"),
+    lordName: String(pick(row, "lordName", "LordName") ?? "—"),
     food: safeInt(pick(row, "food", "Food")),
     money: safeInt(pick(row, "money", "Money")),
   };
@@ -57,6 +60,7 @@ export function normalizeEconomySettlementDetail(
     armyMaintenanceMoney: safeInt(pick(d, "armyMaintenanceMoney", "ArmyMaintenanceMoney")),
     treasuryMoney: safeInt(pick(d, "treasuryMoney", "TreasuryMoney")),
     treasuryFood: safeInt(pick(d, "treasuryFood", "TreasuryFood")),
+    convoyCount: safeInt(pick(d, "convoyCount", "ConvoyCount"), tributeLines.length),
     tributeLines,
   };
 }
@@ -78,10 +82,16 @@ export function parseEconomySettlementFromEvent(
   const reportingYear = yearMatch ? safeInt(yearMatch[1]) : 0;
   const reportingMonth = isAnnual ? 0 : monthMatch ? safeInt(monthMatch[1]) : 0;
 
-  const incomeMatch = msg.match(/合计收入\s*🌾([\d,]+)\s*💰([\d,]+)/);
-  const expenseMatch = msg.match(/支出\s*💰([\d,]+)/);
-  const armyMatch = msg.match(/军队维护\s*💰([\d,]+)/);
-  const treasuryMatch = msg.match(/库藏\s*💰([\d,]+)\s*🌾([\d,]+)/);
+  const incomeMatch =
+    msg.match(/(?:合计收入|贡纳收入)\s*🌾([\d,]+)(?:合)?\s*💰([\d,]+)(?:文)?/) ??
+    msg.match(/合计收入\s*🌾([\d,]+)\s*💰([\d,]+)/);
+  const expenseMatch =
+    msg.match(/(?:维持费支出|支出)\s*💰([\d,]+)(?:文)?/) ?? msg.match(/支出\s*💰([\d,]+)/);
+  const armyMatch = msg.match(/军队维护\s*💰([\d,]+)(?:文)?/);
+  const treasuryMatch =
+    msg.match(/(?:结算后库藏|库藏)\s*💰([\d,]+)(?:文)?\s*🌾([\d,]+)(?:合)?/) ??
+    msg.match(/库藏\s*💰([\d,]+)\s*🌾([\d,]+)/);
+  const convoyMatch = msg.match(/共\s*(\d+)\s*批运输队/);
 
   const parseNum = (s: string | undefined) => safeInt(s?.replace(/,/g, ""));
 
@@ -91,6 +101,8 @@ export function parseEconomySettlementFromEvent(
     if (!m) continue;
     tributeLines.push({
       originName: m[1]!.trim(),
+      forceName: "—",
+      lordName: "—",
       food: parseNum(m[2]),
       money: parseNum(m[3]),
     });
@@ -108,6 +120,7 @@ export function parseEconomySettlementFromEvent(
     armyMaintenanceMoney: parseNum(armyMatch?.[1]),
     treasuryMoney: parseNum(treasuryMatch?.[1]),
     treasuryFood: parseNum(treasuryMatch?.[2]),
+    convoyCount: convoyMatch ? safeInt(convoyMatch[1]) : tributeLines.length,
     tributeLines,
   };
 }
@@ -119,11 +132,17 @@ export function normalizeStrategyEvent(raw: unknown): StrategyEvent {
   const economyRaw =
     pick(evt, "economySettlement", "EconomySettlement") ??
     pick(evt, "economyMonthly", "EconomyMonthly");
+  const battleRaw = pick(evt, "battleResult", "BattleResult");
+  const detailCategory = optionalString(pick(evt, "detailCategory", "DetailCategory"));
+  const detailMessage = optionalString(pick(evt, "detailMessage", "DetailMessage"));
 
   return {
     category,
     message: String(pick(evt, "message", "Message") ?? ""),
     brief: optionalString(briefRaw),
     economySettlement: normalizeEconomySettlementDetail(economyRaw, category),
+    battleResult: battleRaw ? normalizeBattleResult(battleRaw) : undefined,
+    detailCategory,
+    detailMessage,
   };
 }

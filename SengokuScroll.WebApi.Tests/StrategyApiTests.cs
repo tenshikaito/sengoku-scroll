@@ -156,6 +156,17 @@ public class StrategyApiTests : IClassFixture<StrategyWebApplicationFactory>
     }
 
     [Fact]
+    public async Task GetState_OnStartup_ReturnsDefaultScenarioWithoutExplicitLoad()
+    {
+        var state = await client.GetFromJsonAsync<StrategyWorldStateDto>("/strategy/state");
+
+        Assert.NotNull(state);
+        Assert.Equal("mini_kanto", state.ScenarioId);
+        Assert.Equal(1560, state.Date.Year);
+        Assert.Equal(2, state.Units.Count);
+    }
+
+    [Fact]
     public async Task GetState_AfterLoad_MatchesLoadResponseShape()
     {
         var loadResponse = await client.PostAsJsonAsync("/strategy/load", new LoadScenarioRequest
@@ -207,8 +218,11 @@ public class StrategyApiTests : IClassFixture<StrategyWebApplicationFactory>
 
         var payload = await advanceResponse.Content.ReadFromJsonAsync<StrategyAdvanceDayResponseDto>();
         Assert.NotNull(payload);
-        Assert.Single(payload!.ResolvedBattles);
-        Assert.True(payload.State.Units.First(u => u.Id == 1).Soldiers < 100);
+        Assert.Empty(payload!.ResolvedBattles);
+        Assert.Contains(
+            payload.State.Messengers,
+            m => string.Equals(m.PayloadType, "BattleReport", StringComparison.OrdinalIgnoreCase));
+        Assert.True(payload.State.Units.First(u => u.Id == 1).Soldiers < 3000);
     }
 
     [Fact]

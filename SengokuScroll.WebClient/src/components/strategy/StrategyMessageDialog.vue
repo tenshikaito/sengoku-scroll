@@ -22,7 +22,7 @@ const messageText = computed(() => formatEventsAsPlainText(props.events));
     width="620px"
     align-center
     destroy-on-close
-    class="strategy-message-dialog"
+    class="strategy-message-dialog strategy-dialog-centered-footer"
     @update:model-value="$emit('update:visible', $event)"
   >
     <textarea

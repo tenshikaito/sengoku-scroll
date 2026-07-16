@@ -2,6 +2,7 @@ using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Data.Models;
+using SengokuScroll.Strategy.Diagnostics;
 using static SengokuScroll.Domain.Entities.Character;
 
 namespace SengokuScroll.Strategy.Helpers;
@@ -13,8 +14,16 @@ public static class StrategyStrongholdLordHelper
     public static int ResolveForceLordCharacterId(
         int forceId,
         StrategyScenarioMeta meta,
-        GameData gameData)
+        GameData gameData,
+        StrategyForceLordRegistry? lordRegistry = null)
     {
+        if (lordRegistry?.TryGetLordCharacterId(forceId, out var runtimeLordId) == true
+            && gameData.Characters.ContainsKey(runtimeLordId))
+        {
+            return runtimeLordId;
+        }
+
+        // 业务：运行时未登记则回退剧本元数据中的当主角色
         if (meta.ForceLordCharacterIds.TryGetValue(forceId, out var lordId)
             && gameData.Characters.ContainsKey(lordId))
         {
@@ -40,6 +49,7 @@ public static class StrategyStrongholdLordHelper
         if (forceId == meta.PlayerForceId && !string.IsNullOrWhiteSpace(meta.LordName))
             return meta.LordName.Trim();
 
+        // 业务：AI/他势力无当主角色时显示通用称谓
         return "当主";
     }
 
@@ -60,6 +70,38 @@ public static class StrategyStrongholdLordHelper
 
     /// <summary>是否当主直辖（LordId=0）。</summary>
     public static bool IsDirectRule(Stronghold stronghold) => stronghold.LordId == 0;
+
+    /// <summary>是否势力当主居城（当主角色 <see cref="Character.StrongholdId"/> 等于本据点）。</summary>
+    public static bool IsForceLordResidence(
+        Stronghold stronghold,
+        StrategyScenarioMeta meta,
+        GameData gameData)
+    {
+        var lordCharacterId = ResolveForceLordCharacterId(stronghold.ForceId, meta, gameData);
+        if (lordCharacterId <= 0
+            || !gameData.Characters.TryGetValue(lordCharacterId, out var lord))
+        {
+            return false;
+        }
+
+        return lord.StrongholdId == stronghold.Id;
+    }
+
+    /// <summary>
+    /// 是否显示「居城」：当主居城，或已任命领主（LordId&gt;0）之据点。
+    /// 其余 LordId=0 且非当主居城者为「直辖」。
+    /// </summary>
+    public static bool IsGovernanceResidence(
+        Stronghold stronghold,
+        StrategyScenarioMeta meta,
+        GameData gameData)
+    {
+        if (IsForceLordResidence(stronghold, meta, gameData))
+            return true;
+
+        // 业务：已任命领主（LordId>0）的据点也视为「居城」
+        return stronghold.LordId > 0;
+    }
 
     /// <summary>将领主角色驻留于居城（LordId 对应据点）。</summary>
     public static void EnsureLordResidence(Stronghold stronghold, Character lord)

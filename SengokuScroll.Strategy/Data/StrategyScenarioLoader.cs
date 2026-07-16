@@ -10,6 +10,7 @@ using SengokuScroll.Domain.Actions;
 using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
+using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Unit;
 using static SengokuScroll.Domain.Entities.Character;
 
@@ -68,11 +69,84 @@ public static class StrategyScenarioLoader
         return new StrategyScenarioMeta
         {
             PlayerForceId = scenario.PlayerForceId,
+            Difficulty = StrategyDifficultyRules.Parse(scenario.Difficulty),
             LordName = scenario.Lord?.Name ?? "当主",
             LordUnitId = scenario.Lord?.UnitId,
             LordStrongholdId = scenario.Lord?.StrongholdId,
             ForceLordCharacterIds = BuildForceLordCharacterIds(scenario),
-            Intel = intel
+            Intel = intel,
+            RegionHarvestProfiles = BuildRegionHarvestProfiles(document.Map)
+        };
+    }
+
+    /// <summary>剧本指定种子优先；否则用 Id+起始日派生，保证同剧本开局可回放。</summary>
+    private static int ResolveSimulationSeed(StrategyScenarioDocument document)
+    {
+        if (document.Scenario.SimulationSeed != 0)
+            return document.Scenario.SimulationSeed;
+
+        var start = document.Scenario.StartDate;
+        var hash = HashCode.Combine(document.Id, start.Year, start.Month, start.Day);
+        return hash == int.MinValue ? 1 : Math.Abs(hash);
+    }
+
+    private static Dictionary<int, RegionHarvestProfile> BuildRegionHarvestProfiles(StrategyMapDefinition map)
+    {
+        var profiles = new Dictionary<int, RegionHarvestProfile>();
+
+        foreach (var region in map.PoliticalRegions)
+        {
+            var events = ResolveHarvestEvents(region);
+            profiles[region.Id] = new RegionHarvestProfile
+            {
+                RegionId = region.Id,
+                Events = events
+            };
+        }
+
+        return profiles;
+    }
+
+    private static IReadOnlyList<HarvestEventDefinition> ResolveHarvestEvents(
+        StrategyPoliticalRegionDefinition region)
+    {
+        if (region.HarvestEvents is { Count: > 0 } custom)
+        {
+            return custom
+                .Select(e => new HarvestEventDefinition(e.Month, e.Day, e.ShareBasisPoints))
+                .ToList();
+        }
+
+        // 业务：未自定义时按作物模式套用默认收成分配（二作/三作/单作）
+        return region.CropPattern?.Trim() switch
+        {
+            "Double" or "double" =>
+            [
+                new(HarvestConstants.DefaultDoubleEarly.Month,
+                    HarvestConstants.DefaultDoubleEarly.Day,
+                    HarvestConstants.DefaultDoubleEarly.ShareBasisPoints),
+                new(HarvestConstants.DefaultDoubleLate.Month,
+                    HarvestConstants.DefaultDoubleLate.Day,
+                    HarvestConstants.DefaultDoubleLate.ShareBasisPoints)
+            ],
+            "Triple" or "triple" =>
+            [
+                new(HarvestConstants.DefaultDoubleEarly.Month,
+                    HarvestConstants.DefaultDoubleEarly.Day,
+                    3333),
+                new(HarvestConstants.DefaultDoubleLate.Month,
+                    HarvestConstants.DefaultDoubleLate.Day,
+                    3333),
+                new(HarvestConstants.DefaultNorthernSingle.Month,
+                    HarvestConstants.DefaultNorthernSingle.Day,
+                    3334)
+            ],
+            _ =>
+            [
+                new(HarvestConstants.DefaultNorthernSingle.Month,
+                    HarvestConstants.DefaultNorthernSingle.Day,
+                    HarvestConstants.DefaultNorthernSingle.ShareBasisPoints)
+            ]
         };
     }
 
@@ -88,6 +162,7 @@ public static class StrategyScenarioLoader
 
         if (scenario.Lord is not null)
         {
+            // 业务：剧本显式当主名时，覆盖玩家势力的当主角色 Id
             var lordCharacter = scenario.Characters.FirstOrDefault(c =>
                 string.Equals(c.Name, scenario.Lord.Name, StringComparison.Ordinal));
             if (lordCharacter is not null)
@@ -138,7 +213,7 @@ public static class StrategyScenarioLoader
 
         foreach (var definition in document.Scenario.Strongholds)
         {
-            var stronghold = CreateStronghold(definition);
+            var stronghold = CreateStronghold(definition, landmarks);
             strongholds[definition.Id] = stronghold;
         }
 
@@ -177,7 +252,7 @@ public static class StrategyScenarioLoader
                 Regions = politicalRegions,
                 PoliticalRegionGrid = politicalRegionGrid,
                 Roads = roads,
-                StrongholdPoints = landmarks
+                Landmarks = landmarks
             },
             GameMapData = mapData,
             GameMasterData = new GameMasterData
@@ -187,13 +262,14 @@ public static class StrategyScenarioLoader
                 ReligionGroups = [],
                 Religions = [],
                 StrongholdTypes = [],
-                DefenseFacilityTypes = [],
+                DefenseFacilityTypes = StrongholdDefenseRules.CreateDefaultDefenseFacilityTypes(),
                 UnitTypes = [],
                 Characters = []
             },
             GameData = new GameData
             {
                 GameDate = new GameDate(startDate.Year, startDate.Month, startDate.Day),
+                SimulationSeed = ResolveSimulationSeed(document),
                 Forces = forces,
                 Strongholds = strongholds,
                 Units = units,
@@ -223,8 +299,42 @@ public static class StrategyScenarioLoader
         }
 
         ApplyDefaultWarDiplomacy(forces.Values);
+        StrategyDefaultMasterDataSeed.Apply(world);
+        ApplyDefaultStrongholdDefense(world);
+        ApplyDefaultEconomyFacilities(world);
 
         return world;
+    }
+
+    private static void ApplyDefaultEconomyFacilities(GameWorld world)
+    {
+        foreach (var stronghold in world.GameData.Strongholds.Values)
+        {
+            // 业务：剧本未写经济设施时补默认（如 Market）
+            if (stronghold.EconomyFacilityIds.Count > 0)
+                continue;
+
+            stronghold.EconomyFacilityIds.AddRange(
+                EconomyFacilityRules.ResolveDefaultFacilityIds(stronghold));
+        }
+    }
+
+    private static void ApplyDefaultStrongholdDefense(GameWorld world)
+    {
+        var master = world.GameMasterData;
+        foreach (var stronghold in world.GameData.Strongholds.Values)
+        {
+            // 业务：未声明城防设施时按人口补默认，并重算城防值
+            if (stronghold.DefenseFacilityIds.Count == 0)
+            {
+                stronghold.DefenseFacilityIds.AddRange(
+                    StrongholdDefenseRules.ResolveDefaultFacilityIds(stronghold.Population));
+            }
+
+            stronghold.Defense = (byte)Math.Min(
+                byte.MaxValue,
+                StrongholdDefenseRules.ResolveTotalDefense(stronghold, master));
+        }
     }
 
     /// <summary>剧本未声明外交时，多势力默认互相敌对（M3 最小战争状态）。</summary>
@@ -240,6 +350,7 @@ public static class StrategyScenarioLoader
                 if (a.Diplomacies.Any(d => d.TargetForceId == b.Id))
                     continue;
 
+                // 业务：家臣势力与宗主不自动设为敌对
                 if (IsInnerVassalOf(a, b) || IsInnerVassalOf(b, a))
                     continue;
 
@@ -282,6 +393,7 @@ public static class StrategyScenarioLoader
             if (definition.StrongholdId is int strongholdId
                 && strongholds.TryGetValue(strongholdId, out var stronghold))
             {
+                // 业务：角色驻留据点则同步地图坐标
                 location = stronghold.Location;
                 locationStrongholdId = strongholdId;
             }
@@ -412,6 +524,7 @@ public static class StrategyScenarioLoader
             return;
         }
 
+        // 业务：剧本只给主将名而无角色记录时，自动创建并绑定
         var nextId = characters.Keys.DefaultIfEmpty(0).Max() + 1;
         var created = StrategyScenarioCharacterFactory.CreateAutoCommander(
             nextId,
@@ -450,6 +563,7 @@ public static class StrategyScenarioLoader
 
         if (!string.IsNullOrWhiteSpace(definition.MayorName))
         {
+            // 业务：代官（LeaderId）可与领主分离，按名称匹配同势力角色
             var mayor = characters.Values.FirstOrDefault(c =>
                 c.ForceId == definition.ForceId
                 && string.Equals(c.Name, definition.MayorName, StringComparison.Ordinal));
@@ -542,12 +656,12 @@ public static class StrategyScenarioLoader
         return grid;
     }
 
-    private static Dictionary<int, StrongholdPoint> BuildLandmarks(StrategyMapDefinition map)
+    private static Dictionary<int, Landmark> BuildLandmarks(StrategyMapDefinition map)
     {
-        var points = new Dictionary<int, StrongholdPoint>();
+        var points = new Dictionary<int, Landmark>();
         foreach (var landmark in map.Landmarks)
         {
-            points[landmark.Id] = new StrongholdPoint
+            points[landmark.Id] = new Landmark
             {
                 Id = landmark.Id,
                 Name = landmark.Name,
@@ -610,7 +724,9 @@ public static class StrategyScenarioLoader
             _ => Force.ForceStatus.Independence
         };
 
-    private static Stronghold CreateStronghold(StrategyStrongholdDefinition definition)
+    private static Stronghold CreateStronghold(
+        StrategyStrongholdDefinition definition,
+        IReadOnlyDictionary<int, Landmark> landmarks)
     {
         var forceActor = CreateStrongholdActor(
             definition.Id * 10,
@@ -619,7 +735,15 @@ public static class StrategyScenarioLoader
             definition.Food,
             definition.Morale,
             definition.Training,
-            definition.Money);
+            definition.Money,
+            garrisonSoldiers: definition.GarrisonSoldiers);
+
+        var civilianActor = CreateCivilianActor(
+            definition.Id * 10 + 1,
+            definition.ForceId,
+            definition.Id,
+            definition.Population,
+            popularFeelings: definition.PopularFeelings > 0 ? definition.PopularFeelings : (byte)50);
 
         return new Stronghold
         {
@@ -628,17 +752,56 @@ public static class StrategyScenarioLoader
             ForceId = definition.ForceId,
             Location = new Point3(definition.X, definition.Y),
             Population = definition.Population,
+            Stability = definition.Stability > 0 ? definition.Stability : (byte)50,
             PollTaxRate = definition.PollTaxRate,
             AgricultureTaxRate = definition.AgricultureTaxRate,
             CommerceTaxRate = definition.CommerceTaxRate,
             TariffTaxRate = definition.TariffTaxRate,
+            CommerceValue = Math.Max(1000, definition.Population * 2),
+            Defense = definition.Defense,
+            IsHistorical = ResolveIsHistorical(definition, landmarks),
             ForceActor = forceActor,
-            CivilianActor = CreateStrongholdActor(definition.Id * 10 + 1, definition.ForceId, definition.Id),
+            CivilianActor = civilianActor,
+            Market = new StrongholdMarket(),
             MerchantActors = [],
             ReligionActors = [],
-            DefenseFacilityIds = [],
+            DefenseFacilityIds = definition.DefenseFacilityIds.Count > 0
+                ? [..definition.DefenseFacilityIds]
+                : [],
+            EconomyFacilityIds = definition.EconomyFacilityIds.Count > 0
+                ? [..definition.EconomyFacilityIds]
+                : [],
             HasCoreForceIds = [definition.ForceId]
         };
+    }
+
+    private static StrongholdActor CreateCivilianActor(
+        int id,
+        int forceId,
+        int strongholdId,
+        int population,
+        byte popularFeelings = 50)
+    {
+        var actor = CreateStrongholdActor(
+            id,
+            forceId,
+            strongholdId,
+            popularFeelings: popularFeelings);
+        actor.Name = "民间";
+        actor.AgricultureProduction = Math.Max(1000, population * 15);
+        actor.CommerceProduction = Math.Max(100, population * 10);
+        return actor;
+    }
+
+    private static bool ResolveIsHistorical(
+        StrategyStrongholdDefinition definition,
+        IReadOnlyDictionary<int, Landmark> landmarks)
+    {
+        if (definition.IsHistorical.HasValue)
+            return definition.IsHistorical.Value;
+
+        return landmarks.Values.Any(l =>
+            l.Location.X == definition.X && l.Location.Y == definition.Y);
     }
 
     private static StrongholdActor CreateStrongholdActor(
@@ -648,7 +811,9 @@ public static class StrategyScenarioLoader
         int food = 0,
         int morale = 80,
         int training = 65,
-        int money = 0)
+        int money = 0,
+        byte popularFeelings = 50,
+        int garrisonSoldiers = 0)
         => new()
         {
             Id = id,
@@ -661,11 +826,23 @@ public static class StrategyScenarioLoader
             Food = food,
             Morale = (byte)morale,
             Training = (byte)training,
-            Money = money
+            Money = money,
+            Soldier = garrisonSoldiers,
+            PopularFeelings = popularFeelings
         };
 
     private static Unit CreateUnit(StrategyUnitDefinition definition)
-        => new()
+    {
+        var directive = UnitDirective.Move;
+        // 业务：方针 Support 时单位进入 Hold 姿态（驻守/支援）
+        if (!string.IsNullOrWhiteSpace(definition.Directive)
+            && Enum.TryParse<UnitDirective>(definition.Directive, ignoreCase: true, out var parsed))
+            directive = parsed;
+
+        const int defaultMovementCap = 5;
+        var movement = Math.Clamp(definition.Movement, 1, defaultMovementCap);
+
+        return new()
         {
             Id = definition.Id,
             Name = definition.Name,
@@ -676,15 +853,18 @@ public static class StrategyScenarioLoader
             Money = definition.Money,
             Morale = (byte)definition.Morale,
             Training = (byte)definition.Training,
-            Movement = definition.Movement,
-            Ap = definition.Movement,
+            Movement = movement,
+            Ap = movement,
             IsMilitary = true,
             IsReadyToMove = true,
             Status = UnitStatus.Waiting,
+            Directive = directive,
+            Stance = directive == UnitDirective.Support ? UnitStance.Hold : UnitStance.Normal,
             SubUnitIds = [],
             ActionTarget = new UnitActionTarget
             {
                 RoutePoints = new Queue<Point2>()
             }
         };
+    }
 }

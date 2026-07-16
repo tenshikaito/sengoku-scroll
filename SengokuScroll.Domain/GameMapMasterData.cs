@@ -29,5 +29,5 @@ public class GameMapMasterData
     /// <summary>道路类型 Id → 定义（region 层存储道路类型 Id）。</summary>
     public required Dictionary<int, RoadDefinition> Roads { get; set; }
 
-    public required Dictionary<int, StrongholdPoint> StrongholdPoints { get; set; }
+    public required Dictionary<int, Landmark> Landmarks { get; set; }
 }

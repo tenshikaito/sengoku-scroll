@@ -10,6 +10,7 @@ public class CharacterMoveEvaluator(
     IGameContext context,
     MovementRules movementRules) : EvaluatorBase
 {
+    /// <summary>评估角色单步移动是否合法；途经敌军单位格时须为敌对关系。</summary>
     public GameResult Evaluate(IMovable movable, Point2 location)
     {
         GameResult CheckOutOfBounds()
@@ -33,6 +34,7 @@ public class CharacterMoveEvaluator(
 
             var r = DiplomacyRules.IsEnemy(myForce, targetForce);
 
+            // 业务：友军单位格不阻挡角色，交由 MovementRules 处理同格细则
             if (!r)
                 return r;
 

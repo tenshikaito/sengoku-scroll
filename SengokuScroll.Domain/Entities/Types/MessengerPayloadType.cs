@@ -12,6 +12,9 @@ public enum MessengerPayloadType
     /// <summary>战斗结果战报；到达后玩家方可查看详情。</summary>
     BattleReport,
 
+    /// <summary>战略情报（溃灭、占城等）；抵达当主后解锁消息详情。</summary>
+    StrategicReport,
+
     /// <summary>向运输队传递假情报，使其改向或停留（谍报玩法）。</summary>
     FalseIntelligence
 }

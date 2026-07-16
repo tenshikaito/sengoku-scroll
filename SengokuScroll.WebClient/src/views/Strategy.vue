@@ -7,13 +7,17 @@ import {
   restoreStrategySave,
   hasLocalStrategySave,
   getMovementTrace,
+  getStrategyState,
   loadScenario,
-  moveUnit,
   orderUnitAttack,
+  orderUnitSiege,
+  mergeUnits,
+  splitUnit,
+  deployFromStronghold,
+  moveUnit,
   previewBattle,
   previewUnitPath,
   setUnitDirective,
-  setStrategySessionRecoveryHandler,
   setApiMode,
   strategyApiDiagnostics,
   type StrategyApiMode,
@@ -36,6 +40,8 @@ import StrategyBattleConfirmDialog, {
 } from "@/components/strategy/StrategyBattleConfirmDialog.vue";
 import StrategyBattleResultDialog from "@/components/strategy/StrategyBattleResultDialog.vue";
 import StrategyDirectiveDialog from "@/components/strategy/StrategyDirectiveDialog.vue";
+import StrategySplitDialog from "@/components/strategy/StrategySplitDialog.vue";
+import StrategyExpeditionDialog from "@/components/strategy/StrategyExpeditionDialog.vue";
 import StrategyEventFeed from "@/components/strategy/StrategyEventFeed.vue";
 import StrategyNotificationTray, {
   type StrategyPendingNotification,
@@ -46,12 +52,21 @@ import {
   filterEventsByMessageScope,
 } from "@/utils/strategyMessageScope";
 import StrategyEconomySettlementDialog from "@/components/strategy/StrategyEconomySettlementDialog.vue";
+import StrategyIntelSystemDialog from "@/components/strategy/StrategyIntelSystemDialog.vue";
+import StrategySystemMenuDialog from "@/components/strategy/StrategySystemMenuDialog.vue";
+import StrategyForceCommandPopup from "@/components/strategy/StrategyForceCommandPopup.vue";
 import StrategyCellIntelHover from "@/components/strategy/StrategyCellIntelHover.vue";
 import StrategyMapViewControls from "@/components/strategy/StrategyMapViewControls.vue";
 import type { MapRouteOverlay, MapMoveRelayMarker } from "@/components/strategy/mapRouteStyles";
 import { getForceColorCss } from "@/components/strategy/forceColors";
 import type { StrategyMapColorMode } from "@/utils/mapEntityColors";
-import { formatFoodGo, formatMoney, formatSoldiers } from "@/utils/strategyDisplayUnits";
+import {
+  countOwnCharacters,
+  countOwnStrongholds,
+  countRealmCharacters,
+  countRealmStrongholds,
+} from "@/utils/strategyRealmStats";
+import { formatFoodKoku, formatMoneyKan, formatSoldiers } from "@/utils/strategyDisplayUnits";
 import { useStrategyMapInteraction } from "@/composables/useStrategyMapInteraction";
 import type { StrategyMoveTarget } from "@/strategyMapInteraction/types";
 import {
@@ -73,11 +88,12 @@ import {
 import type { UnitDirectiveValue } from "@/utils/unitDirective";
 import { landmarkAtCell, mapTileInfo } from "@/utils/mapTileLookup";
 import { logStrategyMapCoords, logHoverIntelLayoutDebug, rectToScreenDebug } from "@/utils/strategyMapDebug";
-import { attackApBlockReason, parseApiErrorCode } from "@/utils/strategyActionRules";
+import { attackApBlockReason, parseApiErrorCode, siegeApBlockReason } from "@/utils/strategyActionRules";
 import {
-  notificationFromBattle,
   notificationFromEvent,
+  strategicReportDetailText,
 } from "@/utils/strategyNotifications";
+import { messageCategoryLabel } from "@/utils/messageCategories";
 
 const HOVER_INTEL_W = 280;
 const HOVER_INTEL_H = 360;
@@ -132,6 +148,10 @@ const {
   onMapRightClick,
   onBeginMove,
   onBeginAttack,
+  onBeginMerge,
+  enterSplitSpawnSelection,
+  pendingMergeTargetUnitId,
+  pendingSplitSubUnitIds,
   onConfirmBattle,
   onBattlePreviewReady,
   onCancel,
@@ -151,15 +171,29 @@ const eventFeed = ref<StrategyEvent[]>([]);
 const pendingNotifications = ref<StrategyPendingNotification[]>([]);
 const settlementDialogVisible = ref(false);
 const settlementDetail = ref<StrategyEconomySettlementDetail | null>(null);
+const eventDetailVisible = ref(false);
+const eventDetailTitle = ref("");
+const eventDetailText = ref("");
 const hoverIntelAnchorSide = ref<AnchorSide>("right");
 const hoverIntelVerticalAlign = ref<AnchorVerticalAlign>("start");
 const messageDialogVisible = ref(false);
 const showPlayerMessages = ref(true);
 const showWorldMessages = ref(true);
 const directiveDialogVisible = ref(false);
+const splitDialogVisible = ref(false);
+const expeditionDialogVisible = ref(false);
+const pendingSplitUnitName = ref<string | undefined>(undefined);
+const intelSystemVisible = ref(false);
+const intelSystemInitialTab = ref("force");
+const systemMenuVisible = ref(false);
+const forceCommandVisible = ref(false);
+const forceStatusRef = ref<HTMLElement | null>(null);
+const forcePopupRef = ref<InstanceType<typeof StrategyForceCommandPopup> | null>(null);
 const intelDialogVisible = ref(false);
 const intelDialogTarget = ref<EntityIntelTarget | null>(null);
-const hoverIntelStyle = ref<{ left: string; top: string } | { display: "none" }>({ display: "none" });
+const hoverIntelStyle = ref<
+  { display: "none" } | { position: "fixed"; left: string; top: string; zIndex: string }
+>({ display: "none" });
 let previewRequestSerial = 0;
 
 const apiMode = computed(() => strategyApiDiagnostics.mode);
@@ -167,9 +201,11 @@ const lastRequest = computed(() => strategyApiDiagnostics.last);
 const usingMockFallback = computed(() => strategyApiDiagnostics.usingMockFallback);
 
 const dateText = computed(() => {
-  if (!state.value) return "—";
+  if (!state.value) return " —";
   const d = state.value.date;
-  return `${d.year}年${d.month}月${d.day}日`;
+  const month = String(d.month).padStart(2, " ");
+  const day = String(d.day).padStart(2, " ");
+  return ` ${d.year}年${month}月${day}日`;
 });
 
 const selectedUnit = computed(
@@ -179,6 +215,33 @@ const selectedUnit = computed(
 const selectedStronghold = computed(
   () => state.value?.strongholds.find((s) => s.id === selectedStrongholdId.value) ?? null
 );
+
+const popupStronghold = computed(() => {
+  if (!menuAnchor.value || !state.value) return null;
+  return (
+    state.value.strongholds.find(
+      (s) => s.x === menuAnchor.value!.x && s.y === menuAnchor.value!.y
+    ) ?? null
+  );
+});
+
+const canSiegePopupStronghold = computed(() => {
+  const unit = selectedUnit.value;
+  const sh = popupStronghold.value;
+  const playerForceId = state.value?.playerForceId;
+  if (!unit || !sh || playerForceId == null) return false;
+  if (sh.forceId === playerForceId) return false;
+  const dist = Math.abs(unit.x - sh.x) + Math.abs(unit.y - sh.y);
+  return dist <= 1;
+});
+
+const canExpeditionStronghold = computed(() => {
+  const sh = selectedStronghold.value;
+  const playerForceId = state.value?.playerForceId;
+  if (!sh || playerForceId == null) return false;
+  if (sh.forceId !== playerForceId || !sh.isLordResidence) return false;
+  return !state.value?.units.some((u) => u.soldiers > 0 && u.x === sh.x && u.y === sh.y);
+});
 
 const selectedConvoy = computed(
   () => state.value?.supplyConvoys.find((c) => c.id === selectedConvoyId.value) ?? null
@@ -198,8 +261,51 @@ const playerForce = computed(
     state.value?.forces.find((f) => f.id === state.value!.playerForceId) ?? null
 );
 
+const lordResidenceName = computed(() => {
+  if (!state.value) return null;
+  const fromLord = state.value.lord.residenceStrongholdName?.trim();
+  if (fromLord) return fromLord;
+  const atLord = state.value.strongholds.find(
+    (s) =>
+      s.forceId === state.value!.playerForceId &&
+      s.x === state.value!.lord.x &&
+      s.y === state.value!.lord.y
+  );
+  return atLord?.name ?? null;
+});
+
+const playerLordName = computed(() => state.value?.lord.name?.trim() ?? null);
+
+const playerForceStats = computed(() => {
+  const force = playerForce.value;
+  if (!force || !state.value) return null;
+  const { forces, strongholds, units, characters, lord } = state.value;
+  const lordName = lord.name;
+  return {
+    strongholdCount: countRealmStrongholds(force.id, forces, strongholds),
+    ownStrongholdCount: countOwnStrongholds(force.id, strongholds),
+    characterCount: countRealmCharacters(force.id, forces, strongholds, units, {
+      characters,
+      forceCharacterCount: force.characterCount,
+      lordName,
+    }),
+    ownCharacterCount: countOwnCharacters(force.id, strongholds, units, {
+      characters,
+      lordName,
+    }),
+    prestige: force.prestige ?? 0,
+    orthodoxy: force.orthodoxy ?? 0,
+  };
+});
+
 /** 地图右下角：势力 / 封地 / 外交 着色模式。 */
 const mapColorMode = ref<StrategyMapColorMode>("Realm");
+
+/** 默认战略（暂停）；进行 = 自动推进（后续实装）。 */
+const gamePaused = ref(true);
+
+/** 倍速占位；后续实装自动推进间隔。 */
+const gameSpeed = ref<1 | 2 | 4>(1);
 
 /** M4 可改为从难度/设置读取；M3 起可接入同盟势力列表。 */
 const routeVisibilityContext = computed(() => ({
@@ -216,10 +322,9 @@ function cellEntity<T extends { x: number; y: number }>(items: T[], x: number, y
   return cellEntities(items, x, y)[0] ?? null;
 }
 
-/** 底栏情报：仅跟随鼠标悬停格（不用选中/固定悬浮格）。 */
+/** 底栏情报：跟随鼠标悬停格；栏位始终显示。 */
 const intelBarX = computed(() => hoverCell.value?.x ?? null);
 const intelBarY = computed(() => hoverCell.value?.y ?? null);
-const intelBarVisible = computed(() => intelBarX.value !== null && intelBarY.value !== null);
 
 /** 悬浮框等仍用悬停 > 固定 > 选中格。 */
 const intelBarCell = computed(() => {
@@ -244,14 +349,27 @@ const intelUnit = computed(() =>
     : null
 );
 
+function battlefieldAt(x: number, y: number) {
+  return state.value?.battlefields?.find((b) => b.x === x && b.y === y) ?? null;
+}
+
+function fieldBattlefieldAt(x: number, y: number) {
+  const bf = battlefieldAt(x, y);
+  return bf?.kind === "Field" ? bf : null;
+}
+
 function entityCountAt(x: number, y: number): number {
   if (!state.value) return 0;
-  return (
+  let count =
     cellEntities(state.value.strongholds, x, y).length +
-    cellEntities(state.value.units, x, y).length +
     cellEntities(state.value.supplyConvoys, x, y).length +
-    cellEntities(state.value.messengers, x, y).length
-  );
+    cellEntities(state.value.messengers, x, y).length;
+  if (battlefieldAt(x, y)) {
+    count += 1;
+  } else {
+    count += cellEntities(state.value.units, x, y).length;
+  }
+  return count;
 }
 
 const pinnedCellEntityCount = computed(() => {
@@ -294,15 +412,24 @@ const showHoverIntel = computed(
     pinnedCellEntityCount.value > 0
 );
 
-function hasDualIntelLayout(x: number, y: number): boolean {
-  if (!state.value) return false;
-  const hasStronghold = cellEntities(state.value.strongholds, x, y).length > 0;
-  const hasOther =
-    cellEntities(state.value.units, x, y).length +
+function intelBoxCountAt(x: number, y: number): number {
+  if (!state.value) return 0;
+  let count = 0;
+  if (cellEntities(state.value.strongholds, x, y).length > 0) count += 1;
+  if (fieldBattlefieldAt(x, y)) count += 1;
+  else if (cellEntities(state.value.units, x, y).length > 0) count += 1;
+  if (
     cellEntities(state.value.supplyConvoys, x, y).length +
-    cellEntities(state.value.messengers, x, y).length >
-    0;
-  return hasStronghold && hasOther;
+      cellEntities(state.value.messengers, x, y).length >
+    0
+  ) {
+    count += 1;
+  }
+  return count;
+}
+
+function hasMultiIntelLayout(x: number, y: number): boolean {
+  return intelBoxCountAt(x, y) > 1;
 }
 
 function estimateHoverIntelPopupSize(): { width: number; height: number } {
@@ -310,8 +437,12 @@ function estimateHoverIntelPopupSize(): { width: number; height: number } {
   if (el && el.offsetWidth > 0 && el.offsetHeight > 0) {
     return { width: el.offsetWidth, height: el.offsetHeight };
   }
-  if (intelPinnedCell.value && hasDualIntelLayout(intelPinnedCell.value.x, intelPinnedCell.value.y)) {
-    return { width: HOVER_INTEL_W * 2 + HOVER_INTEL_DUAL_GAP, height: HOVER_INTEL_H };
+  if (intelPinnedCell.value && hasMultiIntelLayout(intelPinnedCell.value.x, intelPinnedCell.value.y)) {
+    const boxCount = intelBoxCountAt(intelPinnedCell.value.x, intelPinnedCell.value.y);
+    return {
+      width: HOVER_INTEL_W * boxCount + HOVER_INTEL_DUAL_GAP * Math.max(0, boxCount - 1),
+      height: HOVER_INTEL_H,
+    };
   }
   return { width: HOVER_INTEL_W, height: HOVER_INTEL_H };
 }
@@ -409,6 +540,10 @@ function updateHoverIntelPosition() {
   });
 }
 
+function panelCountFromDom(...elements: (Element | null)[]): number {
+  return elements.filter(Boolean).length;
+}
+
 function logHoverIntelLayoutAfterLayout(
   placement: {
     left: number;
@@ -426,12 +561,14 @@ function logHoverIntelLayoutAfterLayout(
 
   const layerEl = hoverIntelLayerRef.value;
   const strongholdEl = layerEl?.querySelector(".intel-box--stronghold") ?? null;
-  const otherEl = layerEl?.querySelector(".intel-box--other") ?? null;
+  const militaryEl = layerEl?.querySelector(".intel-box--military") ?? null;
+  const civilEl = layerEl?.querySelector(".intel-box--civil") ?? null;
   const singleEl =
-    layerEl?.querySelector(".cell-intel-stack > .intel-box:not(.intel-box--stronghold):not(.intel-box--other)") ??
-    null;
+    layerEl?.querySelector(
+      ".cell-intel-stack > .intel-box:not(.intel-box--stronghold):not(.intel-box--military):not(.intel-box--civil)"
+    ) ?? null;
 
-  const dualLayout = Boolean(strongholdEl && otherEl);
+  const multiLayout = Boolean(strongholdEl || militaryEl || civilEl) && panelCountFromDom(strongholdEl, militaryEl, civilEl) > 1;
 
   logHoverIntelLayoutDebug({
     gridCell: { x: intelPinnedCell.value.x, y: intelPinnedCell.value.y },
@@ -469,11 +606,11 @@ function logHoverIntelLayoutAfterLayout(
     rawTop: placement.rawTop,
     containerScreen: rectToScreenDebug(layerEl),
     strongholdBoxScreen: rectToScreenDebug(strongholdEl),
-    otherBoxScreen: rectToScreenDebug(otherEl),
-    singleBoxScreen: dualLayout ? null : rectToScreenDebug(singleEl),
+    otherBoxScreen: rectToScreenDebug(militaryEl ?? civilEl),
+    singleBoxScreen: multiLayout ? null : rectToScreenDebug(singleEl),
     placement,
     popupSize,
-    dualLayout,
+    dualLayout: multiLayout,
   });
 }
 
@@ -484,18 +621,6 @@ watch([showHoverIntel, intelPinnedCell, () => popupMode.value], updateHoverIntel
 function onViewportChange() {
   updateHoverIntelPosition();
 }
-
-const intelConvoy = computed(() =>
-  state.value && intelX.value !== null && intelY.value !== null
-    ? cellEntity(state.value.supplyConvoys, intelX.value, intelY.value)
-    : null
-);
-
-const intelMessenger = computed(() =>
-  state.value && intelX.value !== null && intelY.value !== null
-    ? cellEntity(state.value.messengers, intelX.value, intelY.value)
-    : null
-);
 
 const intelRoad = computed(() => {
   if (!state.value || intelX.value === null || intelY.value === null) return null;
@@ -523,19 +648,28 @@ const intelBarStronghold = computed(() =>
 );
 
 const popupUsesCorner = computed(
-  () => popupMode.value === "moveSelect" || popupMode.value === "attackSelect"
+  () =>
+    popupMode.value === "moveSelect" ||
+    popupMode.value === "attackSelect" ||
+    popupMode.value === "mergeSelect" ||
+    popupMode.value === "splitSelect"
 );
 
-const cornerHintMode = computed((): "moveSelect" | "attackSelect" =>
-  popupMode.value === "attackSelect" ? "attackSelect" : "moveSelect"
-);
+const cornerHintMode = computed((): "moveSelect" | "attackSelect" | "mergeSelect" | "splitSelect" => {
+  if (popupMode.value === "attackSelect") return "attackSelect";
+  if (popupMode.value === "mergeSelect") return "mergeSelect";
+  if (popupMode.value === "splitSelect") return "splitSelect";
+  return "moveSelect";
+});
 
 const menuPopupMode = computed(() => {
   const mode = popupMode.value;
   if (
     mode === "none" ||
     mode === "moveSelect" ||
-    mode === "attackSelect"
+    mode === "attackSelect" ||
+    mode === "mergeSelect" ||
+    mode === "splitSelect"
   ) {
     return null;
   }
@@ -895,6 +1029,14 @@ const popupStyle = computed(() => {
   return { left: `${left}px`, top: `${top}px` };
 });
 
+/** 指令菜单 tooltip：菜单在左半屏时向右弹出，否则向左。 */
+const commandTooltipSide = computed<"left" | "right">(() => {
+  if (!menuAnchor.value || !mapPanelRef.value) return "right";
+  const rect = mapPanelRef.value.getBoundingClientRect();
+  const mid = rect.left + rect.width / 2;
+  return menuAnchor.value.screenX < mid ? "right" : "left";
+});
+
 function clearMapHoverState() {
   onHoverCell(null);
   intelPinnedCell.value = null;
@@ -954,17 +1096,133 @@ function handleBeginAttack() {
   onBeginAttack();
 }
 
+function handleBeginMerge() {
+  onBeginMerge();
+}
+
+function handleBeginSplit() {
+  if (!selectedUnit.value?.composition.length) {
+    void notifyActionBlocked("无法分兵", "该部队没有可拆子编制");
+    return;
+  }
+  splitDialogVisible.value = true;
+}
+
+function handleBeginExpedition() {
+  if (!canExpeditionStronghold.value) {
+    void notifyActionBlocked("无法出征", "仅当主居城且据点格无地图军时可出征");
+    return;
+  }
+  expeditionDialogVisible.value = true;
+}
+
+async function handleSplitDialogConfirm(payload: { subUnitIds: number[]; unitName?: string }) {
+  pendingSplitSubUnitIds.value = payload.subUnitIds;
+  pendingSplitUnitName.value = payload.unitName;
+  splitDialogVisible.value = false;
+  enterSplitSpawnSelection();
+}
+
+async function handleExpeditionConfirm(payload: {
+  unitName?: string;
+  commanderId: number;
+  composition: import("@/api/strategyTypes").StrategyDeployCompositionEntry[];
+}) {
+  const sh = selectedStronghold.value;
+  if (!sh) return;
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await deployFromStronghold(sh.id, payload);
+    info.value = `已从 ${sh.name} 出征`;
+    onCancel();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "出征失败";
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function executeMerge(sourceUnitId: number, targetUnitId: number) {
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await mergeUnits(sourceUnitId, targetUnitId);
+    info.value = "部队已合并";
+    pendingMergeTargetUnitId.value = null;
+    onCancel();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "合并失败";
+    pendingMergeTargetUnitId.value = null;
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function executeSplit(unitId: number, target: StrategyMoveTarget, subUnitIds: number[], unitName?: string) {
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await splitUnit(unitId, subUnitIds, target.x, target.y, unitName);
+    info.value = `已在 (${target.x}, ${target.y}) 分兵`;
+    pendingSplitSubUnitIds.value = [];
+    onCancel();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "分兵失败";
+    pendingSplitSubUnitIds.value = [];
+    onCancel();
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleSiegeOrder(mode: "Assault" | "Encircle") {
+  const unitId = selectedUnitId.value;
+  const sh = popupStronghold.value;
+  if (unitId === null || !sh) return;
+
+  const reason = siegeApBlockReason(selectedUnit.value);
+  if (reason) {
+    void notifyActionBlocked("无法攻城", reason);
+    return;
+  }
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await orderUnitSiege(unitId, sh.id, mode);
+    info.value = mode === "Assault" ? `已对 ${sh.name} 下达强攻` : `已对 ${sh.name} 下达包围`;
+    onCancel();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "攻城指令失败";
+  } finally {
+    loading.value = false;
+  }
+}
+
 function handleSelectUnit(payload: { unitId: number; screenX: number; screenY: number }) {
+  closeForceCommandMenu();
   logStrategyMapCoords("select-unit", payload);
   onSelectUnit(payload);
+
+  if (stateId.value === "mergeTargetSelect") {
+    const targetId = pendingMergeTargetUnitId.value;
+    const sourceId = selectedUnitId.value;
+    if (targetId && sourceId !== null && targetId !== sourceId) {
+      void executeMerge(sourceId, targetId);
+    }
+  }
 }
 
 function handleSelectStronghold(payload: { strongholdId: number; screenX: number; screenY: number }) {
+  closeForceCommandMenu();
   logStrategyMapCoords("select-stronghold", payload);
   onSelectStronghold(payload);
 }
 
 function handleSelectConvoy(payload: { convoyId: number; screenX: number; screenY: number }) {
+  closeForceCommandMenu();
   logStrategyMapCoords("select-convoy", payload);
   onSelectConvoy(payload);
 }
@@ -991,6 +1249,15 @@ async function handleSelectCell(payload: { x: number; y: number; screenX: number
     if (battlePreview.value) {
       onBattlePreviewReady();
       battleConfirmVisible.value = true;
+    }
+    return;
+  }
+
+  if (stateId.value === "splitSpawnSelect") {
+    const unitId = selectedUnitId.value;
+    const subUnitIds = [...pendingSplitSubUnitIds.value];
+    if (unitId !== null && subUnitIds.length > 0) {
+      await executeSplit(unitId, target, subUnitIds, pendingSplitUnitName.value);
     }
     return;
   }
@@ -1089,6 +1356,17 @@ function showResolvedBattle(result: StrategyBattleResult) {
 }
 
 function pushNotification(notification: StrategyPendingNotification) {
+  if (notification.kind === "battle" && notification.battleResult) {
+    const key = `${notification.battleResult.resolutionSeed}:${notification.battleResult.attackerUnitId}:${notification.battleResult.defenderUnitId}`;
+    const exists = pendingNotifications.value.some(
+      (item) =>
+        item.kind === "battle" &&
+        item.battleResult &&
+        `${item.battleResult.resolutionSeed}:${item.battleResult.attackerUnitId}:${item.battleResult.defenderUnitId}` === key
+    );
+    if (exists) return;
+  }
+
   pendingNotifications.value = [...pendingNotifications.value, notification];
 }
 
@@ -1097,18 +1375,55 @@ function openSettlementDialog(event: StrategyEvent) {
   settlementDialogVisible.value = true;
 }
 
+function openEventDetailDialog(event: StrategyEvent) {
+  const category =
+    event.category === "StrategicReportArrived" && event.detailCategory
+      ? event.detailCategory === "SiegeEncircle"
+        ? "围城开始"
+        : event.detailCategory === "SiegeAssault"
+          ? "强攻开始"
+          : messageCategoryLabel(event.detailCategory)
+      : messageCategoryLabel(event.category);
+  eventDetailTitle.value = category;
+  eventDetailText.value =
+    event.category === "StrategicReportArrived"
+      ? strategicReportDetailText(event)
+      : event.message;
+  eventDetailVisible.value = true;
+}
+
 function handleNotificationOpen(notification: StrategyPendingNotification) {
   pendingNotifications.value = pendingNotifications.value.filter(
     (item) => item.id !== notification.id
   );
 
   if (notification.kind === "battle" && notification.battleResult) {
+    const br = notification.battleResult;
+    if (
+      (br.engagementKind === "SiegeEncircle" || br.engagementKind === "SiegeAssault")
+      && br.attackerCasualties === 0
+      && br.defenderCasualties === 0
+      && br.logEntries?.length === 1
+    ) {
+      openEventDetailDialog({
+        category: "StrategicReportArrived",
+        message: br.logEntries[0]?.message ?? `${br.attackerName} 对 ${br.defenderName} 发动攻城。`,
+        brief: notification.brief,
+        detailCategory: br.engagementKind,
+      } as StrategyEvent);
+      return;
+    }
     showResolvedBattle(notification.battleResult);
     return;
   }
 
   if (notification.kind === "economy" && notification.event) {
     openSettlementDialog(notification.event);
+    return;
+  }
+
+  if (notification.event) {
+    openEventDetailDialog(notification.event);
   }
 }
 
@@ -1117,6 +1432,34 @@ function handlePopupCancel() {
   battleConfirmVisible.value = false;
   resetMovePath();
   onCancel();
+}
+
+function toggleForceCommandMenu() {
+  forceCommandVisible.value = !forceCommandVisible.value;
+}
+
+function closeForceCommandMenu() {
+  forceCommandVisible.value = false;
+}
+
+function openForceIntelFromMenu() {
+  closeForceCommandMenu();
+  intelSystemInitialTab.value = "force";
+  intelSystemVisible.value = true;
+}
+
+function openIntelSystemDialog() {
+  intelSystemInitialTab.value = "force";
+  intelSystemVisible.value = true;
+}
+
+function isInsideForcePopup(target: EventTarget | null): boolean {
+  if (!(target instanceof Node)) return false;
+  const forceEl = forcePopupRef.value?.$el as HTMLElement | undefined;
+  const statusEl = forceStatusRef.value;
+  return Boolean(
+    (forceEl && forceEl.contains(target)) || (statusEl && statusEl.contains(target))
+  );
 }
 
 function isInsideMapPopup(target: EventTarget | null): boolean {
@@ -1133,10 +1476,21 @@ function isBlockingOverlayTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest(".el-overlay, .el-message-box"));
 }
 
+/** 侧栏调试区、顶部提示条等 UI 不应触发「点空白取消地图 Popup」。 */
+function isInsideProtectedChrome(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest(".side-panel, .error-bar"));
+}
+
 function handleGlobalPointerDown(event: PointerEvent) {
+  if (forceCommandVisible.value && !isInsideForcePopup(event.target)) {
+    closeForceCommandMenu();
+  }
+
   if (popupMode.value === "none") return;
   if (isInsideMapPopup(event.target)) return;
   if (isBlockingOverlayTarget(event.target)) return;
+  if (isInsideProtectedChrome(event.target)) return;
   if (popupUsesCorner.value && mapCanvasRef.value?.containsPointerTarget(event.target)) return;
 
   event.preventDefault();
@@ -1187,12 +1541,12 @@ async function refreshMovementTrace() {
   }
 }
 
-async function loadGame() {
+async function fetchGameState() {
   loading.value = true;
   error.value = "";
   info.value = "";
   try {
-    state.value = await loadScenario("mini_kanto");
+    state.value = await getStrategyState();
     selectedUnitId.value = null;
     selectedStrongholdId.value = null;
     selectedConvoyId.value = null;
@@ -1212,6 +1566,35 @@ async function loadGame() {
       info.value = "当前为 Mock 模式。";
     }
   } catch (e) {
+    error.value = e instanceof Error ? e.message : "读取世界状态失败";
+  } finally {
+    loading.value = false;
+    await refreshMovementTrace();
+  }
+}
+
+/** 开发用：从剧本 JSON 重新初始化后端内存仿真。 */
+async function reloadScenario() {
+  loading.value = true;
+  error.value = "";
+  info.value = "";
+  try {
+    state.value = await loadScenario("mini_kanto");
+    selectedUnitId.value = null;
+    selectedStrongholdId.value = null;
+    selectedConvoyId.value = null;
+    selectedCell.value = null;
+    battleConfirmVisible.value = false;
+    battleResultVisible.value = false;
+    intelDialogVisible.value = false;
+    eventFeed.value = [];
+    pendingNotifications.value = [];
+    settlementDialogVisible.value = false;
+    settlementDetail.value = null;
+    mapInteraction.reset();
+    resetMovePath();
+    info.value = "已重新加载剧本（世界已初始化）";
+  } catch (e) {
     error.value = e instanceof Error ? e.message : "加载剧本失败";
   } finally {
     loading.value = false;
@@ -1221,14 +1604,15 @@ async function loadGame() {
 
 function switchApiMode(mode: StrategyApiMode) {
   setApiMode(mode);
-  loadGame();
+  void fetchGameState();
 }
 
 function appendEvents(events: StrategyEvent[]) {
   if (!events.length) return;
   eventFeed.value = [...eventFeed.value, ...events].slice(-80);
+  const playerForceId = state.value?.playerForceId;
   for (const evt of events) {
-    const trayItem = notificationFromEvent(evt);
+    const trayItem = notificationFromEvent(evt, playerForceId, state.value ?? undefined);
     if (trayItem) pushNotification(trayItem);
   }
 }
@@ -1240,15 +1624,6 @@ async function onAdvanceDay() {
     const response = await advanceDay();
     state.value = response.state;
     appendEvents(response.events ?? []);
-    if (response.resolvedBattles.length > 0) {
-      for (const battle of response.resolvedBattles) {
-        pushNotification(notificationFromBattle(battle));
-      }
-      info.value =
-        response.resolvedBattles.length > 1
-          ? `本日共 ${response.resolvedBattles.length} 场战斗已结算`
-          : "战斗已结算";
-    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : "推进日期失败";
   } finally {
@@ -1297,16 +1672,7 @@ async function onLoadSave() {
 onMounted(() => {
   window.addEventListener("pointerdown", handleGlobalPointerDown, true);
   window.addEventListener("resize", updateHoverIntelPosition);
-  setStrategySessionRecoveryHandler((recovered) => {
-    state.value = recovered;
-    selectedUnitId.value = null;
-    selectedStrongholdId.value = null;
-    selectedConvoyId.value = null;
-    selectedCell.value = null;
-    mapInteraction.reset();
-    info.value = "WebApi 已重启，已自动重新加载 mini_kanto 剧本";
-  });
-  void loadGame();
+  void fetchGameState();
 });
 
 onBeforeUnmount(() => {
@@ -1317,27 +1683,23 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="strategy-page">
-    <header class="strategy-toolbar">
-      <div class="toolbar-left">
-        <h2 class="title">{{ state?.map.name ?? "策略模式" }}</h2>
-      </div>
-
-      <div class="toolbar-right">
-        <el-button-group>
-          <el-button disabled title="M2-c 占位">⏸</el-button>
-          <el-button type="primary" :loading="loading" @click="onAdvanceDay">▶ 推进 1 日</el-button>
-        </el-button-group>
-        <el-button :loading="loading" @click="loadGame">重新加载</el-button>
-        <el-button :loading="loading" @click="onSaveGame">存档</el-button>
-        <el-button :loading="loading" @click="onLoadSave">读档</el-button>
-      </div>
-    </header>
-
     <el-alert v-if="info" type="info" :title="info" show-icon :closable="false" class="error-bar" />
     <el-alert v-if="error" type="error" :title="error" show-icon :closable="false" class="error-bar" />
 
     <div class="strategy-body">
       <aside class="side-panel">
+        <h3>调试</h3>
+        <el-button size="small" :loading="loading" @click="reloadScenario">重新加载剧本</el-button>
+        <el-button
+          type="primary"
+          size="small"
+          :loading="loading"
+          class="debug-advance-btn"
+          @click="onAdvanceDay"
+        >
+          ▶ 推进 1 日
+        </el-button>
+
         <h3>API 诊断</h3>
         <ul class="diag-list">
           <li>模式：<code>{{ apiMode }}</code></li>
@@ -1454,21 +1816,81 @@ onBeforeUnmount(() => {
             @click.stop
             @wheel.stop
           >
-            <div class="map-message-zone">
-              <StrategyMessageFeedToolbar
-                v-model:show-player="showPlayerMessages"
-                v-model:show-world="showWorldMessages"
-                @open-dialog="messageDialogVisible = true"
-              />
-              <StrategyEventFeed :events="scopedEventFeed" />
+            <div class="map-top-left">
+              <div class="map-message-column">
+                <div class="map-time-control map-float-panel">
+                  <span class="date">{{ dateText }}</span>
+                  <el-radio-group v-model="gameSpeed" size="small" class="speed-radios">
+                    <el-radio-button :label="1" title="1 倍速（后续实装）">▶</el-radio-button>
+                    <el-radio-button :label="2" title="2 倍速（后续实装）">▶▶</el-radio-button>
+                    <el-radio-button :label="4" title="4 倍速（后续实装）">▶▶▶</el-radio-button>
+                  </el-radio-group>
+                </div>
+                <div class="map-message-zone">
+                  <StrategyMessageFeedToolbar
+                    v-model:show-player="showPlayerMessages"
+                    v-model:show-world="showWorldMessages"
+                    @open-dialog="messageDialogVisible = true"
+                  />
+                  <StrategyEventFeed :events="scopedEventFeed" />
+                </div>
+              </div>
+              <div
+                v-if="playerForce && playerForceStats"
+                class="map-top-status map-float-panel"
+              >
+                <div
+                  ref="forceStatusRef"
+                  class="map-top-status__force map-top-status__force--clickable"
+                  title="点击打开势力指令"
+                  @click.stop="toggleForceCommandMenu"
+                >
+                  <div class="force-identity">
+                    <span class="force-name">{{ playerForce.name }}</span>
+                    <span v-if="playerLordName" class="force-lord" title="当主">
+                      👑 {{ playerLordName }}
+                    </span>
+                    <span v-if="lordResidenceName" class="force-residence" title="居城">
+                      🏠 {{ lordResidenceName }}
+                    </span>
+                    <span class="force-stat" title="威望">
+                      ⭐ {{ playerForceStats.prestige }}
+                    </span>
+                    <span class="force-stat" title="正统">
+                      📜 {{ playerForceStats.orthodoxy }}
+                    </span>
+                  </div>
+                  <div class="force-resources">
+                    <span class="force-stat" title="金钱">
+                      💰 {{ formatMoneyKan(playerForce.money) }}
+                    </span>
+                    <span class="force-stat" title="粮食">
+                      🌾 {{ formatFoodKoku(playerForce.food) }}
+                    </span>
+                    <span class="force-stat" title="据点数（封地合计 · 本势力）">
+                      🏯 {{ playerForceStats.strongholdCount }}
+                      <span class="force-stat-sub">({{ playerForceStats.ownStrongholdCount }})</span>
+                    </span>
+                    <span class="force-stat" title="将领数（封地合计 · 本势力）">
+                      ⚔ {{ playerForceStats.characterCount }}
+                      <span class="force-stat-sub">({{ playerForceStats.ownCharacterCount }})</span>
+                    </span>
+                  </div>
+                </div>
+                <StrategyForceCommandPopup
+                  v-if="forceCommandVisible && playerForce"
+                  ref="forcePopupRef"
+                  class="map-force-command-layer"
+                  :force-name="playerForce.name"
+                  tooltip-side="right"
+                  @show-intel="openForceIntelFromMenu"
+                  @cancel="closeForceCommandMenu"
+                />
+              </div>
             </div>
-            <div class="map-top-status-float">
-              <span class="date">{{ dateText }}</span>
-              <template v-if="playerForce">
-                <span class="force-name">{{ playerForce.name }}</span>
-                <span>💰 {{ formatMoney(playerForce.money) }}</span>
-                <span>🌾 {{ formatFoodGo(playerForce.food) }}</span>
-              </template>
+            <div class="map-top-actions map-float-panel">
+              <el-button size="small" @click="openIntelSystemDialog">情报</el-button>
+              <el-button size="small" @click="systemMenuVisible = true">系统</el-button>
             </div>
           </div>
 
@@ -1479,25 +1901,52 @@ onBeforeUnmount(() => {
             @click.stop
             @wheel.stop
           >
-            <div class="map-bottom-notify">
-              <StrategyNotificationTray
-                :notifications="pendingNotifications"
-                @open="handleNotificationOpen"
-              />
+            <div class="map-bottom-left">
+              <div class="map-bottom-left-panel">
+                <div v-if="pendingNotifications.length" class="map-bottom-notify">
+                  <StrategyNotificationTray
+                    :notifications="pendingNotifications"
+                    @open="handleNotificationOpen"
+                  />
+                </div>
+                <StrategyIntelBar
+                  class="map-bottom-intel"
+                  :world-state="state"
+                  :x="intelBarX"
+                  :y="intelBarY"
+                  :terrain-name="intelTileInfo.terrainName"
+                  :region-name="intelTileInfo.regionName"
+                  :road-name="intelRoad?.typeName ?? null"
+                  :road-level="intelRoad?.level ?? null"
+                  :stronghold="intelBarStronghold"
+                  :landmark-name="intelLandmark?.name ?? null"
+                />
+              </div>
             </div>
-            <div class="map-bottom-row" :class="{ 'map-bottom-row--no-intel': !intelBarVisible }">
-              <StrategyIntelBar
-                v-if="intelBarVisible"
-                class="map-bottom-intel"
-                :world-state="state"
-                :x="intelBarX"
-                :y="intelBarY"
-                :terrain-name="intelTileInfo.terrainName"
-                :region-name="intelTileInfo.regionName"
-                :stronghold="intelBarStronghold"
-                :landmark-name="intelLandmark?.name ?? null"
-              />
-              <StrategyMapViewControls v-model="mapColorMode" />
+            <div class="map-bottom-right">
+              <div class="map-game-pace map-float-panel">
+                <el-button
+                  v-if="gamePaused"
+                  type="primary"
+                  size="large"
+                  class="game-pace-btn"
+                  title="进入进行（自动推进，后续实装）"
+                  @click="gamePaused = false"
+                >
+                  进行
+                </el-button>
+                <el-button
+                  v-else
+                  type="primary"
+                  size="large"
+                  class="game-pace-btn"
+                  title="进入战略（暂停，手动操作）"
+                  @click="gamePaused = true"
+                >
+                  战略
+                </el-button>
+              </div>
+              <StrategyMapViewControls v-model="mapColorMode" class="map-bottom-view" />
             </div>
           </div>
 
@@ -1510,9 +1959,19 @@ onBeforeUnmount(() => {
             :entity-name="popupEntityName"
             :x="menuAnchor.x"
             :y="menuAnchor.y"
+            :unit="selectedUnit"
+            :tooltip-side="commandTooltipSide"
+            :can-siege="canSiegePopupStronghold"
+            :siege-stronghold-id="popupStronghold?.id ?? null"
+            :can-expedition="canExpeditionStronghold"
             @begin-move="handleBeginMove"
             @begin-attack="handleBeginAttack"
             @begin-directive="handleBeginDirective"
+            @begin-merge="handleBeginMerge"
+            @begin-split="handleBeginSplit"
+            @begin-expedition="handleBeginExpedition"
+            @siege-assault="handleSiegeOrder('Assault')"
+            @siege-encircle="handleSiegeOrder('Encircle')"
             @show-intel="openIntelDialog"
             @cancel="handlePopupCancel"
           />
@@ -1551,6 +2010,8 @@ onBeforeUnmount(() => {
     <StrategyBattleResultDialog
       :visible="battleResultVisible"
       :result="battleResult"
+      :player-force-id="state?.playerForceId ?? 1"
+      :world-state="state"
       @update:visible="battleResultVisible = $event"
     />
     <StrategyEconomySettlementDialog
@@ -1558,6 +2019,26 @@ onBeforeUnmount(() => {
       :detail="settlementDetail"
       @update:visible="settlementDialogVisible = $event"
     />
+    <el-dialog
+      :model-value="eventDetailVisible"
+      :title="eventDetailTitle"
+      width="560px"
+      align-center
+      destroy-on-close
+      class="strategy-event-detail-dialog strategy-dialog-centered-footer"
+      @update:model-value="eventDetailVisible = $event"
+    >
+      <textarea
+        class="event-detail-textarea"
+        readonly
+        tabindex="-1"
+        :value="eventDetailText"
+        aria-label="消息详情"
+      />
+      <template #footer>
+        <el-button type="primary" @click="eventDetailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
     <StrategyMessageDialog
       :visible="messageDialogVisible"
       :events="scopedEventFeed"
@@ -1571,6 +2052,33 @@ onBeforeUnmount(() => {
       :strongholds="state.strongholds"
       @update:visible="directiveDialogVisible = $event"
       @confirm="handleDirectiveConfirm"
+    />
+    <StrategySplitDialog
+      :visible="splitDialogVisible"
+      :unit="selectedUnit"
+      @update:visible="splitDialogVisible = $event"
+      @confirm="handleSplitDialogConfirm"
+    />
+    <StrategyExpeditionDialog
+      v-if="state"
+      :visible="expeditionDialogVisible"
+      :stronghold="selectedStronghold"
+      :characters="state.characters ?? []"
+      :player-force-id="state.playerForceId"
+      @update:visible="expeditionDialogVisible = $event"
+      @confirm="handleExpeditionConfirm"
+    />
+    <StrategyIntelSystemDialog
+      :visible="intelSystemVisible"
+      :world-state="state"
+      :initial-tab="intelSystemInitialTab"
+      @update:visible="intelSystemVisible = $event"
+    />
+    <StrategySystemMenuDialog
+      :visible="systemMenuVisible"
+      @update:visible="systemMenuVisible = $event"
+      @save="onSaveGame"
+      @load="onLoadSave"
     />
 
     <div
@@ -1598,40 +2106,179 @@ onBeforeUnmount(() => {
 .strategy-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 120px);
-  gap: 12px;
+  height: calc(100vh - 80px);
+  min-width: 960px;
+  min-height: 640px;
+  gap: 8px;
+  overflow: auto;
 }
 
-.strategy-toolbar {
+.map-float-panel {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+
+.map-top-left {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(calc(100% - 120px), 720px);
+}
+
+.map-message-column {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 20em;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.map-time-control {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  flex-shrink: 0;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 10px;
+  box-sizing: border-box;
+}
+
+.map-time-control .date {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+}
+
+.map-time-control .speed-radios {
+  flex-shrink: 0;
+}
+
+.map-time-control .speed-radios :deep(.el-radio-button) {
+  flex: 1 1 0;
+}
+
+.map-time-control .speed-radios :deep(.el-radio-button__inner) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  padding: 4px 0;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+
+.map-top-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 16px;
-  background: #0f172a;
-  color: #e2e8f0;
-  border-radius: 8px;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
-.toolbar-left {
+.map-top-status {
+  position: relative;
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-shrink: 0;
 }
 
-.title {
+.map-top-status__force {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px 12px;
+}
+
+.map-top-status__force .force-identity,
+.map-top-status__force .force-resources {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.map-top-status__force .force-name {
+  font-weight: 600;
+}
+
+.map-top-status__force .force-lord {
+  color: #e2e8f0;
+}
+
+.map-top-status__force .force-residence {
+  color: #94a3b8;
+}
+
+.map-top-status__force .force-stat {
+  color: #cbd5e1;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.map-top-status__force .force-stat-sub {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+@media (min-width: 1366px) {
+  .map-top-status__force {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 12px;
+  }
+}
+
+.map-top-status__force--clickable {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  transition: background 0.15s ease;
+}
+
+.map-top-status__force--clickable:hover {
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.map-force-command-layer {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+}
+
+.map-top-actions :deep(.el-button) {
   margin: 0;
-  font-size: 1.1rem;
 }
 
 .date {
-  color: #94a3b8;
+  color: #e2e8f0;
   font-size: 0.9rem;
+  white-space: nowrap;
 }
 
 .map-column {
   flex: 1;
-  min-width: 0;
+  min-width: 640px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1670,9 +2317,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
+  width: 100%;
+  flex-shrink: 0;
   min-width: 0;
-  max-width: min(480px, 52vw);
+  font-size: 0.82rem;
   pointer-events: none;
 }
 
@@ -1680,33 +2328,40 @@ onBeforeUnmount(() => {
   pointer-events: auto;
 }
 
-.map-top-status-float {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-  flex-shrink: 0;
-  padding: 8px 14px;
-  font-size: 0.88rem;
-  color: #e2e8f0;
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: 10px;
-  backdrop-filter: blur(6px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  pointer-events: auto;
-}
-
-.map-top-status-float .force-name {
-  font-weight: 600;
-}
-
 .map-overlay--bottom {
   bottom: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.map-bottom-left {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.map-bottom-left-panel {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .map-bottom-left-panel {
+    width: 80%;
+  }
+}
+
+@media (min-width: 1200px) {
+  .map-bottom-left-panel {
+    width: 60%;
+  }
 }
 
 .map-bottom-notify {
@@ -1714,29 +2369,46 @@ onBeforeUnmount(() => {
   flex-direction: row;
   justify-content: flex-end;
   align-items: center;
+  /* 与 StrategyIntelBar 水平 padding 对齐，使图标行宽 = 情报栏内容区宽 */
+  padding: 0 14px;
+  box-sizing: border-box;
   pointer-events: auto;
 }
 
-.map-bottom-row {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-end;
-  gap: 10px;
-  min-width: 0;
-}
-
-.map-bottom-row--no-intel {
-  justify-content: flex-end;
-}
-
 .map-bottom-intel {
-  flex: 1;
+  width: 100%;
+  flex: 0 1 auto;
   min-width: 0;
   pointer-events: auto;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
-.map-bottom-row :deep(.map-view-controls) {
+.map-bottom-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.map-game-pace {
+  pointer-events: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.game-pace-btn {
+  min-width: 5.5em;
+  padding: 10px 22px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.map-bottom-view {
+  flex-shrink: 0;
+}
+
+.map-bottom-view :deep(.map-view-controls) {
   pointer-events: auto;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
@@ -1765,6 +2437,16 @@ onBeforeUnmount(() => {
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.side-panel h3:not(:first-child) {
+  margin-top: 16px;
+}
+
+.debug-advance-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
 }
 
 .unit-name {
@@ -1926,5 +2608,26 @@ onBeforeUnmount(() => {
 
 .error-bar {
   margin: 0;
+}
+
+.event-detail-textarea {
+  display: block;
+  width: 100%;
+  min-height: min(360px, 50vh);
+  max-height: min(360px, 50vh);
+  margin: 0;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  resize: none;
+  outline: none;
+  background: #f8fafc;
+  color: #1e293b;
+  font-family: "Yu Mincho", "MS Mincho", "SimSun", serif;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-y: auto;
 }
 </style>

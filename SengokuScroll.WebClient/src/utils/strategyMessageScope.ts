@@ -11,6 +11,7 @@ const PLAYER_FEED_CATEGORIES = new Set([
   "PolicyDispatched",
   "PolicyDelivered",
   "BattleReportArrived",
+  "StrategicReportArrived",
   "MessengerArrived",
   "LordTributeDispatched",
   "LordTributeArrived",

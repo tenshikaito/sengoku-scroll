@@ -1,0 +1,35 @@
+---
+description: 业务代码注释规范 — 新增或修改游戏规则/实体/系统时补充中文业务注释
+globs: SengokuScroll.Domain/**/*,SengokuScroll.Strategy/**/*,SengokuScroll.Application/**/*
+alwaysApply: false
+---
+
+# 业务代码注释规范
+
+## 必须注释的内容
+
+1. **公开 API**：类、方法、枚举值 — 使用 `///` 中文说明**游戏业务含义**（不是重复方法名）
+2. **游戏规则分支**：`if/else`、`switch` 中体现设计决策的条件 — 行前加 `// 业务：...`
+3. **魔法数字/常量**：说明在游戏中的意义（例：`4500` → 溃灭战利品粮草比例 45%）
+4. **System.Update()**：标注日推进各阶段顺序与职责
+
+## 不必注释的内容
+
+- 显而易见的赋值、空检查、`return` 转发
+- 纯 DTO / 接口定义（除非字段有特殊游戏语义）
+- 与业务无关的样板代码
+
+## 示例
+
+```csharp
+/// <summary>败方兵数为 0 时：移除地图单位、分配战利品、判定将领命运。</summary>
+public static DestructionOutcome ResolveAnnihilatedUnit(...)
+
+// 业务：胜方兵力倍于败方时，主将逃脱概率再降 15 点
+if (victor.Soldier > destroyed.Soldier * 2)
+    escapeChance -= 15;
+```
+
+## 变更游戏内容时
+
+同步检查是否需要更新 [docs/game-concepts.md](../../docs/game-concepts.md)。

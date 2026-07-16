@@ -10,6 +10,9 @@ public static class CommonExtensions
     public static bool IsAdjacent(this Point3 p, Point3 other)
         => ManhattanDistance(p, other) == 1;
 
+    public static bool IsSameTile(this Point3 p, Point3 other)
+        => p.X == other.X && p.Y == other.Y;
+
     public static int ManhattanDistance(this Point3 p, Point3 other)
     {
         return Math.Abs(p.X - other.X)

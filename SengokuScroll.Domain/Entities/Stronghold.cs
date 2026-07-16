@@ -145,9 +145,18 @@ public class Stronghold : IHasForce
     public byte TariffTaxRate { get; set; }
 
     /// <summary>
-    /// 城防设施
+    /// 商业值：代表城市贸易规模，并线性限制商人开店数量（CommerceValue / K）。
     /// </summary>
+    public int CommerceValue { get; set; }
+
+    /// <summary>据点订单簿市场（需 Market 设施方可挂单；M4-b 起启用撮合）。</summary>
+    public required StrongholdMarket Market { get; set; }
+
+    /// <summary>城防设施</summary>
     public required List<int> DefenseFacilityIds { get; set; }
+
+    /// <summary>经济设施（Market、奢侈品工坊等；M4-d）。</summary>
+    public required List<int> EconomyFacilityIds { get; set; }
 
     /// <summary>
     /// 保有核心

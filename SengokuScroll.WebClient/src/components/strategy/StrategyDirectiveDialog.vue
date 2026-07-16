@@ -59,6 +59,7 @@ function submit() {
     :title="unit ? `设定方针 — ${unit.name}` : '设定方针'"
     width="420px"
     append-to-body
+    class="strategy-dialog-centered-footer"
     @update:model-value="emit('update:visible', $event)"
   >
     <p v-if="unit" class="hint">部队位置 ({{ unit.x }}, {{ unit.y }})</p>

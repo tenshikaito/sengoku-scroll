@@ -1,5 +1,6 @@
 ﻿namespace SengokuScroll.Domain.Entities;
 
+/// <summary>势力（大名/朝廷）：政体、战略战术、省份与外交关系的顶层实体。</summary>
 public class Force : StrongholdActor
 {
     /// <summary>
@@ -62,6 +63,12 @@ public class Force : StrongholdActor
     /// 外交
     /// </summary>
     public required List<Diplomacy> Diplomacies { get; set; }
+
+    /// <summary>势力内直辖→居城贡赋欠粮（合；M4-d）。</summary>
+    public int InternalArrearsFoodGo { get; set; }
+
+    /// <summary>势力内直辖→居城贡赋欠钱（文；M4-d）。</summary>
+    public int InternalArrearsMoney { get; set; }
 
     public enum ForceStatus : byte
     {

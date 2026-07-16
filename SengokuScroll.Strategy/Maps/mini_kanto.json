@@ -58,36 +58,38 @@
       { "id": 3, "name": "桶狭间", "x": 2, "y": 5 }
     ]
   },
-  "scenario": {
+    "scenario": {
     "startDate": { "year": 1560, "month": 1, "day": 1 },
     "playerForceId": 1,
+    "difficulty": "Normal",
+    "simulationSeed": 15600101,
     "lord": { "name": "织田信长", "strongholdId": 1 },
     "forces": [
-      { "id": 1, "name": "织田", "lordCharacterId": 1, "food": 50000, "money": 12000 },
-      { "id": 2, "name": "今川", "lordCharacterId": 3, "food": 48000, "money": 10000 },
-      { "id": 3, "name": "酒井", "lordCharacterId": 6, "food": 12000, "money": 8000, "status": "InnerVassal", "suzerainForceId": 1 },
-      { "id": 4, "name": "北条支系", "lordCharacterId": 7, "food": 10000, "money": 6000, "status": "InnerVassal", "suzerainForceId": 2 }
+      { "id": 1, "name": "织田", "lordCharacterId": 1, "food": 80000000, "money": 8000000 },
+      { "id": 2, "name": "今川", "lordCharacterId": 3, "food": 70000000, "money": 6000000 },
+      { "id": 3, "name": "酒井", "lordCharacterId": 6, "food": 20000000, "money": 2000000, "status": "InnerVassal", "suzerainForceId": 1 },
+      { "id": 4, "name": "北条支系", "lordCharacterId": 7, "food": 15000000, "money": 1500000, "status": "InnerVassal", "suzerainForceId": 2 }
     ],
     "characters": [
       { "id": 1, "name": "织田信长", "forceId": 1, "strongholdId": 1, "leadership": 96, "power": 82, "birthYear": 1534 },
       { "id": 2, "name": "柴田胜家", "forceId": 1, "leadership": 91, "power": 88, "birthYear": 1522 },
-      { "id": 3, "name": "今川氏真", "forceId": 2, "leadership": 68, "power": 65, "birthYear": 1538 },
+      { "id": 3, "name": "今川氏真", "forceId": 2, "strongholdId": 6, "leadership": 68, "power": 65, "birthYear": 1538 },
       { "id": 4, "name": "林秀贞", "forceId": 1, "strongholdId": 1, "leadership": 72, "politics": 78, "birthYear": 1507 },
       { "id": 5, "name": "北条氏康", "forceId": 2, "strongholdId": 4, "leadership": 88, "power": 75, "birthYear": 1515 },
       { "id": 6, "name": "酒井忠次", "forceId": 3, "strongholdId": 2, "leadership": 85, "power": 80, "birthYear": 1485 },
       { "id": 7, "name": "北条纲成", "forceId": 4, "strongholdId": 5, "leadership": 78, "power": 72, "birthYear": 1510 }
     ],
     "strongholds": [
-      { "id": 1, "name": "清洲", "forceId": 1, "x": 1, "y": 4, "lordId": 0, "food": 15000, "population": 8000, "mayorName": "林秀贞", "morale": 85, "training": 68, "money": 3000000 },
-      { "id": 2, "name": "犬山", "forceId": 3, "x": 2, "y": 2, "lordId": 6, "food": 12000, "population": 6000, "morale": 78, "training": 62, "money": 1500000 },
-      { "id": 3, "name": "冈崎", "forceId": 1, "x": 1, "y": 7, "lordId": 0, "food": 10000, "population": 7000, "morale": 80, "training": 65, "money": 1200000 },
-      { "id": 4, "name": "小田原", "forceId": 2, "x": 8, "y": 5, "lordId": 5, "food": 18000, "population": 12000, "morale": 82, "training": 70, "money": 4000000 },
-      { "id": 5, "name": "骏府", "forceId": 4, "x": 7, "y": 3, "lordId": 7, "food": 14000, "population": 9000, "morale": 79, "training": 64, "money": 2500000 },
-      { "id": 6, "name": "挂川", "forceId": 2, "x": 6, "y": 7, "lordId": 0, "food": 11000, "population": 6500, "morale": 76, "training": 60, "money": 1800000 },
-      { "id": 7, "name": "三河凑", "forceId": 1, "x": 3, "y": 6, "lordId": 0, "food": 8000, "population": 4000, "morale": 74, "training": 58, "money": 800000 },
-      { "id": 8, "name": "伊豆港", "forceId": 2, "x": 8, "y": 8, "lordId": 0, "food": 9000, "population": 5000, "morale": 75, "training": 55, "money": 900000 },
-      { "id": 9, "name": "足助", "forceId": 1, "x": 4, "y": 1, "lordId": 0, "food": 7000, "population": 3500, "morale": 72, "training": 56, "money": 600000 },
-      { "id": 10, "name": "沼津", "forceId": 4, "x": 5, "y": 8, "lordId": 0, "food": 6000, "population": 3000, "morale": 70, "training": 54, "money": 500000 }
+      { "id": 1, "name": "清洲", "forceId": 1, "x": 1, "y": 4, "lordId": 0, "food": 90000000, "population": 48000, "garrisonSoldiers": 1500, "pollTaxRate": 12, "agricultureTaxRate": 28, "commerceTaxRate": 15, "tariffTaxRate": 10, "mayorName": "林秀贞", "morale": 85, "training": 68, "money": 18000000 },
+      { "id": 2, "name": "犬山", "forceId": 3, "x": 2, "y": 2, "lordId": 6, "food": 72000000, "population": 36000, "garrisonSoldiers": 1200, "mayorName": "酒井忠次", "morale": 78, "training": 62, "money": 9000000 },
+      { "id": 3, "name": "冈崎", "forceId": 1, "x": 1, "y": 7, "lordId": 0, "food": 60000000, "population": 42000, "garrisonSoldiers": 1000, "morale": 80, "training": 65, "money": 7200000 },
+      { "id": 4, "name": "小田原", "forceId": 2, "x": 8, "y": 5, "lordId": 5, "food": 108000000, "population": 72000, "garrisonSoldiers": 1800, "pollTaxRate": 11, "agricultureTaxRate": 26, "commerceTaxRate": 14, "tariffTaxRate": 9, "morale": 82, "training": 70, "money": 24000000 },
+      { "id": 5, "name": "骏府", "forceId": 4, "x": 7, "y": 3, "lordId": 7, "food": 84000000, "population": 54000, "garrisonSoldiers": 1200, "morale": 79, "training": 64, "money": 15000000 },
+      { "id": 6, "name": "挂川", "forceId": 2, "x": 6, "y": 7, "lordId": 0, "food": 66000000, "population": 39000, "garrisonSoldiers": 1400, "morale": 76, "training": 60, "money": 10800000 },
+      { "id": 7, "name": "三河凑", "forceId": 1, "x": 3, "y": 6, "lordId": 0, "food": 48000000, "population": 24000, "garrisonSoldiers": 800, "morale": 74, "training": 58, "money": 4800000 },
+      { "id": 8, "name": "伊豆港", "forceId": 2, "x": 8, "y": 8, "lordId": 0, "food": 60000000, "population": 30000, "garrisonSoldiers": 900, "morale": 75, "training": 55, "money": 5400000 },
+      { "id": 9, "name": "足助", "forceId": 1, "x": 4, "y": 1, "lordId": 0, "food": 42000000, "population": 21000, "garrisonSoldiers": 700, "morale": 72, "training": 56, "money": 3600000 },
+      { "id": 10, "name": "沼津", "forceId": 4, "x": 5, "y": 8, "lordId": 0, "food": 36000000, "population": 18000, "garrisonSoldiers": 800, "morale": 70, "training": 54, "money": 3000000 }
     ],
     "units": [
       {
@@ -96,40 +98,60 @@
         "forceId": 1,
         "x": 4,
         "y": 4,
-        "soldiers": 100,
-        "food": 2000,
-        "movement": 10,
+        "soldiers": 3000,
+        "food": 6000000,
+        "movement": 5,
         "commanderId": 2,
         "commanderName": "柴田胜家",
         "morale": 82,
         "training": 72,
-        "money": 500000,
+        "money": 3000000,
         "composition": [
-          { "typeId": 1, "typeName": "足轻", "soldiers": 63 },
-          { "typeId": 2, "typeName": "弓兵", "soldiers": 16 },
-          { "typeId": 3, "typeName": "骑兵", "soldiers": 12 },
-          { "typeId": 4, "typeName": "铁炮", "soldiers": 9 }
+          { "typeId": 1, "typeName": "足轻", "soldiers": 1890 },
+          { "typeId": 2, "typeName": "弓兵", "soldiers": 480 },
+          { "typeId": 3, "typeName": "骑兵", "soldiers": 360 },
+          { "typeId": 4, "typeName": "铁炮", "soldiers": 270 }
         ]
       },
       {
         "id": 2,
         "name": "今川先锋",
         "forceId": 2,
-        "x": 5,
-        "y": 4,
-        "soldiers": 80,
-        "food": 1600,
-        "movement": 10,
+        "x": 8,
+        "y": 6,
+        "soldiers": 2400,
+        "food": 4800000,
+        "movement": 5,
         "commanderId": 3,
         "commanderName": "今川氏真",
         "morale": 78,
         "training": 68,
-        "money": 300000,
+        "money": 1800000,
         "composition": [
-          { "typeId": 1, "typeName": "足轻", "soldiers": 50 },
-          { "typeId": 2, "typeName": "弓兵", "soldiers": 12 },
-          { "typeId": 3, "typeName": "骑兵", "soldiers": 10 },
-          { "typeId": 4, "typeName": "铁炮", "soldiers": 8 }
+          { "typeId": 1, "typeName": "足轻", "soldiers": 1500 },
+          { "typeId": 2, "typeName": "弓兵", "soldiers": 360 },
+          { "typeId": 3, "typeName": "骑兵", "soldiers": 300 },
+          { "typeId": 4, "typeName": "铁炮", "soldiers": 240 }
+        ]
+      },
+      {
+        "id": 21,
+        "name": "今川主力",
+        "forceId": 2,
+        "x": 9,
+        "y": 5,
+        "soldiers": 5500,
+        "food": 11000000,
+        "movement": 5,
+        "commanderName": "今川氏真",
+        "morale": 80,
+        "training": 70,
+        "money": 2500000,
+        "composition": [
+          { "typeId": 1, "typeName": "足轻", "soldiers": 3465 },
+          { "typeId": 2, "typeName": "弓兵", "soldiers": 880 },
+          { "typeId": 3, "typeName": "骑兵", "soldiers": 660 },
+          { "typeId": 4, "typeName": "铁炮", "soldiers": 495 }
         ]
       }
     ]

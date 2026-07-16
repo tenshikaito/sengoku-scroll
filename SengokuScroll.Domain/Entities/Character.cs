@@ -200,12 +200,20 @@ public class Character : CharacterDefinition, IMovable
         /// </summary>
         /// <remarks>表示角色正在参与单位行动、无法执行个人指令</remarks>
         UnitAction,
+
+        /// <summary>被敌方俘虏</summary>
+        Prisoner,
     }
 
     public enum CharacterLocationType : int
     {
+        /// <summary>在战略地图上移动。</summary>
         Map,
+
+        /// <summary>驻留于据点内（设施/城内）。</summary>
         Stronghold,
+
+        /// <summary>编入军事单位同行。</summary>
         Unit
     }
 }

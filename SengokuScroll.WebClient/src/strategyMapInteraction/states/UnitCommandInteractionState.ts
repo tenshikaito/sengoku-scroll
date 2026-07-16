@@ -1,6 +1,7 @@
 import type { MapHoverCellPayload, StrategyMapInteractionContext } from "../types";
 import { StrategyMapInteractionState } from "../StrategyMapInteractionState";
 import { AttackTargetSelectionInteractionState } from "./AttackTargetSelectionInteractionState";
+import { MergeTargetSelectionInteractionState } from "./MergeTargetSelectionInteractionState";
 import { MoveTargetSelectionInteractionState } from "./MoveTargetSelectionInteractionState";
 import { NavigateInteractionState } from "./NavigateInteractionState";
 
@@ -22,6 +23,17 @@ export class UnitCommandInteractionState extends StrategyMapInteractionState {
   override onBeginAttack(ctx: StrategyMapInteractionContext): void {
     ctx.setMoveTarget(null);
     ctx.transitionTo(new AttackTargetSelectionInteractionState());
+  }
+
+  override onBeginMerge(ctx: StrategyMapInteractionContext): void {
+    ctx.setPendingMergeTargetUnitId(null);
+    ctx.setMoveTarget(null);
+    ctx.transitionTo(new MergeTargetSelectionInteractionState());
+  }
+
+  override onBeginSplit(ctx: StrategyMapInteractionContext): void {
+    ctx.clearPendingSplitSubUnitIds();
+    ctx.setMoveTarget(null);
   }
 
   override onCancel(ctx: StrategyMapInteractionContext): void {

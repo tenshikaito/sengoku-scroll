@@ -18,15 +18,22 @@ public class LogisticsCalculatorTests
             LogisticsConstants.DefaultPorterCount,
             LogisticsConstants.DefaultEscortSoldierCount);
 
-        // 50×1.5 + 20×2 = 115 合/日
-        Assert.Equal(115, consumption);
+        // 50×1.5 + 20×3 = 75+60 = 135 合/日
+        Assert.Equal(135, consumption);
     }
 
     [Fact]
     public void UnitDailyFoodConsumption_ScalesWithSoldiers()
     {
-        // 100 兵 × 2 合/人/日 = 200 合
-        Assert.Equal(200, LogisticsCalculator.CalculateUnitDailyFoodConsumption(100));
+        // 100 兵 × 3 合/人/日 = 300 合
+        Assert.Equal(300, LogisticsCalculator.CalculateUnitDailyFoodConsumption(100));
+    }
+
+    [Fact]
+    public void CivilianDailyFoodConsumption_ScalesWithPopulation()
+    {
+        // 1000 民 × 2 合/人/日 = 2000 合
+        Assert.Equal(2000, LogisticsCalculator.CalculateCivilianDailyFoodConsumption(1000));
     }
 }
 
@@ -53,8 +60,8 @@ public class SupplyConvoyActionsTests
 
         SupplyConvoyActions.ApplyDailyTransitConsumption(convoy);
 
-        // 扣除 115 合在途自耗
-        Assert.Equal(4885, convoy.CargoFoodGo);
+        // 扣除 135 合在途自耗
+        Assert.Equal(4865, convoy.CargoFoodGo);
     }
 }
 

@@ -25,6 +25,7 @@ public static class SupplyConvoyActions
     /// <summary>沿路径推进一格；返回是否已抵达终点。</summary>
     public static bool AdvanceOneStep(SupplyConvoy convoy)
     {
+        // 业务：路径已走完则标记抵达
         if (convoy.RoutePoints.Count == 0)
         {
             convoy.Status = SupplyConvoyStatus.Arrived;

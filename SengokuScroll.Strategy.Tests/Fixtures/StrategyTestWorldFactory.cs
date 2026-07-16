@@ -25,11 +25,17 @@ public static class StrategyTestWorldFactory
         => CreateFromWorld(StrategyTestWorldBuilder.BuildLogisticsWorld(unitLocation, unitFood));
 
     /// <summary>从已构建的 <see cref="GameWorld"/> 创建策略测试环境。</summary>
-    public static StrategyTestContext CreateFromWorld(GameWorld world)
+    public static StrategyTestContext CreateFromWorld(
+        GameWorld world,
+        StrategyScenarioMeta? scenarioMeta = null)
     {
-        var simulation = StrategySimulationBootstrap.CreateScope(
-            world,
-            new StrategyScenarioMeta { PlayerForceId = 1, LordUnitId = 1, LordName = "测试当主" });
+        var meta = scenarioMeta ?? new StrategyScenarioMeta
+        {
+            PlayerForceId = 1,
+            LordUnitId = 1,
+            LordName = "测试当主"
+        };
+        var simulation = StrategySimulationBootstrap.CreateScope(world, meta);
         return new StrategyTestContext(
             simulation.World,
             simulation,

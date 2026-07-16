@@ -64,12 +64,22 @@ public sealed class StrategyTributeLedger
         int reportingMonth,
         IReadOnlyList<TributeArrivalRecord> lines)
     {
+        var aggregated = lines
+            .GroupBy(l => l.OriginStrongholdId)
+            .Select(g => new TributeArrivalRecord(
+                g.Key,
+                g.First().OriginName,
+                g.Sum(x => x.Food),
+                g.Sum(x => x.Money)))
+            .OrderBy(l => l.OriginName)
+            .ToList();
+
         return new TributeSettlementSummary(
             reportingYear,
             reportingMonth,
-            lines.Sum(l => l.Food),
-            lines.Sum(l => l.Money),
+            aggregated.Sum(l => l.Food),
+            aggregated.Sum(l => l.Money),
             lines.Count,
-            lines);
+            aggregated);
     }
 }

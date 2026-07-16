@@ -11,12 +11,14 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.5" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SengokuScroll.Application\SengokuScroll.Application.csproj" />
     <ProjectReference Include="..\SengokuScroll.Common\SengokuScroll.Common.csproj" />
     <ProjectReference Include="..\SengokuScroll.Domain\SengokuScroll.Domain.csproj" />
+    <ProjectReference Include="..\SengokuScroll.Localization\SengokuScroll.Localization.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -31,7 +31,10 @@ public interface IStrategyMessengerSystem : IGameSystem
 public class StrategyMessengerSystem(
     IGameContext context,
     StrategyScenarioMeta scenarioMeta,
-    StrategyDayOutcomeBuffer dayOutcomeBuffer) : IStrategyMessengerSystem
+    StrategyDayOutcomeBuffer dayOutcomeBuffer,
+    StrategyPendingBattleReportStore pendingBattleReports,
+    StrategyPendingEventStore pendingEvents,
+    BattleReportDeliveryHelper battleReportDeliveryHelper) : IStrategyMessengerSystem
 {
     /// <summary>在单位系统之后、角色系统之前执行。</summary>
     public int Order { get; } = 25;
@@ -44,6 +47,7 @@ public class StrategyMessengerSystem(
         var convoys = gameData.SupplyConvoys;
         var toRemove = new List<int>();
 
+        // 阶段1：推进在途信使逐格移动
         foreach (var messenger in messengers.Values.ToList())
         {
             if (messenger.Status != MessengerStatus.Moving)
@@ -65,6 +69,7 @@ public class StrategyMessengerSystem(
             }
         }
 
+        // 阶段2：移除已抵达并投递完毕的信使实体
         foreach (var id in toRemove)
             messengers.Remove(id);
     }
@@ -91,6 +96,12 @@ public class StrategyMessengerSystem(
             return;
         }
 
+        if (messenger.PayloadType == MessengerPayloadType.StrategicReport)
+        {
+            NotifyStrategicReportArrived(messenger, gameData);
+            return;
+        }
+
         if (messenger.PayloadType != MessengerPayloadType.FalseIntelligence
             || messenger.TargetConvoyId <= 0
             || !convoys.TryGetValue(messenger.TargetConvoyId, out var convoy))
@@ -98,6 +109,7 @@ public class StrategyMessengerSystem(
             return;
         }
 
+        // 业务：假情报信使抵达后迷惑目标运输队
         MessengerActions.ApplyFalseIntelligence(convoy, messenger);
     }
 
@@ -115,21 +127,50 @@ public class StrategyMessengerSystem(
         });
     }
 
-    /// <summary>战报信使抵达当主所在格：玩家势力写入事件栏。</summary>
+    /// <summary>战报信使抵达目标格：玩家势力写入事件栏并附带完整战报。</summary>
     private void NotifyBattleReportArrived(Messenger messenger, Domain.GameData gameData)
     {
         if (messenger.ForceId != scenarioMeta.PlayerForceId)
             return;
 
-        var lordLocation = StrategyLordHelper.ResolveLocation(gameData, scenarioMeta);
-        if (messenger.Location.X != lordLocation.X || messenger.Location.Y != lordLocation.Y)
+        var battleResult = pendingBattleReports.Take(messenger.Id);
+        if (battleResult is null)
+        {
+            dayOutcomeBuffer.AddEvent(new StrategyEventDto
+            {
+                Category = "BattleReportArrived",
+                Message =
+                    $"📨 战报信使抵达（{messenger.Location.X}, {messenger.Location.Y}）"
+            });
+            return;
+        }
+
+        battleReportDeliveryHelper.NotifyPlayerBattleReportArrivedFromMessenger(
+            battleResult,
+            messenger.Location,
+            gameData);
+    }
+
+    private void NotifyStrategicReportArrived(Messenger messenger, Domain.GameData gameData)
+    {
+        if (messenger.ForceId != scenarioMeta.PlayerForceId)
             return;
 
-        dayOutcomeBuffer.AddEvent(new StrategyEventDto
+        var reportEvent = pendingEvents.Take(messenger.Id);
+        if (reportEvent is null)
         {
-            Category = "BattleReportArrived",
-            Message = $"📨 战报信使抵达当主 {scenarioMeta.LordName}（{lordLocation.X}, {lordLocation.Y}）"
-        });
+            dayOutcomeBuffer.AddEvent(new StrategyEventDto
+            {
+                Category = "StrategicReportArrived",
+                Message = $"📨 情报信使抵达（{messenger.Location.X}, {messenger.Location.Y}）"
+            });
+            return;
+        }
+
+        battleReportDeliveryHelper.NotifyPlayerStrategicReportArrivedFromMessenger(
+            reportEvent,
+            messenger.Location,
+            gameData);
     }
 
     private static string DirectiveLabel(string directive) => directive switch

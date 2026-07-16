@@ -4,10 +4,12 @@ using System.Threading.Channels;
 
 namespace SengokuScroll.Application;
 
+/// <summary>异步命令队列：单读者通道，写入方等待处理结果。</summary>
 public class CommandQueue
 {
     private readonly Channel<CommandEnvelope> channel = Channel.CreateUnbounded<CommandEnvelope>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
+    /// <summary>入队命令并等待处理器完成。</summary>
     public async Task<GameResult> EnqueueAsync(ICommand cmd)
     {
         var env = new CommandEnvelope(cmd);
@@ -24,9 +26,6 @@ public class CommandQueue
 
     public ChannelReader<CommandEnvelope> Reader => channel.Reader;
 
-    /// <summary>
-    /// Mark the queue as complete: no more items will be written. The reader will finish
-    /// after all already-enqueued items are consumed.
-    /// </summary>
+    /// <summary>标记队列完成：不再写入，读者消费完剩余项后结束。</summary>
     public void Complete() => channel.Writer.Complete();
 }
