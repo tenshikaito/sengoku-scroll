@@ -118,7 +118,7 @@ function rowClass(row: Record<string, unknown>) {
   <div class="intel-pane">
     <el-tabs v-model="listPreset" class="layer-tabs layer-tabs--list">
       <el-tab-pane label="状态" name="status" />
-      <el-tab-pane label="物资" name="supplies" />
+      <el-tab-pane label="内政" name="supplies" />
       <el-tab-pane label="军备" name="military" />
     </el-tabs>
 
@@ -157,12 +157,12 @@ function rowClass(row: Record<string, unknown>) {
       </div>
 
       <div v-else-if="detailTab === 'culture'" class="detail-body">
-        <StrategyIntelBasicDescriptions v-if="cultureRows.length" :rows="cultureRows" />
+        <StrategyIntelBasicDescriptions v-if="cultureRows.length" :rows="cultureRows" :column="1" />
         <p v-else class="placeholder">请选择据点。</p>
       </div>
 
       <div v-else-if="detailTab === 'religion'" class="detail-body">
-        <StrategyIntelBasicDescriptions v-if="religionRows.length" :rows="religionRows" />
+        <StrategyIntelBasicDescriptions v-if="religionRows.length" :rows="religionRows" :column="1" />
         <p v-else class="placeholder">请选择据点。</p>
       </div>
 

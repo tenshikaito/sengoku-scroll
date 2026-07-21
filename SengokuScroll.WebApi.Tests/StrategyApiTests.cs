@@ -14,6 +14,24 @@ public class StrategyApiTests : IClassFixture<StrategyWebApplicationFactory>
         => client = factory.CreateClient();
 
     [Fact]
+    public async Task GetMapMaster_ReturnsTerrainGridAndLandmarks()
+    {
+        await client.PostAsJsonAsync("/strategy/load", new LoadScenarioRequest { ScenarioId = "mini_kanto" });
+
+        var response = await client.GetAsync("/strategy/map");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var map = await response.Content.ReadFromJsonAsync<StrategyMapMasterDto>();
+        Assert.NotNull(map);
+        Assert.Equal("mini_kanto", map.ScenarioId);
+        Assert.Equal(400, map.TerrainIds.Count);
+        Assert.Equal(400, map.RegionIds.Count);
+        Assert.Contains(map.Terrains, t => t.Key == "forest");
+        Assert.True(map.RoadCells.Count >= 12);
+        Assert.Equal(3, map.Landmarks.Count);
+    }
+
+    [Fact]
     public async Task LoadScenario_ReturnsWorldState()
     {
         var response = await client.PostAsJsonAsync("/strategy/load", new LoadScenarioRequest
@@ -27,7 +45,7 @@ public class StrategyApiTests : IClassFixture<StrategyWebApplicationFactory>
         Assert.NotNull(state);
         Assert.Equal("mini_kanto", state.ScenarioId);
         Assert.Equal(1560, state.Date.Year);
-        Assert.Equal(10, state.Map.Width);
+        Assert.Equal(20, state.Map.Width);
         Assert.Equal(2, state.Forces.Count);
         Assert.Equal(10, state.Strongholds.Count);
         Assert.Equal(2, state.Units.Count);

@@ -38,6 +38,7 @@ public sealed class StrategyBattleResolutionSystem(
     ITextLocalizer localizer,
     GameRuleConfig rules) : IStrategyBattleResolutionSystem
 {
+    /// <summary>接敌战斗在移动/接敌扫描之后、信使投递当日战报之前结算。</summary>
     public int Order { get; } = 26;
 
     public void Update()

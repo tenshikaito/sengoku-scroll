@@ -1,5 +1,6 @@
 using SengokuScroll.Strategy.Data;
 using SengokuScroll.Strategy.Persistence;
+using SengokuScroll.Strategy.Vision;
 
 namespace SengokuScroll.Strategy.Tests;
 
@@ -18,7 +19,14 @@ public class StrategyWorldSaveTests
         unit.Soldier = 42;
         world.GameData.Forces[1].Money = 99999;
 
-        var save = StrategyWorldSaveService.Capture(world, "mini_kanto", loaded.Meta.PlayerForceId);
+        var ledger = new StrategyVisibilityLedger();
+        ledger.Initialize(world, loaded.Meta);
+
+        var save = StrategyWorldSaveService.Capture(
+            world,
+            "mini_kanto",
+            loaded.Meta.PlayerForceId,
+            ledger);
 
         unit.Location = new Common.Types.Point3(0, 0);
         unit.Soldier = 1;

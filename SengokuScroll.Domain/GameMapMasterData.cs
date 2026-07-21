@@ -21,12 +21,10 @@ public class GameMapMasterData
 
     public required Dictionary<int, ClimateDefinition> Climates { get; set; }
 
+    /// <summary>地图区域定义（气候/收粮等；格点归属见 <see cref="TileMap"/> region 层）。</summary>
     public required Dictionary<int, RegionDefinition> Regions { get; set; }
 
-    /// <summary>政治区域 Id 网格（行优先，与 <see cref="TileMap"/> 同尺寸；0=无）。与道路 region 层独立。</summary>
-    public byte[] PoliticalRegionGrid { get; set; } = [];
-
-    /// <summary>道路类型 Id → 定义（region 层存储道路类型 Id）。</summary>
+    /// <summary>道路类型 Id → 定义（样式与移动力规则；实例格点见 <see cref="GameMapData.Roads"/>）。</summary>
     public required Dictionary<int, RoadDefinition> Roads { get; set; }
 
     public required Dictionary<int, Landmark> Landmarks { get; set; }

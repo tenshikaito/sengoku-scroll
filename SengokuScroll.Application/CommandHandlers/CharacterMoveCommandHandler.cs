@@ -10,13 +10,13 @@ using static SengokuScroll.Domain.GameError;
 
 namespace SengokuScroll.Application.CommandHandlers;
 
-/// <summary>?? RPG ???????????????????</summary>
+/// <summary>下达角色地图移动命令：寻路后写入路径队列并置 Moving 状态（RPG/策略共用）。</summary>
 public partial class CharacterMoveCommandHandler(
     ILogger<CharacterMoveCommandHandler> logger,
     IPathfindingService pathfindingService)
     : CommandHandlerBase, IRequestHandler<CharacterMoveCommand>
 {
-    /// <summary>???????????????????????</summary>
+    /// <summary>校验角色存在、寻路至目标格，将路径入队（首格跳过，由日推进逐步 dequeue）。</summary>
     public GameResult Handle(CharacterMoveCommand cmd, IGameRequestContext context)
     {
         LogParams(cmd.CharacterId, cmd.Location);
@@ -27,7 +27,7 @@ public partial class CharacterMoveCommandHandler(
         if (!character)
             return CharacterError.CharacterNotFound;
 
-        // ??????????????
+        // 业务：寻路失败时不改 ActionStatus，避免卡在 Moving 且无路径
         var pathLocationList = pathfindingService.CalculatePath(character, cmd.Location);
 
         if (pathLocationList is null)

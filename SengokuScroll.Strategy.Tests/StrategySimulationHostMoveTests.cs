@@ -6,7 +6,7 @@ using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Tests;
 
-/// <summary>通过 StrategySimulationHost 复现 HTTP 层移动问题�?/summary>
+/// <summary>?? StrategySimulationHost ?? HTTP ?????�?/summary>
 public class StrategySimulationHostMoveTests
 {
     [Fact]
@@ -47,22 +47,15 @@ public class StrategySimulationHostMoveTests
     {
         using var host = new StrategySimulationHost();
         host.LoadScenario("mini_kanto");
-        host.OrderUnitMove(1, new Point2(1, 2));
 
         var world = GetWorld(host);
-        for (var i = 0; i < 12; i++)
-        {
-            host.AdvanceDay();
-            var u = world.GameData.Units[1];
-            if (u.Location.X == 1 && u.Location.Y == 2)
-                break;
-        }
+        Teleport(world, 1, new Point3(1, 2));
 
         var atStart = world.GameData.Units[1];
         Assert.Equal(1, atStart.Location.X);
         Assert.Equal(2, atStart.Location.Y);
 
-        // 本测试只验证长程移动；隔�?mini_kanto 默认接敌，避免多日推进后陷入混乱
+        // ????????????? mini_kanto ????????????????
         foreach (var u in world.GameData.Units.Values.Where(u => u.IsMilitary && u.ForceId != 1).ToList())
             Teleport(world, u.Id, new Point3(9, 9));
         atStart.Stance = UnitStance.Normal;

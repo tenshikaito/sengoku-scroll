@@ -15,6 +15,8 @@ const props = defineProps<{
   worldState: StrategyWorldState | null;
   /** 打开时默认选中的 Tab（force | stronghold | person | character）。 */
   initialTab?: string;
+  /** 打开时默认选中的势力范围过滤（all | realm | homeOnly）。 */
+  initialRealmFilter?: IntelRealmFilterMode;
 }>();
 
 const emit = defineEmits<{
@@ -34,8 +36,15 @@ watch(
   (open) => {
     if (open) {
       activeTab.value = normalizeTab(props.initialTab);
-      realmFilter.value = "all";
+      realmFilter.value = props.initialRealmFilter ?? "all";
     }
+  }
+);
+
+watch(
+  () => props.initialRealmFilter,
+  (mode) => {
+    if (mode && props.visible) realmFilter.value = mode;
   }
 );
 

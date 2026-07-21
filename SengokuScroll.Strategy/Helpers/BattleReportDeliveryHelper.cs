@@ -116,6 +116,8 @@ public sealed class BattleReportDeliveryHelper(
         if (forceId != scenarioMeta.PlayerForceId)
             return;
 
+        MaybePushInstantBattleSummary(battleResult);
+
         var messengerId = messengerDispatchHelper.DispatchBattleReport(
             origin,
             forceId,
@@ -143,6 +145,8 @@ public sealed class BattleReportDeliveryHelper(
     {
         if (forceId != scenarioMeta.PlayerForceId)
             return;
+
+        MaybePushInstantStrategicSummary(reportEvent);
 
         var messengerId = messengerDispatchHelper.DispatchStrategicReport(
             origin,
@@ -280,5 +284,46 @@ public sealed class BattleReportDeliveryHelper(
             return main;
 
         return $"{main}（驰援：{string.Join("、", extras)}）";
+    }
+
+    private void MaybePushInstantBattleSummary(StrategyBattleResultDto battleResult)
+    {
+        if (!StrategyDifficultyRules.InstantEventMessages(
+                scenarioMeta.Difficulty,
+                scenarioMeta.StartOptions))
+            return;
+
+        var key = $"instant-battle:{BuildBattleKey(battleResult)}";
+        if (!playerNotifiedEventKeys.Add(key))
+            return;
+
+        var brief = BuildBrief(battleResult);
+        dayOutcomeBuffer.AddEvent(new StrategyEventDto
+        {
+            Category = "InstantEventSummary",
+            Brief = brief,
+            Message = $"⚡ 前线急报（待证实）：{brief}"
+        });
+    }
+
+    private void MaybePushInstantStrategicSummary(StrategyEventDto reportEvent)
+    {
+        if (!StrategyDifficultyRules.InstantEventMessages(
+                scenarioMeta.Difficulty,
+                scenarioMeta.StartOptions))
+            return;
+
+        var brief = reportEvent.Brief?.Trim() ?? reportEvent.Message;
+        var key = $"instant-event:{reportEvent.Category}:{brief}";
+        if (!playerNotifiedEventKeys.Add(key))
+            return;
+
+        dayOutcomeBuffer.AddEvent(new StrategyEventDto
+        {
+            Category = "InstantEventSummary",
+            Brief = brief,
+            Message = $"⚡ {brief}（待证实）",
+            DetailCategory = reportEvent.Category
+        });
     }
 }

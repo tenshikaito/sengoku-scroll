@@ -15,6 +15,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using SengokuScroll.Strategy.Systems;
 using SengokuScroll.Strategy.Time;
+using SengokuScroll.Strategy.Vision;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Hosting;
@@ -36,7 +37,9 @@ public sealed class StrategySimulationHost : IDisposable
     public bool IsLoaded => simulation is not null;
 
     /// <summary>从 Maps 目录加载 JSON 剧本并初始化仿真。</summary>
-    public GameResult<StrategyWorldStateDto> LoadScenario(string scenarioId)
+    public GameResult<StrategyWorldStateDto> LoadScenario(
+        string scenarioId,
+        StrategyLoadOptions? loadOptions = null)
     {
         lock (sync)
         {
@@ -46,7 +49,8 @@ public sealed class StrategySimulationHost : IDisposable
 
             simulation?.Dispose();
             var loaded = StrategyScenarioLoader.LoadFromFile(path);
-            simulation = StrategySimulationBootstrap.CreateScope(loaded.World, loaded.Meta);
+            var meta = StrategyScenarioLoader.ApplyLoadOptions(loaded.Meta, loadOptions);
+            simulation = StrategySimulationBootstrap.CreateScope(loaded.World, meta);
             simulation.MovementTrace.Clear();
             simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
             LoadedScenarioId = scenarioId;
@@ -364,9 +368,20 @@ public sealed class StrategySimulationHost : IDisposable
                 return GameError.UnitError.UnitNotFound;
 
             var pathfinding = simulation.Services.GetRequiredService<IPathfindingService>();
+            var movementRules = simulation.Services.GetRequiredService<Domain.Rules.MovementRules>();
+            var visibilityLedger = simulation.Services.GetRequiredService<StrategyVisibilityLedger>();
+            visibilityLedger.Recompute(simulation.World, simulation.ScenarioMeta);
+            var visibility = visibilityLedger.GetOrCreate(simulation.ScenarioMeta.PlayerForceId);
+            var pathBlockCheck = StrategyPreviewPathRules.BuildFogAwarePathBlockCheck(
+                movementRules,
+                unit,
+                simulation.World.GameData,
+                simulation.ScenarioMeta,
+                visibility);
+
             var start = from ?? (Point2)unit.Location;
             var stops = BuildStopList(start, target, via);
-            var path = BuildPathThrough(pathfinding, unit, stops, start);
+            var path = BuildPathThrough(pathfinding, unit, stops, start, pathBlockCheck);
             if (!path.IsSuccess)
                 return path.Error!;
 
@@ -410,7 +425,8 @@ public sealed class StrategySimulationHost : IDisposable
         IPathfindingService pathfinding,
         Domain.Entities.Unit unit,
         IReadOnlyList<Point2> stops,
-        Point2 pathStart)
+        Point2 pathStart,
+        Func<Point2, bool>? isPathTileBlocked = null)
     {
         if (stops.Count == 0)
             return GameError.MovementError.CannotMoveToTile;
@@ -420,7 +436,7 @@ public sealed class StrategySimulationHost : IDisposable
 
         foreach (var stop in stops)
         {
-            var segment = pathfinding.CalculatePathFrom(segmentStart, stop, unit);
+            var segment = pathfinding.CalculatePathFrom(segmentStart, stop, unit, isPathTileBlocked);
             if (segment is null || segment.Count <= 1)
                 return GameError.MovementError.CannotMoveToTile;
 
@@ -550,6 +566,20 @@ public sealed class StrategySimulationHost : IDisposable
             return BuildStateResult();
     }
 
+    /// <summary>获取当前剧本地图静态主数据（地形/区域/道路/地标）。</summary>
+    public GameResult<StrategyMapMasterDto> GetMapMaster()
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            return StrategyWorldStateMapper.ToMapMasterDto(
+                simulation.World,
+                LoadedScenarioId ?? string.Empty);
+        }
+    }
+
     /// <summary>捕获当前仿真为 JSON 存档。</summary>
     public GameResult<StrategySaveDocument> CaptureSave()
     {
@@ -561,7 +591,8 @@ public sealed class StrategySimulationHost : IDisposable
             return StrategyWorldSaveService.Capture(
                 simulation.World,
                 LoadedScenarioId,
-                simulation.ScenarioMeta.PlayerForceId);
+                simulation.ScenarioMeta.PlayerForceId,
+                simulation.Services.GetRequiredService<StrategyVisibilityLedger>());
         }
     }
 
@@ -583,6 +614,19 @@ public sealed class StrategySimulationHost : IDisposable
             StrategyWorldSaveService.Apply(save, simulation.World);
             simulation.MovementTrace.Clear();
             simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
+
+            var ledger = simulation.Services.GetRequiredService<StrategyVisibilityLedger>();
+            if (save.Visibility is not null)
+            {
+                var tileMap = simulation.World.GameMapMasterData.TileMap;
+                ledger.ApplySave(
+                    save.PlayerForceId,
+                    save.Visibility,
+                    tileMap.Width,
+                    tileMap.Height);
+            }
+
+            ledger.Recompute(simulation.World, simulation.ScenarioMeta);
 
             return BuildStateResult();
         }
@@ -687,15 +731,54 @@ public sealed class StrategySimulationHost : IDisposable
             .DispatchMonthlyLordTributes();
     }
 
+    /// <summary>登记谍报成果（开发/任务用；约 2 个月后过期）。</summary>
+    public GameResult<StrategyWorldStateDto> RecordEspionageIntel(
+        string targetKind,
+        int targetId,
+        string scope,
+        string precision)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            if (!Enum.TryParse<EspionageIntelTargetKind>(targetKind, ignoreCase: true, out var kind))
+                return GameError.DataNotFound;
+
+            if (!Enum.TryParse<EspionageIntelScope>(scope, ignoreCase: true, out var scopeEnum))
+                return GameError.DataNotFound;
+
+            if (!Enum.TryParse<EspionageIntelPrecision>(precision, ignoreCase: true, out var precisionEnum))
+                return GameError.DataNotFound;
+
+            var ledger = simulation.Services.GetRequiredService<StrategyEspionageIntelLedger>();
+            ledger.RecordMission(
+                simulation.ScenarioMeta.PlayerForceId,
+                kind,
+                targetId,
+                scopeEnum,
+                precisionEnum,
+                simulation.World.GameData.GameDate);
+
+            return BuildStateResult();
+        }
+    }
+
     private GameResult<StrategyWorldStateDto> BuildStateResult()
     {
         if (simulation is null)
             return GameError.DataNotFound;
 
+        simulation.Services.GetRequiredService<StrategyVisibilityLedger>()
+            .Recompute(simulation.World, simulation.ScenarioMeta);
+
         return StrategyWorldStateMapper.ToDto(
             simulation.World,
             LoadedScenarioId ?? string.Empty,
-            simulation.ScenarioMeta);
+            simulation.ScenarioMeta,
+            simulation.Services.GetRequiredService<StrategyVisibilityLedger>(),
+            simulation.Services.GetRequiredService<StrategyEspionageIntelLedger>());
     }
 
     private static string? ResolveScenarioPath(string scenarioId)

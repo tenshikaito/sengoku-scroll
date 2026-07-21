@@ -38,17 +38,17 @@ public sealed class StrategyMapDefinition
     /// <summary>道路路径模板（便于编辑器复用）。</summary>
     public List<StrategyRoadTemplateDefinition> RoadTemplates { get; init; } = [];
 
-    /// <summary>引用的道路模板 Id 列表，加载时铺设到 region 层。</summary>
+    /// <summary>引用的道路模板 Id 列表，加载时写入 <see cref="GameMapData.Roads"/>。</summary>
     public List<string> PlacedRoads { get; init; } = [];
 
-    /// <summary>政治区域定义（与道路 region 层独立）。</summary>
-    public List<StrategyPoliticalRegionDefinition> PoliticalRegions { get; init; } = [];
+    /// <summary>地图区域定义（气候/收粮；格点归属见 <see cref="RegionGrid"/>）。</summary>
+    public List<StrategyRegionDefinition> Regions { get; init; } = [];
 
     /// <summary>
-    /// 政治区域键网格（行优先，长度 = Width × Height）。
+    /// 地图区域键网格（行优先，长度 = Width × Height）。
     /// 省略则整张地图无区域名。
     /// </summary>
-    public List<string>? PoliticalRegionGrid { get; init; }
+    public List<string>? RegionGrid { get; init; }
 
     /// <summary>地图地标（对应 Domain <see cref="Entities.Landmark"/>）。</summary>
     public List<StrategyMapLandmarkDefinition> Landmarks { get; init; } = [];
@@ -88,8 +88,8 @@ public sealed class StrategyMapPointDefinition
     public required int Y { get; init; }
 }
 
-/// <summary>政治区域定义（对应 Domain <see cref="Definitions.RegionDefinition"/>）。</summary>
-public sealed class StrategyPoliticalRegionDefinition
+/// <summary>地图区域定义（对应 Domain <see cref="Definitions.RegionDefinition"/>）。</summary>
+public sealed class StrategyRegionDefinition
 {
     public required int Id { get; init; }
 
@@ -146,8 +146,11 @@ public sealed class StrategyScenarioDefinition
     /// <summary>玩家操控势力 Id。</summary>
     public int PlayerForceId { get; init; } = 1;
 
-    /// <summary>难度：Easy | Normal | Hard | Legendary；省略则 Normal。</summary>
+    /// <summary>难度：Easy | Normal | Hard | Custom；省略则 Normal。</summary>
     public string? Difficulty { get; init; }
+
+    /// <summary>开局已知位置的据点 Id 列表（非己方也可 gray 显示）。</summary>
+    public List<int> KnownStrongholdIds { get; init; } = [];
 
     /// <summary>本局固定随机种子；0 或省略则开局按剧本 Id+起始日期派生。</summary>
     public int SimulationSeed { get; init; }
@@ -236,7 +239,7 @@ public sealed class StrategyStrongholdDefinition
 
     public string CultureName { get; init; } = "日本";
 
-    public string ReligionName { get; init; } = "神道";
+    public string ReligionName { get; init; } = "神道教";
 
     public int Money { get; init; }
 
@@ -345,7 +348,7 @@ public sealed class StrategyUnitDefinition
 
     public string CultureName { get; init; } = "日本";
 
-    public string ReligionName { get; init; } = "神道";
+    public string ReligionName { get; init; } = "神道教";
 
     public int Money { get; init; }
 

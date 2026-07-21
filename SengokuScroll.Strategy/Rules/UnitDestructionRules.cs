@@ -1,8 +1,10 @@
+using SengokuScroll.Common.Types;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Actions;
 using SengokuScroll.Domain.Contexts;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Extensions;
+using SengokuScroll.Domain.Services.Pathfinding;
 using SengokuScroll.Strategy.Actions;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
@@ -45,7 +47,7 @@ public static class UnitDestructionRules
             if (!gameData.Units.TryGetValue(unit, out var doomed))
                 continue;
 
-            ResolveAnnihilatedUnit(context, doomed, null, gameData, meta, dayOutcomeBuffer);
+            ResolveAnnihilatedUnit(context, doomed, null, gameData, meta, dayOutcomeBuffer, pathfinding: null);
         }
     }
 
@@ -57,7 +59,8 @@ public static class UnitDestructionRules
         GameData gameData,
         StrategyScenarioMeta meta,
         StrategyDayOutcomeBuffer? dayOutcomeBuffer,
-        BattleReportDeliveryHelper? reportDelivery = null)
+        BattleReportDeliveryHelper? reportDelivery = null,
+        IPathfindingService? pathfinding = null)
     {
         if (destroyed.Soldier > 0)
             return new DestructionOutcome(false, null, 0, 0);
@@ -77,7 +80,16 @@ public static class UnitDestructionRules
                 victor.Money += lootMoney;
         }
 
-        var commanderFate = ResolveCommanderFate(destroyed, victor, gameData, meta, dayOutcomeBuffer);
+        var releaseLocation = destroyed.Location;
+        var commanderFate = ResolveCommandersFate(
+            context,
+            destroyed,
+            victor,
+            releaseLocation,
+            gameData,
+            meta,
+            dayOutcomeBuffer,
+            pathfinding);
 
         MapLocationActions.RemoveUnit(context, destroyed);
 
@@ -114,24 +126,63 @@ public static class UnitDestructionRules
         return new DestructionOutcome(true, commanderFate, lootFood, lootMoney);
     }
 
-    private static string? ResolveCommanderFate(
+    private static string? ResolveCommandersFate(
+        IGameWorldContext context,
         Unit destroyed,
         Unit? victor,
+        Point3 releaseLocation,
         GameData gameData,
         StrategyScenarioMeta meta,
-        StrategyDayOutcomeBuffer? dayOutcomeBuffer)
+        StrategyDayOutcomeBuffer? dayOutcomeBuffer,
+        IPathfindingService? pathfinding)
     {
-        if (destroyed.LeaderId <= 0
-            || !gameData.Characters.TryGetValue(destroyed.LeaderId, out var commander)
-            || commander.IsDead)
-        {
+        var commanderIds = UnitCommanderEscapeHelper.CollectCommanderIds(destroyed, gameData).ToList();
+        if (commanderIds.Count == 0)
             return null;
+
+        string? mainFate = null;
+        var mainCommanderId = destroyed.LeaderId;
+
+        foreach (var commanderId in commanderIds)
+        {
+            if (!gameData.Characters.TryGetValue(commanderId, out var commander)
+                || commander.IsDead
+                || commander.ForceStatus == CharacterForceStatus.Prisoner)
+            {
+                continue;
+            }
+
+            var fate = ResolveSingleCommanderFate(
+                context,
+                destroyed,
+                commander,
+                victor,
+                releaseLocation,
+                gameData,
+                meta,
+                pathfinding);
+
+            if (commanderId == mainCommanderId)
+                mainFate = fate;
         }
 
-        // 业务：无胜方（如补给断绝等非战斗溃灭）时，主将逃回本势力最大人口据点
+        return mainFate;
+    }
+
+    private static string ResolveSingleCommanderFate(
+        IGameWorldContext context,
+        Unit destroyed,
+        Character commander,
+        Unit? victor,
+        Point3 releaseLocation,
+        GameData gameData,
+        StrategyScenarioMeta meta,
+        IPathfindingService? pathfinding)
+    {
+        // 业务：无胜方（如补给断绝等非战斗溃灭）时，将领在溃灭格现身并寻路回居城
         if (victor is null || victor.Soldier <= 0)
         {
-            TryEscapeToFriendlyStronghold(commander, gameData);
+            EscapeCommanderToMap(context, commander, releaseLocation, gameData, meta, pathfinding);
             return "Escaped";
         }
 
@@ -151,6 +202,7 @@ public static class UnitDestructionRules
             gameData.SimulationSeed,
             destroyed.Id,
             victor.Id,
+            commander.Id,
             gameData.GameDate.Year,
             gameData.GameDate.Month,
             gameData.GameDate.Day)) % 100;
@@ -158,7 +210,7 @@ public static class UnitDestructionRules
         // 业务：掷点低于逃脱率则逃回；介于逃脱率与 +35 之间则被俘；否则战死
         if (roll < escapeChance)
         {
-            TryEscapeToFriendlyStronghold(commander, gameData);
+            EscapeCommanderToMap(context, commander, releaseLocation, gameData, meta, pathfinding);
             return "Escaped";
         }
 
@@ -171,6 +223,35 @@ public static class UnitDestructionRules
         commander.IsDead = true;
         commander.ForceStatus = CharacterForceStatus.Idle;
         return "Slain";
+    }
+
+    private static void EscapeCommanderToMap(
+        IGameWorldContext context,
+        Character commander,
+        Point3 releaseLocation,
+        GameData gameData,
+        StrategyScenarioMeta meta,
+        IPathfindingService? pathfinding)
+    {
+        if (pathfinding is not null)
+        {
+            UnitCommanderEscapeHelper.ReleaseToMapAndRouteHome(
+                context,
+                commander,
+                releaseLocation,
+                gameData,
+                meta,
+                pathfinding);
+            return;
+        }
+
+        // 业务：无寻路服务时（如日终清扫）仍避免瞬移，至少落在溃灭格
+        commander.ForceStatus = CharacterForceStatus.Idle;
+        commander.LocationType = CharacterLocationType.Map;
+        commander.LocationStrongholdId = 0;
+        commander.ActionStatus = CharacterActionStatus.Waiting;
+        commander.ActionTarget.RoutePoints.Clear();
+        MapLocationActions.SetCharacterLocation(context, commander, releaseLocation);
     }
 
     private static void CaptureCommander(Character commander, Unit victor, GameData gameData)
@@ -188,21 +269,6 @@ public static class UnitDestructionRules
             commander.LocationType = CharacterLocationType.Stronghold;
             commander.LocationStrongholdId = stronghold.Id;
         }
-    }
-
-    private static void TryEscapeToFriendlyStronghold(Character commander, GameData gameData)
-    {
-        // 业务：逃至本势力人口最多的据点，并安置为当主/在城将领
-        var fallback = gameData.Strongholds.Values
-            .Where(s => s.ForceId == commander.ForceId)
-            .OrderByDescending(s => s.Population)
-            .FirstOrDefault();
-
-        if (fallback is null)
-            return;
-
-        StrategyStrongholdLordHelper.EnsureLordResidence(fallback, commander);
-        commander.ForceStatus = CharacterForceStatus.Idle;
     }
 
     private static string FormatCommanderMessage(Unit destroyed, string? fate)

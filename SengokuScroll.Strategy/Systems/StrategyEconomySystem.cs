@@ -43,7 +43,7 @@ public class StrategyEconomySystem(
         // 阶段1：逐据点日更——日产、收粮税、市民口粮
         foreach (var stronghold in context.GameWorldContext.EachStronghold())
         {
-            var regionId = RegionLocationHelper.ResolvePoliticalRegionId(world, stronghold.Location);
+            var regionId = RegionLocationHelper.ResolveRegionId(world, stronghold.Location);
             // 业务：收粮日跳过农业日产，避免与收粮结算重复计粮
             var skipFoodProduction = HarvestRules.ShouldSkipDailyFoodProduction(
                 stronghold,

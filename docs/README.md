@@ -1,6 +1,6 @@
 # SengokuScroll（战国绘卷）设计文档索引
 
-> 版本：1.3 | 日期：2026-07-10
+> 版本：1.5 | 日期：2026-07-21
 
 本目录包含项目的全部基本设计与详细设计文档。本文档为**总索引**，说明文档体系、阅读顺序、数据来源及实现对照。
 
@@ -55,7 +55,7 @@ docs/
 | 层级 | 文档 | 职责 |
 |------|------|------|
 | **基本设计** | [design-document.md](./design-document.md) | 项目定位、设计原则、三模式对比、解决方案结构、技术栈、重构计划 |
-| **游戏概念词典** | [game-concepts.md](./game-concepts.md) | 概念词典；**§3.0 堆叠/战场、§5.5 战争**（2026-07-15） |
+| **游戏概念词典** | [game-concepts.md](./game-concepts.md) | 概念词典；§3.7 迷雾/谍报、§9 日推进链（2026-07-21 v1.6） |
 | **共同详细设计** | [shared-detail-design.md](./shared-detail-design.md) | 三模式共享的领域模型、规则、时间、事件、指令、网络、存档 |
 | **模式详细设计** | `*-detail-design.md` | 各模式专属 System、玩法循环、模式特有机制 |
 | **开发计划** | [strategy-development-plan.md](./strategy-development-plan.md) | 里程碑、范围、确认清单（策略·草案） |
@@ -106,7 +106,7 @@ flowchart TB
 
 ### 3.0 [game-concepts.md](./game-concepts.md) — 游戏概念词典
 
-**版本 1.0** | 开发与策划的**概念权威清单**
+**版本 1.6** | 开发与策划的**概念权威清单**
 
 | 章节 | 内容 |
 |------|------|
@@ -295,7 +295,7 @@ flowchart TB
 
 见 [design-document.md §2.1](./design-document.md#21-项目结构) — 含 `Modes/`、`Combat/` 等尚未创建的项目。
 
-### 6.2 当前已实现（2026-07-09）
+### 6.2 当前已实现（2026-07-17）
 
 | 项目 | 状态 | 说明 |
 |------|------|------|
@@ -304,12 +304,12 @@ flowchart TB
 | SengokuScroll.Application | 🟡 | GameLoop、Command、事件分发 |
 | SengokuScroll.Strategy | 🟡 | 时间/单位/战斗/经济/后勤/信使/AI/存档 |
 | SengokuScroll.WebApi | 🟡 | 策略 REST API（load/advance/move/battle/save） |
-| SengokuScroll.WebClient | 🟡 | Vue3 + PixiJS 策略主地图；overlay 消息/情报/通知 |
-| SengokuScroll.Strategy.Tests | 🟡 | 策略集成测试（50+） |
+| SengokuScroll.WebClient | 🟡 | Vue3 + PixiJS 策略主地图；overlay 消息/情报/通知；视口裁切 |
+| SengokuScroll.Strategy.Tests | 🟡 | 策略集成测试（180+） |
 | SengokuScroll.Rpg / .Mmo / .Combat | ❌ | 未创建 |
 | SignalR / 多人 / MMO | ❌ | 仅设计 |
 
-策略 UI 纵切对照见 [strategy-ui-design.md §2.4](./strategy-ui-design.md#24-m3-b-纵切实装布局webclient--mini_kanto)。
+策略 UI 纵切对照见 [strategy-ui-design.md §2.4](./strategy-ui-design.md#24-m3-b-纵切实装布局webclient--mini_kanto)（布局）与 [§2.5](./strategy-ui-design.md#25-地图视口裁切strategymapcanvas--m3-d)（视口裁切）。
 
 ### 6.3 开发阶段建议
 
@@ -336,17 +336,17 @@ flowchart TB
 
 ## 8. 文档变更记录
 
-| 日期 | 版本 | 变更 |
-|------|------|------|
-| 2026-06-19 | — | 初始 9 篇设计文档 |
-| 2026-06-28 | 1.2 | 联机延后至 RPG 后；明确 RPG 为策略增量 |
 | 日期 | 版本 | 变更摘要 |
 |------|------|----------|
+| 2026-07-21 | 1.5 | 索引同步 game-concepts v1.6（迷雾/谍报、日推进链、业务注释规范） |
+| 2026-07-17 | 1.4 | 道路/区域数据模型与视口裁切文档同步；`mini_kanto` 20×20；移除 `politicalRegionGrid` 表述 |
 | 2026-07-15 | — | 冻结同格堆叠/战场/战争规格写入 [game-concepts.md](./game-concepts.md) v1.3、[strategy-detail-design.md](./strategy-detail-design.md) §5.1/§10 |
 | 2026-07-13 | 1.4 | 新增 [game-concepts.md](./game-concepts.md) 游戏概念词典 |
-| 2026-07-09 | 1.3 | 策略 M3-d：地图地标/政治区域、底栏与 overlay UI |
+| 2026-07-09 | 1.3 | 策略 M3-d：地图地标/区域、底栏与 overlay UI |
 | 2026-07-09 | 1.2 | 更新实现对照；策略 M3-d 进行中 |
+| 2026-06-28 | 1.2 | 联机延后至 RPG 后；明确 RPG 为策略增量 |
 | 2026-06-28 | 1.1 | 新增策略开发计划；开发顺序改为策略优先 |
+| 2026-06-19 | — | 初始 9 篇设计文档 |
 
 ---
 

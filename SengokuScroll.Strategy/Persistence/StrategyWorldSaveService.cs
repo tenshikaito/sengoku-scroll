@@ -3,6 +3,9 @@ using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using static SengokuScroll.Domain.Entities.Unit;
 
+using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Vision;
+
 namespace SengokuScroll.Strategy.Persistence;
 
 /// <summary>单机 JSON 存档文档（M3-d 最小可恢复字段）。</summary>
@@ -22,6 +25,9 @@ public sealed class StrategySaveDocument
     public required List<StrategySaveStronghold> Strongholds { get; init; }
 
     public required List<StrategySaveUnit> Units { get; init; }
+
+    /// <summary>玩家势力探索态（explored + known 据点）。</summary>
+    public StrategyVisibilitySaveDto? Visibility { get; init; }
 }
 
 public sealed class StrategySaveDate
@@ -93,16 +99,22 @@ public sealed class StrategySavePoint
 public static class StrategyWorldSaveService
 {
     /// <summary>捕获势力金粮、据点归属/领主/驻军与单位位置/路线等可变状态。</summary>
-    public static StrategySaveDocument Capture(GameWorld world, string scenarioId, int playerForceId)
+    public static StrategySaveDocument Capture(
+        GameWorld world,
+        string scenarioId,
+        int playerForceId,
+        StrategyVisibilityLedger visibilityLedger)
     {
         var data = world.GameData;
         var date = data.GameDate;
+        var tileMap = world.GameMapMasterData.TileMap;
 
         return new StrategySaveDocument
         {
             ScenarioId = scenarioId,
             PlayerForceId = playerForceId,
             SimulationSeed = data.SimulationSeed,
+            Visibility = visibilityLedger.Capture(playerForceId, tileMap.Width, tileMap.Height),
             Date = new StrategySaveDate
             {
                 Year = date.Year,

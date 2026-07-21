@@ -12,6 +12,13 @@ public class PathfindingService(IGameContext context, MovementRules movementRule
         => CalculatePathFrom((Point2)movable.Location, target, movable);
 
     public List<PathNode>? CalculatePathFrom(Point2 start, Point2 target, IMovable movable)
+        => CalculatePathFrom(start, target, movable, null);
+
+    public List<PathNode>? CalculatePathFrom(
+        Point2 start,
+        Point2 target,
+        IMovable movable,
+        Func<Point2, bool>? isPathTileBlocked)
     {
         var openSet = new PriorityQueue<Point2, int>();
         var cameFrom = new Dictionary<Point2, Point2?>();
@@ -49,7 +56,7 @@ public class PathfindingService(IGameContext context, MovementRules movementRule
                 if (moveCost < 0)
                     continue;
 
-                if (IsBlockedByOccupyingMilitaryUnit(movable, next, target))
+                if (IsBlockedByOccupyingMilitaryUnit(movable, next, target, isPathTileBlocked))
                     continue;
 
                 var tentativeG = gScore[current] + moveCost;
@@ -107,11 +114,18 @@ public class PathfindingService(IGameContext context, MovementRules movementRule
         yield return new Point2(p.X, p.Y - 1);
     }
 
-    private bool IsBlockedByOccupyingMilitaryUnit(IMovable movable, Point2 location, Point2 pathTarget)
+    private bool IsBlockedByOccupyingMilitaryUnit(
+        IMovable movable,
+        Point2 location,
+        Point2 pathTarget,
+        Func<Point2, bool>? isPathTileBlocked = null)
     {
         // 业务：最终目标格可进入敌军（开战）；途中仍不可穿越
         if (location.X == pathTarget.X && location.Y == pathTarget.Y)
             return false;
+
+        if (isPathTileBlocked is not null)
+            return isPathTileBlocked(location);
 
         return movementRules.IsPathTileBlockedByMilitary(movable, location);
     }

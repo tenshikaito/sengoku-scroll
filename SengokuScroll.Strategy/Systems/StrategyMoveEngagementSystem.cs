@@ -24,6 +24,7 @@ public sealed class StrategyMoveEngagementSystem(
 {
     public int Order { get; } = 22;
 
+    /// <summary>在移动/接敌之后扫描同格敌对单位，登记战场并下达 Attacking/Standoff。</summary>
     public void Update()
     {
         var units = context.GameWorldContext.EachUnit()

@@ -4,6 +4,7 @@ using SengokuScroll.Domain.Contexts;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Extensions;
 using SengokuScroll.Domain.Rules;
+using SengokuScroll.Domain.Services.Pathfinding;
 using SengokuScroll.Strategy.Actions;
 using SengokuScroll.Strategy.Battle;
 using SengokuScroll.Strategy.Calculators;
@@ -25,7 +26,8 @@ public sealed class BattleAftermathHelper(
     StrongholdCaptureHelper captureHelper,
     StrategyScenarioMeta scenarioMeta,
     StrategyDayOutcomeBuffer dayOutcomeBuffer,
-    BattleReportDeliveryHelper reportDelivery)
+    BattleReportDeliveryHelper reportDelivery,
+    IPathfindingService pathfinding)
 {
     private string? captureBattleNote;
 
@@ -133,7 +135,8 @@ public sealed class BattleAftermathHelper(
             gameData,
             scenarioMeta,
             dayOutcomeBuffer,
-            reportDelivery);
+            reportDelivery,
+            pathfinding);
 
         // 业务：胜方仍在敌城格时自动下达强攻令，城防已垮则占城
         TryAutoSiegeOrCaptureAfterVictory(winner, gameData, engagementKind, strongholdAtLoser);
@@ -233,7 +236,8 @@ public sealed class BattleAftermathHelper(
                 gameData,
                 scenarioMeta,
                 dayOutcomeBuffer,
-                reportDelivery);
+                reportDelivery,
+                pathfinding);
         }
     }
 
@@ -288,7 +292,8 @@ public sealed class BattleAftermathHelper(
                 gameData,
                 scenarioMeta,
                 dayOutcomeBuffer,
-                reportDelivery);
+                reportDelivery,
+                pathfinding);
             return;
         }
 

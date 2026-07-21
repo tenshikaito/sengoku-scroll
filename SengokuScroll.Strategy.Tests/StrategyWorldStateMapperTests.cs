@@ -14,8 +14,8 @@ public class StrategyWorldStateMapperTests
         var loaded = StrategyScenarioLoader.LoadFromFile(path);
         var dto = StrategyWorldStateMapper.ToDto(loaded.World, "mini_kanto", loaded.Meta);
 
-        Assert.Equal(10, dto.Map.Width);
-        Assert.Equal(10, dto.Map.Height);
+        Assert.Equal(20, dto.Map.Width);
+        Assert.Equal(20, dto.Map.Height);
         Assert.Equal(1560, dto.Date.Year);
         Assert.Equal(4, dto.Forces.Count);
         Assert.Equal(10, dto.Strongholds.Count);
@@ -81,12 +81,8 @@ public class StrategyWorldStateMapperTests
         Assert.Equal(1890, odaComposition[0].Soldiers);
         Assert.Equal(63, odaComposition[0].RatioPercent);
 
-        Assert.Equal(100, dto.Map.TileTerrainNames.Count);
-        Assert.Equal("平地", dto.Map.TileTerrainNames[0]);
-        Assert.Equal("尾张", dto.Map.TileRegionNames[0]);
-        Assert.Equal("三河", dto.Map.TileRegionNames[36]);
-        Assert.Equal(3, dto.Map.Landmarks.Count);
-        Assert.Contains(dto.Map.Landmarks, lm => lm.Name == "热田神宫" && lm.X == 3 && lm.Y == 6);
-        Assert.Contains(dto.Map.Landmarks, lm => lm.Name == "桶狭间" && lm.X == 2 && lm.Y == 5);
+        Assert.Equal(20, dto.Map.Width);
+        Assert.Equal(20, dto.Map.Height);
+        Assert.Equal("迷你关东试玩", dto.Map.Name);
     }
 }

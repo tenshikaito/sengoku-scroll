@@ -9,6 +9,7 @@ using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Hosting;
 using SengokuScroll.Strategy.Systems;
+using SengokuScroll.Strategy.Vision;
 
 namespace SengokuScroll.Strategy.Extensions;
 
@@ -64,6 +65,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IStrategySupplySystem, StrategySupplySystem>();
         services.AddSingleton<IStrategyMessengerSystem, StrategyMessengerSystem>();
 
+        services.AddSingleton<StrategyVisibilityLedger>();
+        services.AddSingleton<StrategyEspionageIntelLedger>();
+        services.AddSingleton<StrategyMessageLedger>();
+        services.AddSingleton<StrategyVisionSystem>();
+        services.AddSingleton<IStrategyVisionSystem>(sp => sp.GetRequiredService<StrategyVisionSystem>());
+
         services.AddSingleton<StrategyInstantBattleSystem>();
 
         services.AddSingleton<StrategyBattleResolutionSystem>();
@@ -107,6 +114,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IStrategySupplySystem>(),
             sp.GetRequiredService<IAISystem>(),
             sp.GetRequiredService<IUnitSystem>(),
+            sp.GetRequiredService<IStrategyVisionSystem>(),
             sp.GetRequiredService<IStrategySiegeSystem>(),
             sp.GetRequiredService<IStrategyMoveEngagementSystem>(),
             sp.GetRequiredService<IStrategyStrongholdOccupationSystem>(),

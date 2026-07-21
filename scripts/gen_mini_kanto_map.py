@@ -1,0 +1,181 @@
+import json
+from pathlib import Path
+
+width = 20
+height = 20
+
+
+def region_key(x: int) -> str:
+    if x <= 6:
+        return "owari"
+    if x <= 13:
+        return "mikawa"
+    return "suruga"
+
+
+def terrain_key(x: int, y: int) -> str:
+    if y >= 18 or (x >= 17 and y >= 16):
+        return "water"
+    if 14 <= x <= 18 and 14 <= y <= 17:
+        return "mountain"
+    if x == 16 and y == 16:
+        return "mountain"
+    if y in (8, 12) and 2 <= x <= 16:
+        return "plain"
+    if 7 <= x <= 13 and (x + y) % 5 == 0:
+        return "forest"
+    if x <= 6 and y <= 3:
+        return "hill"
+    return "plain"
+
+
+region_grid = [region_key(x) for y in range(height) for x in range(width)]
+terrain_grid = [terrain_key(x, y) for y in range(height) for x in range(width)]
+
+doc = {
+    "id": "mini_kanto",
+    "name": "迷你关东试玩",
+    "version": "1.2",
+    "map": {
+        "width": width,
+        "height": height,
+        "defaultTerrain": "plain",
+        "terrains": [
+            {"id": 1, "key": "plain", "name": "平地", "movementCost": 2},
+            {"id": 2, "key": "forest", "name": "森林", "movementCost": 3},
+            {"id": 3, "key": "hill", "name": "丘陵", "movementCost": 3},
+            {"id": 4, "key": "water", "name": "水域", "movementCost": 4},
+            {"id": 5, "key": "mountain", "name": "山地", "movementCost": 4},
+        ],
+        "terrainGrid": terrain_grid,
+        "roadTypes": [
+            {"id": 1, "key": "highway", "name": "官道", "speedBonus": 1, "movementCost": 1}
+        ],
+        "roadTemplates": [
+            {
+                "id": "oda_east_trunk",
+                "typeId": 1,
+                "points": [{"x": x, "y": 8} for x in range(2, 11)],
+            },
+            {
+                "id": "oda_north_branch",
+                "typeId": 1,
+                "points": [{"x": 8, "y": y} for y in range(4, 9)],
+            },
+        ],
+        "placedRoads": ["oda_east_trunk", "oda_north_branch"],
+        "regions": [
+            {"id": 1, "key": "owari", "name": "尾张"},
+            {"id": 2, "key": "mikawa", "name": "三河"},
+            {"id": 3, "key": "suruga", "name": "骏河"},
+        ],
+        "regionGrid": region_grid,
+        "landmarks": [
+            {"id": 1, "name": "热田神宫", "x": 6, "y": 12},
+            {"id": 2, "name": "富士山", "x": 16, "y": 16},
+            {"id": 3, "name": "桶狭间", "x": 4, "y": 10},
+        ],
+    },
+    "scenario": {
+        "startDate": {"year": 1560, "month": 1, "day": 1},
+        "playerForceId": 1,
+        "difficulty": "Normal",
+        "simulationSeed": 15600101,
+        "lord": {"name": "织田信长", "strongholdId": 1},
+        "forces": [
+            {"id": 1, "name": "织田", "lordCharacterId": 1, "food": 80000000, "money": 8000000},
+            {"id": 2, "name": "今川", "lordCharacterId": 3, "food": 70000000, "money": 6000000},
+            {"id": 3, "name": "酒井", "lordCharacterId": 6, "food": 20000000, "money": 2000000, "status": "InnerVassal", "suzerainForceId": 1},
+            {"id": 4, "name": "北条支系", "lordCharacterId": 7, "food": 15000000, "money": 1500000, "status": "InnerVassal", "suzerainForceId": 2},
+        ],
+        "characters": [
+            {"id": 1, "name": "织田信长", "forceId": 1, "strongholdId": 1, "leadership": 96, "power": 82, "birthYear": 1534},
+            {"id": 2, "name": "柴田胜家", "forceId": 1, "leadership": 91, "power": 88, "birthYear": 1522},
+            {"id": 3, "name": "今川氏真", "forceId": 2, "strongholdId": 6, "leadership": 68, "power": 65, "birthYear": 1538},
+            {"id": 4, "name": "林秀贞", "forceId": 1, "strongholdId": 1, "leadership": 72, "politics": 78, "birthYear": 1507},
+            {"id": 5, "name": "北条氏康", "forceId": 2, "strongholdId": 4, "leadership": 88, "power": 75, "birthYear": 1515},
+            {"id": 6, "name": "酒井忠次", "forceId": 3, "strongholdId": 2, "leadership": 85, "power": 80, "birthYear": 1485},
+            {"id": 7, "name": "北条纲成", "forceId": 4, "strongholdId": 5, "leadership": 78, "power": 72, "birthYear": 1510},
+        ],
+        "strongholds": [
+            {"id": 1, "name": "清洲", "forceId": 1, "x": 2, "y": 8, "lordId": 0, "food": 90000000, "population": 48000, "garrisonSoldiers": 1500, "pollTaxRate": 12, "agricultureTaxRate": 28, "commerceTaxRate": 15, "tariffTaxRate": 10, "mayorName": "林秀贞", "morale": 85, "training": 68, "money": 18000000},
+            {"id": 2, "name": "犬山", "forceId": 3, "x": 4, "y": 4, "lordId": 6, "food": 72000000, "population": 36000, "garrisonSoldiers": 1200, "mayorName": "酒井忠次", "morale": 78, "training": 62, "money": 9000000},
+            {"id": 3, "name": "冈崎", "forceId": 1, "x": 2, "y": 14, "lordId": 0, "food": 60000000, "population": 42000, "garrisonSoldiers": 1000, "morale": 80, "training": 65, "money": 7200000},
+            {"id": 4, "name": "小田原", "forceId": 2, "x": 16, "y": 10, "lordId": 5, "food": 108000000, "population": 72000, "garrisonSoldiers": 1800, "pollTaxRate": 11, "agricultureTaxRate": 26, "commerceTaxRate": 14, "tariffTaxRate": 9, "morale": 82, "training": 70, "money": 24000000},
+            {"id": 5, "name": "骏府", "forceId": 4, "x": 14, "y": 6, "lordId": 7, "food": 84000000, "population": 54000, "garrisonSoldiers": 1200, "morale": 79, "training": 64, "money": 15000000},
+            {"id": 6, "name": "挂川", "forceId": 2, "x": 12, "y": 14, "lordId": 0, "food": 66000000, "population": 39000, "garrisonSoldiers": 1400, "morale": 76, "training": 60, "money": 10800000},
+            {"id": 7, "name": "三河凑", "forceId": 1, "x": 6, "y": 12, "lordId": 0, "food": 48000000, "population": 24000, "garrisonSoldiers": 800, "morale": 74, "training": 58, "money": 4800000},
+            {"id": 8, "name": "伊豆港", "forceId": 2, "x": 16, "y": 16, "lordId": 0, "food": 60000000, "population": 30000, "garrisonSoldiers": 900, "morale": 75, "training": 55, "money": 5400000},
+            {"id": 9, "name": "足助", "forceId": 1, "x": 8, "y": 2, "lordId": 0, "food": 42000000, "population": 21000, "garrisonSoldiers": 700, "morale": 72, "training": 56, "money": 3600000},
+            {"id": 10, "name": "沼津", "forceId": 4, "x": 10, "y": 16, "lordId": 0, "food": 36000000, "population": 18000, "garrisonSoldiers": 800, "morale": 70, "training": 54, "money": 3000000},
+        ],
+        "units": [
+            {
+                "id": 1,
+                "name": "织田先锋",
+                "forceId": 1,
+                "x": 8,
+                "y": 8,
+                "soldiers": 3000,
+                "food": 6000000,
+                "movement": 5,
+                "commanderId": 2,
+                "commanderName": "柴田胜家",
+                "morale": 82,
+                "training": 72,
+                "money": 3000000,
+                "composition": [
+                    {"typeId": 1, "typeName": "足轻", "soldiers": 1890},
+                    {"typeId": 2, "typeName": "弓兵", "soldiers": 480},
+                    {"typeId": 3, "typeName": "骑兵", "soldiers": 360},
+                    {"typeId": 4, "typeName": "铁炮", "soldiers": 270},
+                ],
+            },
+            {
+                "id": 2,
+                "name": "今川先锋",
+                "forceId": 2,
+                "x": 16,
+                "y": 12,
+                "soldiers": 2400,
+                "food": 4800000,
+                "movement": 5,
+                "commanderId": 3,
+                "commanderName": "今川氏真",
+                "morale": 78,
+                "training": 68,
+                "money": 1800000,
+                "composition": [
+                    {"typeId": 1, "typeName": "足轻", "soldiers": 1500},
+                    {"typeId": 2, "typeName": "弓兵", "soldiers": 360},
+                    {"typeId": 3, "typeName": "骑兵", "soldiers": 300},
+                    {"typeId": 4, "typeName": "铁炮", "soldiers": 240},
+                ],
+            },
+            {
+                "id": 21,
+                "name": "今川主力",
+                "forceId": 2,
+                "x": 18,
+                "y": 10,
+                "soldiers": 5500,
+                "food": 11000000,
+                "movement": 5,
+                "commanderName": "今川氏真",
+                "morale": 80,
+                "training": 70,
+                "money": 2500000,
+                "composition": [
+                    {"typeId": 1, "typeName": "足轻", "soldiers": 3465},
+                    {"typeId": 2, "typeName": "弓兵", "soldiers": 880},
+                    {"typeId": 3, "typeName": "骑兵", "soldiers": 660},
+                    {"typeId": 4, "typeName": "铁炮", "soldiers": 495},
+                ],
+            },
+        ],
+    },
+}
+
+out = Path(__file__).resolve().parents[1] / "SengokuScroll.Strategy" / "Maps" / "mini_kanto.json"
+out.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(f"Wrote {out} ({width}x{height}, terrains={len(set(terrain_grid))} kinds)")

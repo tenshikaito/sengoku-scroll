@@ -44,7 +44,8 @@ public class ExampleGameDataProcessor : IGameDataProcessor
             {
                 Strongholds = [],
                 Characters = [],
-                Units = []
+                Units = [],
+                Roads = []
             },
 
             GameMasterData = new()

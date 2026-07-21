@@ -8,7 +8,7 @@ using SengokuScroll.Strategy.Tests.Fixtures;
 
 namespace SengokuScroll.Strategy.Tests;
 
-/// <summary>瞬间战计算器：战力、胜率边界、确定性种子�?/summary>
+/// <summary>????????????????????�?/summary>
 public class InstantBattleCalculatorTests
 {
     [Fact]
@@ -57,7 +57,7 @@ public class InstantBattleCalculatorTests
     }
 }
 
-/// <summary>StrategySimulationHost 瞬间战联调�?/summary>
+/// <summary>StrategySimulationHost ?????�?/summary>
 public class StrategyInstantBattleHostTests
 {
     [Fact]
@@ -67,9 +67,9 @@ public class StrategyInstantBattleHostTests
         host.LoadScenario("mini_kanto");
 
         IsolateEnemyUnitsForMarchTest(GetWorld(host));
-        Teleport(GetWorld(host), 2, new Point3(5, 4));
+        Teleport(GetWorld(host), 2, new Point3(9, 8));
 
-        var preview = host.PreviewUnitAttack(1, new Point2(5, 4));
+        var preview = host.PreviewUnitAttack(1, new Point2(9, 8));
         Assert.True(preview.IsSuccess);
         Assert.Equal(2, preview.Value!.DefenderUnitId);
         Assert.InRange(preview.Value.AttackerWinRatePercent, 5, 95);
@@ -79,7 +79,7 @@ public class StrategyInstantBattleHostTests
         var attSoldiersBefore = beforeAtt.Soldier;
         var defSoldiersBefore = beforeDef.Soldier;
 
-        Assert.True(host.OrderUnitAttack(1, new Point2(5, 4)).IsSuccess);
+        Assert.True(host.OrderUnitAttack(1, new Point2(9, 8)).IsSuccess);
 
         var sawBattleReport = false;
         for (var day = 0; day < 14; day++)
@@ -94,7 +94,7 @@ public class StrategyInstantBattleHostTests
             }
         }
 
-        // 业务：当主领兵在战场同格时即日目击；异格则信使抵达后解锁（均可能命中�?        Assert.True(sawBattleReport, "应收到决战战报（同格目击或信使抵达）");
+        // ??????????????????????????????????�?        Assert.True(sawBattleReport, "??????????????????");
     }
 
     [Fact]

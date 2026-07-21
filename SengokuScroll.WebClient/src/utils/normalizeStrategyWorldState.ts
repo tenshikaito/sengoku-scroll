@@ -6,6 +6,7 @@ import type {
   StrategyDefenseFacilityState,
   StrategyForceState,
   StrategyLordState,
+  StrategyMapCharacterState,
   StrategyMessengerState,
   StrategyStrongholdState,
   StrategySupplyConvoyState,
@@ -13,11 +14,12 @@ import type {
   StrategyInTransitSupply,
   StrategyUnitState,
   StrategyWorldState,
-  StrategyMapLandmarkState,
   StrategyBattlefieldState,
   StrategyBattlefieldParticipant,
+  StrategyVisibilityState,
+  GameStartOptionsState,
+  StrategyEspionageIntelEntry,
 } from "@/api/strategyTypes";
-import { enrichStrategyMapState } from "@/utils/strategyMapDefaults";
 
 function pick(obj: Record<string, unknown>, camel: string, pascal: string): unknown {
   return obj[camel] ?? obj[pascal];
@@ -127,7 +129,7 @@ function normalizeUnit(raw: unknown, lord: StrategyLordState): StrategyUnitState
     morale: safeInt(pick(u, "morale", "Morale"), 75),
     training: safeInt(pick(u, "training", "Training"), 70),
     cultureName: requiredString(pick(u, "cultureName", "CultureName"), "日本"),
-    religionName: requiredString(pick(u, "religionName", "ReligionName"), "神道"),
+    religionName: requiredString(pick(u, "religionName", "ReligionName"), "神道教"),
     money: safeInt(pick(u, "money", "Money")),
     composition: Array.isArray(pick(u, "composition", "Composition"))
       ? (pick(u, "composition", "Composition") as unknown[]).map(normalizeSubUnit)
@@ -137,6 +139,28 @@ function normalizeUnit(raw: unknown, lord: StrategyLordState): StrategyUnitState
     inTransitSupplies: Array.isArray(pick(u, "inTransitSupplies", "InTransitSupplies"))
       ? (pick(u, "inTransitSupplies", "InTransitSupplies") as unknown[]).map(normalizeInTransitSupply)
       : [],
+    mapVisible: pick(u, "mapVisible", "MapVisible") === false ? false : true,
+    soldiersDisplay: optionalString(pick(u, "soldiersDisplay", "SoldiersDisplay")),
+    moraleBand: optionalString(pick(u, "moraleBand", "MoraleBand")),
+    trainingBand: optionalString(pick(u, "trainingBand", "TrainingBand")),
+  };
+}
+
+function normalizeRosterUnit(raw: unknown) {
+  const u = raw as Record<string, unknown>;
+  return {
+    id: safeInt(pick(u, "id", "Id")),
+    name: requiredString(pick(u, "name", "Name"), "部队"),
+    forceId: safeInt(pick(u, "forceId", "ForceId"), 1),
+    x: safeInt(pick(u, "x", "X")),
+    y: safeInt(pick(u, "y", "Y")),
+    soldiers: safeInt(pick(u, "soldiers", "Soldiers")),
+    status: requiredString(pick(u, "status", "Status"), "Waiting"),
+    directive: requiredString(pick(u, "directive", "Directive"), "Move"),
+    ap: safeInt(pick(u, "ap", "Ap"), 5),
+    supplyStatus: requiredString(pick(u, "supplyStatus", "SupplyStatus"), "Sufficient"),
+    commanderName: optionalString(pick(u, "commanderName", "CommanderName")),
+    offMap: pick(u, "offMap", "OffMap") !== false,
   };
 }
 
@@ -168,6 +192,8 @@ function normalizeStronghold(
   return {
     id,
     name: requiredString(pick(s, "name", "Name"), `据点 #${id}`),
+    typeId: safeInt(pick(s, "typeId", "TypeId"), 1),
+    typeName: requiredString(pick(s, "typeName", "TypeName"), "平城"),
     forceId,
     x,
     y,
@@ -183,7 +209,7 @@ function normalizeStronghold(
     morale: safeInt(pick(s, "morale", "Morale"), 80),
     training: safeInt(pick(s, "training", "Training"), 65),
     cultureName: requiredString(pick(s, "cultureName", "CultureName"), "日本"),
-    religionName: requiredString(pick(s, "religionName", "ReligionName"), "神道"),
+    religionName: requiredString(pick(s, "religionName", "ReligionName"), "神道教"),
     money: safeInt(pick(s, "money", "Money")),
     garrisonSoldiers: safeInt(pick(s, "garrisonSoldiers", "GarrisonSoldiers")),
     garrisonWounded: safeInt(pick(s, "garrisonWounded", "GarrisonWounded"), 0),
@@ -195,6 +221,58 @@ function normalizeStronghold(
     defense: safeInt(pick(s, "defense", "Defense")),
     defenseFacilities: normalizeDefenseFacilities(pick(s, "defenseFacilities", "DefenseFacilities")),
     siegeThreat: optionalString(pick(s, "siegeThreat", "SiegeThreat")) ?? null,
+    visibilityTier: optionalString(pick(s, "visibilityTier", "VisibilityTier")),
+    espionageSoldiersBand: optionalString(pick(s, "espionageSoldiersBand", "EspionageSoldiersBand")),
+    espionageMoraleBand: optionalString(pick(s, "espionageMoraleBand", "EspionageMoraleBand")),
+    espionageTrainingBand: optionalString(pick(s, "espionageTrainingBand", "EspionageTrainingBand")),
+    espionagePopulationBand: optionalString(pick(s, "espionagePopulationBand", "EspionagePopulationBand")),
+    espionageFoodBand: optionalString(pick(s, "espionageFoodBand", "EspionageFoodBand")),
+    espionageMoneyBand: optionalString(pick(s, "espionageMoneyBand", "EspionageMoneyBand")),
+  };
+}
+
+function normalizeEspionageIntel(raw: unknown): StrategyEspionageIntelEntry {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    targetKind: requiredString(pick(row, "targetKind", "TargetKind"), "Stronghold"),
+    targetId: safeInt(pick(row, "targetId", "TargetId")),
+    scope: requiredString(pick(row, "scope", "Scope"), "Both"),
+    precision: requiredString(pick(row, "precision", "Precision"), "Fuzzy"),
+    expiresYear: safeInt(pick(row, "expiresYear", "ExpiresYear")),
+    expiresMonth: safeInt(pick(row, "expiresMonth", "ExpiresMonth"), 1),
+    expiresDay: safeInt(pick(row, "expiresDay", "ExpiresDay"), 1),
+  };
+}
+
+function normalizeVisibility(raw: unknown): StrategyVisibilityState | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const v = raw as Record<string, unknown>;
+  const cellsRaw = pick(v, "visibleCells", "VisibleCells");
+  const bitsRaw = pick(v, "exploredBits", "ExploredBits");
+  const knownRaw = pick(v, "knownStrongholdIds", "KnownStrongholdIds");
+  return {
+    fogMode: requiredString(pick(v, "fogMode", "FogMode"), "Force"),
+    intelMode: requiredString(pick(v, "intelMode", "IntelMode"), "ForceIntel"),
+    controlMode: requiredString(pick(v, "controlMode", "ControlMode"), "DirectiveOnly"),
+    instantEventMessages: pick(v, "instantEventMessages", "InstantEventMessages") === true,
+    allySharedVision: pick(v, "allySharedVision", "AllySharedVision") === true,
+    mapWidth: safeInt(pick(v, "mapWidth", "MapWidth"), 0),
+    mapHeight: safeInt(pick(v, "mapHeight", "MapHeight"), 0),
+    exploredBits: Array.isArray(bitsRaw) ? bitsRaw.map((b) => safeInt(b)) : [],
+    visibleCells: Array.isArray(cellsRaw) ? cellsRaw.map(normalizeMapPoint) : [],
+    knownStrongholdIds: Array.isArray(knownRaw) ? knownRaw.map((id) => safeInt(id)) : [],
+  };
+}
+
+function normalizeStartOptions(raw: unknown): GameStartOptionsState | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  return {
+    fogMode: requiredString(pick(o, "fogMode", "FogMode"), "Force"),
+    intelMode: requiredString(pick(o, "intelMode", "IntelMode"), "ForceIntel"),
+    controlMode: requiredString(pick(o, "controlMode", "ControlMode"), "DirectiveOnly"),
+    allySharedVision: pick(o, "allySharedVision", "AllySharedVision") === true,
+    instantEventMessages: pick(o, "instantEventMessages", "InstantEventMessages") === true,
   };
 }
 
@@ -277,7 +355,7 @@ function normalizeConvoy(raw: unknown): StrategySupplyConvoyState {
     morale: safeInt(pick(c, "morale", "Morale"), 75),
     training: safeInt(pick(c, "training", "Training"), 65),
     cultureName: requiredString(pick(c, "cultureName", "CultureName"), "日本"),
-    religionName: requiredString(pick(c, "religionName", "ReligionName"), "神道"),
+    religionName: requiredString(pick(c, "religionName", "ReligionName"), "神道教"),
     money: safeInt(pick(c, "money", "Money")),
     targetUnitId: safeInt(pick(c, "targetUnitId", "TargetUnitId")),
     targetUnitName: optionalString(pick(c, "targetUnitName", "TargetUnitName")),
@@ -314,13 +392,25 @@ function normalizeMessenger(raw: unknown): StrategyMessengerState {
     morale: safeInt(pick(m, "morale", "Morale"), 80),
     training: safeInt(pick(m, "training", "Training"), 70),
     cultureName: requiredString(pick(m, "cultureName", "CultureName"), "日本"),
-    religionName: requiredString(pick(m, "religionName", "ReligionName"), "神道"),
+    religionName: requiredString(pick(m, "religionName", "ReligionName"), "神道教"),
     money: safeInt(pick(m, "money", "Money")),
     targetUnitId: safeInt(pick(m, "targetUnitId", "TargetUnitId")),
     targetUnitName: optionalString(pick(m, "targetUnitName", "TargetUnitName")),
     originStrongholdId: safeInt(pick(m, "originStrongholdId", "OriginStrongholdId")),
     originStrongholdName: optionalString(pick(m, "originStrongholdName", "OriginStrongholdName")),
     pendingDirective: pending == null ? null : String(pending),
+  };
+}
+
+function normalizeMapCharacter(raw: unknown): StrategyMapCharacterState {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    id: safeInt(pick(row, "id", "Id")),
+    name: requiredString(pick(row, "name", "Name"), "—"),
+    forceId: safeInt(pick(row, "forceId", "ForceId")),
+    x: safeInt(pick(row, "x", "X")),
+    y: safeInt(pick(row, "y", "Y")),
+    mapVisible: pick(row, "mapVisible", "MapVisible") as boolean | undefined,
   };
 }
 
@@ -334,6 +424,7 @@ function normalizeCharacter(raw: unknown): StrategyCharacterSummaryState {
     forceId: safeInt(pick(row, "forceId", "ForceId")),
     name: pick(row, "name", "Name") as string | undefined,
     strongholdId: safeInt(pick(row, "strongholdId", "StrongholdId"), 0) || undefined,
+    leaderId: safeInt(pick(row, "leaderId", "LeaderId"), 0) || undefined,
     locationType: pick(row, "locationType", "LocationType") as string | undefined,
     forceStatus: pick(row, "forceStatus", "ForceStatus") as string | undefined,
     leadership: safeInt(pick(row, "leadership", "Leadership"), 0) || undefined,
@@ -439,6 +530,7 @@ function normalizeMasterData(raw: unknown): StrategyMasterDataSnapshot | undefin
     ),
     terrains: normalizeMasterDataList(pick(row, "terrains", "Terrains")),
     climates: normalizeMasterDataList(pick(row, "climates", "Climates")),
+    weathers: normalizeMasterDataList(pick(row, "weathers", "Weathers")),
     regions: normalizeMasterDataList(pick(row, "regions", "Regions")),
     roads: normalizeMasterDataList(pick(row, "roads", "Roads")),
     landmarks: normalizeMasterDataList(pick(row, "landmarks", "Landmarks")),
@@ -464,14 +556,19 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
   const dateRaw = (pick(o, "date", "Date") ?? {}) as Record<string, unknown>;
 
   const unitsRaw = pick(o, "units", "Units");
+  const rosterRaw = pick(o, "ownUnitRoster", "OwnUnitRoster");
   const strongholdsRaw = pick(o, "strongholds", "Strongholds");
   const forcesRaw = pick(o, "forces", "Forces");
   const convoysRaw = pick(o, "supplyConvoys", "SupplyConvoys");
   const messengersRaw = pick(o, "messengers", "Messengers");
   const charactersRaw = pick(o, "characters", "Characters");
+  const mapCharactersRaw = pick(o, "mapCharacters", "MapCharacters");
+  const espionageIntelRaw = pick(o, "espionageIntel", "EspionageIntel");
   const diplomaciesRaw = pick(o, "diplomacies", "Diplomacies");
   const battlefieldsRaw = pick(o, "battlefields", "Battlefields");
   const masterDataRaw = pick(o, "masterData", "MasterData");
+  const visibilityRaw = pick(o, "visibility", "Visibility");
+  const startOptionsRaw = pick(o, "startOptions", "StartOptions");
 
   const playerForceId = safeInt(pick(o, "playerForceId", "PlayerForceId"), 1);
   const scenarioId = requiredString(pick(o, "scenarioId", "ScenarioId"), "mini_kanto");
@@ -480,47 +577,12 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
 
   const width = safeInt(pick(mapRaw, "width", "Width"), 10);
   const height = safeInt(pick(mapRaw, "height", "Height"), 10);
-  const tileTerrainRaw = pick(mapRaw, "tileTerrainNames", "TileTerrainNames");
-  const tileRegionRaw = pick(mapRaw, "tileRegionNames", "TileRegionNames");
-  const landmarksRaw = pick(mapRaw, "landmarks", "Landmarks");
 
-  const map = enrichStrategyMapState(scenarioId, {
+  const map = {
     name: requiredString(pick(mapRaw, "name", "Name"), "策略地图"),
     width,
     height,
-    roadCells: Array.isArray(pick(mapRaw, "roadCells", "RoadCells"))
-      ? (pick(mapRaw, "roadCells", "RoadCells") as unknown[]).map((c) => {
-          const cell = c as Record<string, unknown>;
-          return {
-            x: safeInt(pick(cell, "x", "X")),
-            y: safeInt(pick(cell, "y", "Y")),
-            typeId: safeInt(pick(cell, "typeId", "TypeId"), 1),
-            typeName: requiredString(pick(cell, "typeName", "TypeName"), "官道"),
-            level: safeInt(pick(cell, "level", "Level"), safeInt(pick(cell, "typeId", "TypeId"), 1)),
-            speedBonus: safeInt(pick(cell, "speedBonus", "SpeedBonus")),
-            movementCost: safeInt(pick(cell, "movementCost", "MovementCost"), 1),
-          };
-        })
-      : [],
-    tileTerrainNames: Array.isArray(tileTerrainRaw)
-      ? tileTerrainRaw.map((v) => requiredString(v, "平地"))
-      : undefined,
-    tileRegionNames: Array.isArray(tileRegionRaw)
-      ? tileRegionRaw.map((v) => optionalString(v))
-      : undefined,
-    landmarks: Array.isArray(landmarksRaw)
-      ? landmarksRaw.map((lm) => {
-          const item = lm as Record<string, unknown>;
-          const id = safeInt(pick(item, "id", "Id"));
-          return {
-            id,
-            name: requiredString(pick(item, "name", "Name"), `地标 #${id}`),
-            x: safeInt(pick(item, "x", "X")),
-            y: safeInt(pick(item, "y", "Y")),
-          } satisfies StrategyMapLandmarkState;
-        })
-      : undefined,
-  });
+  };
 
   return {
     scenarioId,
@@ -575,6 +637,7 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
       ? strongholdsRaw.map((s) => normalizeStronghold(s, lord, playerForceId))
       : [],
     units: Array.isArray(unitsRaw) ? unitsRaw.map((u) => normalizeUnit(u, lord)) : [],
+    ownUnitRoster: Array.isArray(rosterRaw) ? rosterRaw.map(normalizeRosterUnit) : [],
     battlefields: Array.isArray(battlefieldsRaw)
       ? battlefieldsRaw.map(normalizeBattlefield)
       : [],
@@ -582,6 +645,12 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
     messengers: Array.isArray(messengersRaw) ? messengersRaw.map(normalizeMessenger) : [],
     characters: Array.isArray(charactersRaw)
       ? charactersRaw.map(normalizeCharacter)
+      : [],
+    mapCharacters: Array.isArray(mapCharactersRaw)
+      ? mapCharactersRaw.map(normalizeMapCharacter)
+      : [],
+    espionageIntel: Array.isArray(espionageIntelRaw)
+      ? espionageIntelRaw.map(normalizeEspionageIntel)
       : [],
     diplomacies: Array.isArray(diplomaciesRaw)
       ? diplomaciesRaw.map((d) => {
@@ -597,5 +666,7 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
         })
       : [],
     masterData: normalizeMasterData(masterDataRaw),
+    visibility: normalizeVisibility(visibilityRaw),
+    startOptions: normalizeStartOptions(startOptionsRaw),
   };
 }

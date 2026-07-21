@@ -20,15 +20,15 @@ public class RoadPathfindingTests
         var rules = ctx.Services.GetRequiredService<MovementRules>();
 
         var unit = ctx.World.GameData.Units[1];
-        unit.Location = new Point3(1, 4);
+        unit.Location = new Point3(2, 8);
         unit.Ap = 20;
 
-        var route = pathfinding.CalculatePath(unit, new Point2(3, 4));
+        var route = pathfinding.CalculatePath(unit, new Point2(5, 8));
 
         Assert.NotNull(route);
         Assert.True(route!.Count >= 3);
 
-        var roadStep = route.First(n => n.Location.X == 2 && n.Location.Y == 4);
+        var roadStep = route.First(n => n.Location.X == 3 && n.Location.Y == 8);
         Assert.Equal(1, roadStep.StepCost);
         Assert.Equal(1, rules.GetTileMovementApCost(unit, roadStep.Location));
     }

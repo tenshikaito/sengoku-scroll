@@ -7,6 +7,12 @@ public interface IPathfindingService
 {
     List<PathNode>? CalculatePath(IMovable movable, Point2 target);
 
-    /** 从任意起点寻路（用于路径中继预览与拼接）。 */
     List<PathNode>? CalculatePathFrom(Point2 start, Point2 target, IMovable movable);
+
+    /** 可选自定义途经格阻挡判定（用于战争迷雾下的路径预览等）。 */
+    List<PathNode>? CalculatePathFrom(
+        Point2 start,
+        Point2 target,
+        IMovable movable,
+        Func<Point2, bool>? isPathTileBlocked);
 }

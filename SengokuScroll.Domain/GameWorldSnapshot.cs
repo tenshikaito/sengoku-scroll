@@ -20,6 +20,9 @@ public class GameWorldSnapshot
         public required Dictionary<int, int> Strongholds { get; set; }
 
         public required Dictionary<int, List<int>> Units { get; set; }
+
+        /// <summary>tileIndex → 道路类型 Id。</summary>
+        public required Dictionary<int, byte> Roads { get; set; }
     }
 
     public class GameDataViewModel

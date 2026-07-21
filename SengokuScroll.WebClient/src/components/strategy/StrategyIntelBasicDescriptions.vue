@@ -1,48 +1,48 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed } from "vue";
 import type { IntelFieldRow } from "@/utils/strategyIntelRows";
 
 const props = defineProps<{
   rows: IntelFieldRow[];
-  /** 描述列表列数，默认随视口自适应（3–5 列）。 */
+  /** 描述列表列数（固定 3 列）。 */
   column?: number;
   /** 开发字段标题格样式：文字更浅 / 背景更浅。 */
   devLabelStyle?: "text" | "background";
 }>();
 
-const viewportWidth = ref(typeof window !== "undefined" ? window.innerWidth : 1280);
+const DESCRIPTION_COLUMNS = 3;
 
-const descriptionColumns = computed(() => {
-  if (props.column != null) return props.column;
-  if (viewportWidth.value >= 1280) return 5;
-  if (viewportWidth.value >= 960) return 4;
-  return 3;
-});
+const descriptionColumns = computed(() => props.column ?? DESCRIPTION_COLUMNS);
 
-/** 按列优先（自上而下）重排，配合 el-descriptions 行优先填充。 */
-const displayRows = computed(() => {
-  const cols = descriptionColumns.value;
-  const rows = props.rows;
+/** 按列优先分列，再按行展开以配合 el-descriptions 的行优先填充。 */
+function reorderForColumnMajor(rows: IntelFieldRow[], cols: number): IntelFieldRow[] {
+  if (rows.length <= cols) return rows;
+
+  const columns: IntelFieldRow[][] = [];
   const count = rows.length;
-  if (count <= cols) return rows;
+  const base = Math.floor(count / cols);
+  const extra = count % cols;
+  let index = 0;
+  for (let col = 0; col < cols; col++) {
+    const height = base + (col < extra ? 1 : 0);
+    columns.push(rows.slice(index, index + height));
+    index += height;
+  }
 
-  const rowsPerCol = Math.ceil(count / cols);
+  const maxRows = Math.max(...columns.map((column) => column.length));
   const ordered: IntelFieldRow[] = [];
-  for (let row = 0; row < rowsPerCol; row++) {
+  for (let row = 0; row < maxRows; row++) {
     for (let col = 0; col < cols; col++) {
-      const sourceIndex = col * rowsPerCol + row;
-      if (sourceIndex < count) ordered.push(rows[sourceIndex]!);
+      const item = columns[col]?.[row];
+      if (item) ordered.push(item);
     }
   }
   return ordered;
-});
-
-function syncViewportWidth() {
-  viewportWidth.value = window.innerWidth;
 }
 
-onMounted(() => window.addEventListener("resize", syncViewportWidth));
-onUnmounted(() => window.removeEventListener("resize", syncViewportWidth));
+const displayRows = computed(() =>
+  reorderForColumnMajor(props.rows, descriptionColumns.value)
+);
 </script>
 
 <template>

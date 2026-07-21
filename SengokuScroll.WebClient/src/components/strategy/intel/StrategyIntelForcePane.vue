@@ -169,12 +169,12 @@ function onSelectRow(row: Record<string, unknown> | null) {
       </div>
 
       <div v-else-if="detailTab === 'culture'" class="detail-body">
-        <StrategyIntelBasicDescriptions v-if="cultureRows.length" :rows="cultureRows" />
+        <StrategyIntelBasicDescriptions v-if="cultureRows.length" :rows="cultureRows" :column="1" />
         <p v-else class="placeholder">请选择势力。</p>
       </div>
 
       <div v-else-if="detailTab === 'religion'" class="detail-body">
-        <StrategyIntelBasicDescriptions v-if="religionRows.length" :rows="religionRows" />
+        <StrategyIntelBasicDescriptions v-if="religionRows.length" :rows="religionRows" :column="1" />
         <p v-else class="placeholder">请选择势力。</p>
       </div>
 

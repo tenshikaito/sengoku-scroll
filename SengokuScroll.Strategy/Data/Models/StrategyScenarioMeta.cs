@@ -7,8 +7,15 @@ public sealed class StrategyScenarioMeta
 {
     public int PlayerForceId { get; init; } = 1;
 
-    /// <summary>本局难度；默认标准（非简易则不即时解锁战报）。</summary>
+    /// <summary>本局难度；非 Custom 时使用固定预设模板。</summary>
     public StrategyDifficulty Difficulty { get; init; } = StrategyDifficulty.Normal;
+
+    /// <summary>本局生效的开局选项（由难度或 Custom 解析）。</summary>
+    public GameStartOptions StartOptions { get; init; } =
+        GameStartOptions.ForDifficulty(StrategyDifficulty.Normal);
+
+    /// <summary>开局即「已知位置」的非己方据点 Id（剧本 JSON）。</summary>
+    public IReadOnlyList<int> KnownStrongholdIds { get; init; } = [];
 
     public string LordName { get; init; } = "当主";
 
@@ -25,7 +32,7 @@ public sealed class StrategyScenarioMeta
     /// <summary>实体情报展示文本（来自剧本 JSON）。</summary>
     public StrategyScenarioIntelCatalog Intel { get; init; } = StrategyScenarioIntelCatalog.Empty;
 
-    /// <summary>政治 Region → 收粮日历（M4-b）。</summary>
+    /// <summary>地图 Region → 收粮日历（M4-b）。</summary>
     public IReadOnlyDictionary<int, RegionHarvestProfile> RegionHarvestProfiles { get; init; }
         = new Dictionary<int, RegionHarvestProfile>();
 }

@@ -67,17 +67,13 @@ public static class BattleWeatherEvaluator
 
     private static RegionDefinition? ResolveRegion(GameMapMasterData? mapMaster, Point3 location)
     {
-        if (mapMaster is null || mapMaster.PoliticalRegionGrid.Length == 0)
+        if (mapMaster is null)
             return null;
 
         if (mapMaster.TileMap.IsOutOfBounds(location))
             return null;
 
-        var index = mapMaster.TileMap.GetIndex(location);
-        if (index < 0 || index >= mapMaster.PoliticalRegionGrid.Length)
-            return null;
-
-        var regionId = mapMaster.PoliticalRegionGrid[index];
+        var regionId = mapMaster.TileMap.GetRegion(location);
         return regionId > 0 ? mapMaster.Regions.GetValueOrDefault(regionId) : null;
     }
 }

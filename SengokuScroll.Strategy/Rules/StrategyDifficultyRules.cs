@@ -3,40 +3,53 @@ using SengokuScroll.Strategy.Models;
 namespace SengokuScroll.Strategy.Rules;
 
 /// <summary>
-/// 按难度启用的规则开关。新难度档位在此追加，避免散落 if。
+/// 难度解析与情报相关开关。战斗伤亡/追击成功率不随难度变化。
 /// </summary>
 public static class StrategyDifficultyRules
 {
+    /// <summary>败退后至少保留的残部比例（全难度一致）。</summary>
+    public const double DefaultDefeatSurvivorRatio = 0.50;
+
+    /// <summary>追击脱离成功率（百分点，全难度一致）。</summary>
+    public const int DefaultPursuitDisengageChancePercent = 40;
+
     /// <summary>解析字符串难度；无法识别时默认标准。</summary>
     public static StrategyDifficulty Parse(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return StrategyDifficulty.Normal;
 
-        return Enum.TryParse<StrategyDifficulty>(value.Trim(), ignoreCase: true, out var parsed)
+        var trimmed = value.Trim();
+        if (trimmed.Equals("Legendary", StringComparison.OrdinalIgnoreCase))
+            return StrategyDifficulty.Hard;
+
+        return Enum.TryParse<StrategyDifficulty>(trimmed, ignoreCase: true, out var parsed)
             ? parsed
             : StrategyDifficulty.Normal;
     }
 
     /// <summary>
-    /// 是否允许玩家势力在战斗当日（不等信使）解锁完整战报。
-    /// 仅简易开启——写实模式下前线溃灭、主帅不知情是合理的。
+    /// 是否开启即时事件摘要（UI 通道；信使/Message 权威通道不变）。
+    /// Easy 预设强制开启；其它读 <see cref="GameStartOptions"/>。
     /// </summary>
+    public static bool InstantEventMessages(StrategyDifficulty difficulty, GameStartOptions? options = null)
+    {
+        if (difficulty == StrategyDifficulty.Easy)
+            return true;
+
+        return options?.InstantEventMessages ?? false;
+    }
+
+    /// <summary>兼容旧测试名。</summary>
+    [Obsolete("Use InstantEventMessages with GameStartOptions.")]
     public static bool AllowImmediateBattleReport(StrategyDifficulty difficulty)
-        => difficulty == StrategyDifficulty.Easy;
+        => InstantEventMessages(difficulty);
 
-    /// <summary>败方败退后强制保留的最低残部比例（与 <see cref="BattleCasualtyRules.MinDefeatSurvivorRatio"/> 一致）。</summary>
+    /// <summary>败方败退后强制保留的最低残部比例（与难度无关）。</summary>
     public static double DefeatResidualSoldierRatio(StrategyDifficulty difficulty)
-        => BattleCasualtyRules.MinDefeatSurvivorRatio(difficulty);
+        => DefaultDefeatSurvivorRatio;
 
-    /// <summary>追击决战时，撤退方脱离成功率（百分点）。</summary>
+    /// <summary>追击决战时，撤退方脱离成功率（与难度无关）。</summary>
     public static int PursuitDisengageChancePercent(StrategyDifficulty difficulty)
-        => difficulty switch
-        {
-            StrategyDifficulty.Easy => 55,
-            StrategyDifficulty.Normal => 40,
-            StrategyDifficulty.Hard => 28,
-            StrategyDifficulty.Legendary => 18,
-            _ => 40
-        };
+        => DefaultPursuitDisengageChancePercent;
 }

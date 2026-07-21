@@ -1,17 +1,25 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Application, Container, Graphics, Text } from "pixi.js";
-import type { StrategyWorldState } from "@/api/strategy";
+import type { StrategyWorldState, StrategyMapMasterState } from "@/api/strategy";
 import type { MapRouteOverlay, MapMoveRelayMarker } from "./mapRouteStyles";
 import { MOVE_RELAY_MARKER_STYLES, ROUTE_STYLES } from "./mapRouteStyles";
 import { getForceColor } from "./forceColors";
-import { resolveEntityMapColor, type StrategyMapColorMode } from "@/utils/mapEntityColors";
+import { resolveEntityMapColor, isPlayerRealmForce, type StrategyMapColorMode } from "@/utils/mapEntityColors";
 import { logStrategyMapCoords } from "@/utils/strategyMapDebug";
+import { terrainFillColor, terrainStrokeColor } from "@/utils/terrainColors";
+import { maskSoldiersFirstDigit } from "@/utils/strategyDisplayUnits";
+import { mapTileIndex } from "@/utils/mapTileLookup";
 
 const TILE_SIZE = 48;
+/** 裁切范围相对视口向外扩展 20%，减少平移时的黑边与频繁重绘。 */
+const VIEWPORT_BUFFER_RATIO = 0.2;
+
+type CellBounds = { x0: number; y0: number; x1: number; y1: number };
 
 const props = defineProps<{
   worldState: StrategyWorldState | null;
+  mapMaster: StrategyMapMasterState | null;
   selectedUnitId: number | null;
   selectedStrongholdId?: number | null;
   selectedConvoyId?: number | null;
@@ -56,6 +64,8 @@ let containerStart = { x: 0, y: 0 };
 let didPan = false;
 let pointerDownOnCanvas = false;
 let activePointerId: number | null = null;
+let lastCulledBounds: CellBounds | null = null;
+let viewportRefreshPending = false;
 
 function resetPointerGesture() {
   isPanning = false;
@@ -67,6 +77,98 @@ function isInsideMap(x: number, y: number): boolean {
   const map = props.worldState?.map;
   if (!map) return false;
   return x >= 0 && y >= 0 && x < map.width && y < map.height;
+}
+
+function fogDisabled(): boolean {
+  const mode = props.worldState?.visibility?.fogMode;
+  return !mode || mode === "None";
+}
+
+function isTileExplored(x: number, y: number): boolean {
+  if (fogDisabled()) return true;
+  const vis = props.worldState?.visibility;
+  if (!vis) return true;
+  const idx = y * vis.mapWidth + x;
+  const word = Math.floor(idx / 32);
+  const bit = idx % 32;
+  return (((vis.exploredBits[word] ?? 0) >>> bit) & 1) === 1;
+}
+
+function isTileVisible(x: number, y: number): boolean {
+  if (fogDisabled()) return true;
+  const vis = props.worldState?.visibility;
+  if (!vis) return true;
+  return vis.visibleCells.some((c) => c.x === x && c.y === y);
+}
+
+function getCoreVisibleCellBounds(): CellBounds | null {
+  if (!app || !worldContainer || !hostRef.value || !props.worldState?.map) return null;
+
+  const map = props.worldState.map;
+  const rect = hostRef.value.getBoundingClientRect();
+  const topLeft = worldContainer.toLocal({ x: 0, y: 0 });
+  const bottomRight = worldContainer.toLocal({ x: rect.width, y: rect.height });
+
+  const minX = Math.min(topLeft.x, bottomRight.x);
+  const maxX = Math.max(topLeft.x, bottomRight.x);
+  const minY = Math.min(topLeft.y, bottomRight.y);
+  const maxY = Math.max(topLeft.y, bottomRight.y);
+
+  const x0 = Math.max(0, Math.floor(minX / TILE_SIZE));
+  const y0 = Math.max(0, Math.floor(minY / TILE_SIZE));
+  const x1 = Math.min(map.width - 1, Math.ceil(maxX / TILE_SIZE) - 1);
+  const y1 = Math.min(map.height - 1, Math.ceil(maxY / TILE_SIZE) - 1);
+
+  return { x0, y0, x1: Math.max(x0, x1), y1: Math.max(y0, y1) };
+}
+
+function expandCellBounds(bounds: CellBounds, mapWidth: number, mapHeight: number): CellBounds {
+  const spanX = bounds.x1 - bounds.x0 + 1;
+  const spanY = bounds.y1 - bounds.y0 + 1;
+  const padX = Math.max(1, Math.ceil(spanX * VIEWPORT_BUFFER_RATIO));
+  const padY = Math.max(1, Math.ceil(spanY * VIEWPORT_BUFFER_RATIO));
+
+  return {
+    x0: Math.max(0, bounds.x0 - padX),
+    y0: Math.max(0, bounds.y0 - padY),
+    x1: Math.min(mapWidth - 1, bounds.x1 + padX),
+    y1: Math.min(mapHeight - 1, bounds.y1 + padY),
+  };
+}
+
+function getVisibleCellBounds(): CellBounds | null {
+  const core = getCoreVisibleCellBounds();
+  if (!core || !props.worldState?.map) return null;
+  return expandCellBounds(core, props.worldState.map.width, props.worldState.map.height);
+}
+
+function coreExceedsCulledBounds(core: CellBounds, culled: CellBounds): boolean {
+  return (
+    core.x0 < culled.x0 ||
+    core.y0 < culled.y0 ||
+    core.x1 > culled.x1 ||
+    core.y1 > culled.y1
+  );
+}
+
+function needsViewportRedraw(): boolean {
+  const core = getCoreVisibleCellBounds();
+  if (!core) return false;
+  if (!lastCulledBounds) return true;
+  return coreExceedsCulledBounds(core, lastCulledBounds);
+}
+
+function isCellInViewport(x: number, y: number, bounds: CellBounds | null): boolean {
+  if (!bounds) return true;
+  return x >= bounds.x0 && x <= bounds.x1 && y >= bounds.y0 && y <= bounds.y1;
+}
+
+function routeIntersectsViewport(
+  points: { x: number; y: number }[],
+  bounds: CellBounds | null
+): boolean {
+  if (!bounds) return true;
+  return points.some((p) => isCellInViewport(p.x, p.y, bounds));
 }
 
 function cellCenter(x: number, y: number) {
@@ -148,6 +250,26 @@ function notifyViewportChange() {
   emit("viewportChange");
 }
 
+function refreshViewportLayers() {
+  drawMap();
+  drawEntities();
+  drawRoutes();
+  drawHighlights();
+  lastCulledBounds = getVisibleCellBounds();
+  notifyViewportChange();
+}
+
+function scheduleViewportRefresh() {
+  if (viewportRefreshPending) return;
+  viewportRefreshPending = true;
+  requestAnimationFrame(() => {
+    viewportRefreshPending = false;
+    if (needsViewportRedraw()) {
+      refreshViewportLayers();
+    }
+  });
+}
+
 function fitMapToView() {
   if (!app || !worldContainer || !props.worldState) return;
 
@@ -171,27 +293,50 @@ function fitMapToView() {
 }
 
 function drawMap() {
-  if (!mapLayer || !props.worldState?.map) return;
+  if (!mapLayer || !props.worldState?.map || !props.mapMaster) return;
 
   mapLayer.removeChildren();
 
   const { width, height } = props.worldState.map;
+  const master = props.mapMaster;
+  const bounds = getVisibleCellBounds();
+  const xStart = bounds?.x0 ?? 0;
+  const yStart = bounds?.y0 ?? 0;
+  const xEnd = bounds?.x1 ?? width - 1;
+  const yEnd = bounds?.y1 ?? height - 1;
+
   const roadSet = new Set(
-    (props.worldState.map.roadCells ?? []).map((r) => `${r.x},${r.y}`)
+    (master.roadCells ?? []).map((r) => `${r.x},${r.y}`)
   );
 
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
+  for (let y = yStart; y <= yEnd; y++) {
+    for (let x = xStart; x <= xEnd; x++) {
+      const explored = isTileExplored(x, y);
+      const visible = isTileVisible(x, y);
+
+      if (!explored) {
+        const black = new Graphics();
+        black
+          .rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+          .fill(0x050505)
+          .stroke({ width: 1, color: 0x111111, alpha: 0.8 });
+        mapLayer.addChild(black);
+        continue;
+      }
+
+      const terrainId = master.terrainIds[mapTileIndex(master, x, y)] ?? 1;
       const tile = new Graphics();
       const hasRoad = roadSet.has(`${x},${y}`);
-      const base = hasRoad ? 0x78716c : (x + y) % 2 === 0 ? 0x5a7a1e : 0x6b8e23;
+      const base = hasRoad ? 0x78716c : terrainFillColor(terrainId, x, y);
+      const stroke = hasRoad ? 0xa8a29e : terrainStrokeColor(terrainId);
+      const terrainAlpha = visible ? 1 : 0.42;
       tile
         .rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-        .fill(base)
-        .stroke({ width: 1, color: hasRoad ? 0xa8a29e : 0x3d5229, alpha: 0.6 });
+        .fill({ color: base, alpha: terrainAlpha })
+        .stroke({ width: 1, color: stroke, alpha: visible ? 0.6 : 0.35 });
       mapLayer.addChild(tile);
 
-      if (hasRoad) {
+      if (hasRoad && visible) {
         const roadMark = new Graphics();
         roadMark
           .rect(x * TILE_SIZE + 10, y * TILE_SIZE + TILE_SIZE / 2 - 2, TILE_SIZE - 20, 4)
@@ -201,8 +346,10 @@ function drawMap() {
     }
   }
 
-  for (const landmark of props.worldState.map.landmarks ?? []) {
+  for (const landmark of master.landmarks ?? []) {
     if (!isInsideMap(landmark.x, landmark.y)) continue;
+    if (!isCellInViewport(landmark.x, landmark.y, bounds)) continue;
+    if (!isTileVisible(landmark.x, landmark.y)) continue;
 
     const cx = landmark.x * TILE_SIZE + TILE_SIZE / 2;
     const cy = landmark.y * TILE_SIZE + TILE_SIZE * 0.22;
@@ -242,14 +389,24 @@ function drawEntities() {
   if (!entityLayer || !props.worldState) return;
 
   entityLayer.removeChildren();
+  const bounds = getVisibleCellBounds();
 
   for (const stronghold of props.worldState.strongholds) {
-    const color = entityMapColor(stronghold.forceId);
+    if (!isCellInViewport(stronghold.x, stronghold.y, bounds)) continue;
+    const isForeignKnown =
+      stronghold.visibilityTier === "Known" &&
+      !isPlayerRealmForce(
+        stronghold.forceId,
+        props.worldState.playerForceId,
+        props.worldState.forces
+      );
+    const color = isForeignKnown ? 0x6b7280 : entityMapColor(stronghold.forceId);
     const px = stronghold.x * TILE_SIZE + 6;
     const py = stronghold.y * TILE_SIZE + 6;
     const size = TILE_SIZE - 12;
     const selected = props.selectedStrongholdId === stronghold.id;
     const hovered = props.hoverStrongholdId === stronghold.id;
+    const fillAlpha = isForeignKnown ? 0.55 : 0.85;
 
     if (hovered && !selected) {
       const glow = new Graphics();
@@ -262,7 +419,7 @@ function drawEntities() {
     const block = new Graphics();
     block
       .rect(px, py, size, size)
-      .fill({ color, alpha: 0.85 })
+      .fill({ color, alpha: fillAlpha })
       .stroke({
         width: selected ? 3 : hovered ? 2.5 : 2,
         color: selected ? 0xfbbf24 : hovered ? 0x38bdf8 : 0xffffff,
@@ -284,6 +441,8 @@ function drawEntities() {
   );
 
   for (const unit of props.worldState.units) {
+    if (unit.mapVisible === false) continue;
+    if (!isCellInViewport(unit.x, unit.y, bounds)) continue;
     // 业务：交战格不画单军图标，改由战场标记统一显示
     if (battlefieldTiles.has(`${unit.x},${unit.y}`)) continue;
 
@@ -309,7 +468,7 @@ function drawEntities() {
     entityLayer.addChild(marker);
 
     const badge = new Text({
-      text: String(unit.soldiers),
+      text: unit.soldiersDisplay ?? String(unit.soldiers),
       style: { fontSize: 12, fill: 0xffffff, fontWeight: "bold", fontFamily: "sans-serif" },
     });
     badge.anchor.set(0.5);
@@ -317,7 +476,33 @@ function drawEntities() {
     entityLayer.addChild(badge);
   }
 
+  for (const character of props.worldState.mapCharacters ?? []) {
+    if (character.mapVisible === false) continue;
+    if (!isCellInViewport(character.x, character.y, bounds)) continue;
+    if (battlefieldTiles.has(`${character.x},${character.y}`)) continue;
+
+    const color = entityMapColor(character.forceId);
+    const center = cellCenter(character.x, character.y);
+    const radius = TILE_SIZE * 0.22;
+    const marker = new Graphics();
+    marker
+      .circle(center.x, center.y - TILE_SIZE * 0.18, radius)
+      .fill(color)
+      .stroke({ width: 2, color: 0xffffff, alpha: 0.95 });
+    entityLayer.addChild(marker);
+
+    const initial = character.name?.trim().charAt(0) || "将";
+    const label = new Text({
+      text: initial,
+      style: { fontSize: 11, fill: 0xffffff, fontWeight: "bold", fontFamily: "serif" },
+    });
+    label.anchor.set(0.5);
+    label.position.set(center.x, center.y - TILE_SIZE * 0.18);
+    entityLayer.addChild(label);
+  }
+
   for (const battlefield of props.worldState.battlefields ?? []) {
+    if (!isCellInViewport(battlefield.x, battlefield.y, bounds)) continue;
     const center = cellCenter(battlefield.x, battlefield.y);
     const radius = TILE_SIZE * 0.32;
     const marker = new Graphics();
@@ -344,8 +529,16 @@ function drawEntities() {
     const siegeCount =
       battlefield.kind === "Siege" ? battlefield.aggressorSoldierTotal : 0;
     if (siegeCount > 0) {
+      const playerForceId = props.worldState?.playerForceId ?? 0;
+      const defender = props.worldState?.strongholds.find(
+        (sh) => sh.x === battlefield.x && sh.y === battlefield.y
+      );
+      const isEnemySiege = defender?.forceId === playerForceId;
+      const siegeCountText = isEnemySiege
+        ? maskSoldiersFirstDigit(siegeCount).replace(/人$/, "")
+        : String(siegeCount);
       const count = new Text({
-        text: String(siegeCount),
+        text: siegeCountText,
         style: { fontSize: 9, fill: 0xb91c1c, fontFamily: "sans-serif" },
       });
       count.anchor.set(0.5);
@@ -355,6 +548,7 @@ function drawEntities() {
   }
 
   for (const convoy of props.worldState.supplyConvoys) {
+    if (!isCellInViewport(convoy.x, convoy.y, bounds)) continue;
     const color = entityMapColor(convoy.forceId);
     const cx = convoy.x * TILE_SIZE + TILE_SIZE * 0.72;
     const cy = convoy.y * TILE_SIZE + TILE_SIZE * 0.28;
@@ -391,6 +585,7 @@ function drawEntities() {
   }
 
   for (const messenger of props.worldState.messengers) {
+    if (!isCellInViewport(messenger.x, messenger.y, bounds)) continue;
     const color = entityMapColor(messenger.forceId);
     const cx = messenger.x * TILE_SIZE + TILE_SIZE * 0.28;
     const cy = messenger.y * TILE_SIZE + TILE_SIZE * 0.72;
@@ -414,14 +609,17 @@ function drawRoutes() {
   if (!pathLayer) return;
 
   pathLayer.removeChildren();
+  const bounds = getVisibleCellBounds();
 
   for (const route of props.routeOverlays ?? []) {
     if (route.points.length < 2) continue;
+    if (!routeIntersectsViewport(route.points, bounds)) continue;
 
     const style = ROUTE_STYLES[route.variant];
 
     for (const point of route.points) {
       if (!isInsideMap(point.x, point.y)) continue;
+      if (!isCellInViewport(point.x, point.y, bounds)) continue;
 
       const tile = new Graphics();
       tile
@@ -446,6 +644,7 @@ function drawHighlights() {
   if (!highlightLayer) return;
 
   highlightLayer.removeChildren();
+  const bounds = getVisibleCellBounds();
 
   const relayAtSelected =
     props.selectedCell &&
@@ -456,7 +655,8 @@ function drawHighlights() {
   if (
     props.selectedCell &&
     isInsideMap(props.selectedCell.x, props.selectedCell.y) &&
-    !relayAtSelected
+    !relayAtSelected &&
+    isCellInViewport(props.selectedCell.x, props.selectedCell.y, bounds)
   ) {
     const ring = new Graphics();
     ring
@@ -472,6 +672,7 @@ function drawHighlights() {
 
   for (const marker of props.moveRelayMarkers ?? []) {
     if (!isInsideMap(marker.x, marker.y)) continue;
+    if (!isCellInViewport(marker.x, marker.y, bounds)) continue;
 
     const style = MOVE_RELAY_MARKER_STYLES[marker.kind];
     const cx = marker.x * TILE_SIZE + TILE_SIZE / 2;
@@ -540,7 +741,7 @@ function onWheel(event: WheelEvent) {
   zoom = nextZoom;
   worldContainer.scale.set(zoom);
   worldContainer.position.set(cursorX - worldPos.x * zoom, cursorY - worldPos.y * zoom);
-  notifyViewportChange();
+  refreshViewportLayers();
 }
 
 function onPointerDown(event: PointerEvent) {
@@ -584,6 +785,9 @@ function onPointerMove(event: PointerEvent) {
     }
 
     worldContainer.position.set(containerStart.x + dx, containerStart.y + dy);
+    if (didPan) {
+      scheduleViewportRefresh();
+    }
     return;
   }
 
@@ -635,6 +839,12 @@ function onPointerUp(event: PointerEvent) {
   }
 
   if (startedOnCanvas && didPan) {
+    if (needsViewportRedraw()) {
+      refreshViewportLayers();
+    } else {
+      notifyViewportChange();
+    }
+  } else {
     notifyViewportChange();
   }
 
@@ -671,7 +881,8 @@ async function initPixi() {
   app.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
   fitMapToView();
-  redraw();
+  lastCulledBounds = null;
+  refreshViewportLayers();
 }
 
 function destroyPixi() {
@@ -694,23 +905,37 @@ function destroyPixi() {
 }
 
 watch(
-  () => props.worldState,
+  () => props.mapMaster,
   () => {
+    lastCulledBounds = null;
     redraw();
   },
   { deep: true }
 );
 
 watch(
-  () =>
-    [
-      props.worldState?.scenarioId,
-      props.worldState?.map.width,
-      props.worldState?.map.height,
-    ] as const,
+  () => props.worldState,
   () => {
-    fitMapToView();
+    lastCulledBounds = null;
     redraw();
+  },
+  { deep: true }
+);
+
+let lastFitMapKey = "";
+
+watch(
+  () => {
+    const ws = props.worldState;
+    if (!ws) return null;
+    return `${ws.scenarioId}:${ws.map.width}:${ws.map.height}`;
+  },
+  (key) => {
+    if (!key || key === lastFitMapKey) return;
+    lastFitMapKey = key;
+    fitMapToView();
+    lastCulledBounds = null;
+    refreshViewportLayers();
   }
 );
 

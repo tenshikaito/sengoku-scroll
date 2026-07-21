@@ -1,4 +1,4 @@
-import type { StrategyWorldState } from "./strategyTypes";
+import type { StrategyWorldState, StrategyLoadRequest } from "./strategyTypes";
 import type {
   StrategyBattlePreview,
   StrategyInstantBattleResponse,
@@ -10,6 +10,8 @@ import {
   isValidBattleResult,
   normalizeBattleResult,
 } from "@/utils/battleResult";
+import { normalizeStrategyMapMaster } from "@/utils/normalizeStrategyMapMaster";
+import { buildMiniKantoMapMaster } from "@/utils/strategyMapDefaults";
 import { normalizeStrategyWorldState } from "@/utils/normalizeStrategyWorldState";
 import { normalizeStrategyEvent } from "@/utils/normalizeStrategyEvent";
 import {
@@ -223,13 +225,27 @@ async function request<T>(
   }
 }
 
-export const loadScenario = (scenarioId: string) =>
-  request(
+export const loadScenario = (loadRequest: StrategyLoadRequest | string) => {
+  const body =
+    typeof loadRequest === "string"
+      ? { scenarioId: loadRequest }
+      : {
+          scenarioId: loadRequest.scenarioId,
+          difficulty: loadRequest.difficulty,
+          customStartOptions:
+            loadRequest.difficulty === "Custom" ? loadRequest.customStartOptions : undefined,
+        };
+
+  return request(
     "POST",
     "/load",
-    () => fetchLive<unknown>("POST", "/load", { scenarioId }).then(normalizeStrategyWorldState),
-    () => normalizeStrategyWorldState(mockLoadScenario(scenarioId))
+    () => fetchLive<unknown>("POST", "/load", body).then(normalizeStrategyWorldState),
+    () =>
+      normalizeStrategyWorldState(
+        mockLoadScenario(typeof loadRequest === "string" ? loadRequest : loadRequest.scenarioId)
+      )
   );
+};
 
 export const getStrategyState = () =>
   request(
@@ -237,6 +253,14 @@ export const getStrategyState = () =>
     "/state",
     () => fetchLive<unknown>("GET", "/state").then(normalizeStrategyWorldState),
     () => normalizeStrategyWorldState(mockGetState())
+  );
+
+export const getStrategyMapMaster = () =>
+  request(
+    "GET",
+    "/map",
+    () => fetchLive<unknown>("GET", "/map").then(normalizeStrategyMapMaster),
+    () => buildMiniKantoMapMaster()
   );
 
 export const orderUnitAttack = (

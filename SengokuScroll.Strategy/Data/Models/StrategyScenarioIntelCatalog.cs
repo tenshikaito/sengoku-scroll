@@ -16,7 +16,7 @@ public sealed class StrategyUnitIntelOverlay
 
     public string CultureName { get; init; } = "日本";
 
-    public string ReligionName { get; init; } = "神道";
+    public string ReligionName { get; init; } = "神道教";
 }
 
 public sealed class StrategyStrongholdIntelOverlay
@@ -27,5 +27,5 @@ public sealed class StrategyStrongholdIntelOverlay
 
     public string CultureName { get; init; } = "日本";
 
-    public string ReligionName { get; init; } = "神道";
+    public string ReligionName { get; init; } = "神道教";
 }

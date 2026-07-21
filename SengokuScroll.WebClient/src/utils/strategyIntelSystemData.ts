@@ -2,6 +2,7 @@ import type {
   StrategyCharacterSummaryState,
   StrategyForceState,
   StrategyStrongholdState,
+  StrategyUnitState,
   StrategyWorldState,
 } from "@/api/strategyTypes";
 import { isPlayerRealmForce, resolveRealmRootId } from "@/utils/mapEntityColors";
@@ -13,7 +14,19 @@ import {
 import {
   countOwnCharacters,
   countOwnStrongholds,
+  countRealmCharacters,
+  countRealmStrongholds,
 } from "@/utils/strategyRealmStats";
+import {
+  formatStatBand,
+  isCharacterFogMode,
+  isKnownStrongholdIntelMasked,
+  isRestrictedIntelMode,
+  resolveStrongholdTypeLabel,
+  resolveStrongholdScaleLabel,
+  strongholdHoverFieldValue,
+  UNKNOWN_INTEL,
+} from "@/utils/strategyIntelDisplay";
 import {
   defenseFacilityCategoryLabel,
   strongholdDetailIntelRows,
@@ -58,6 +71,7 @@ export interface IntelStrongholdRow {
   forceName: string;
   position: string;
   category: string;
+  scale: string;
   lordName: string;
   mayorName: string;
   population: string;
@@ -92,6 +106,7 @@ export interface IntelPersonRow {
   strongholdName: string;
   isFamily: string;
   role: string;
+  superior: string;
   location: string;
   locationType: string;
   leadership: string;
@@ -179,6 +194,21 @@ function formatDefense(value: unknown): string {
 function statPercent(value: unknown): string {
   const n = Number(value);
   return Number.isFinite(n) ? String(Math.trunc(n)) : "—";
+}
+
+function formatPersonStatValue(value: unknown, worldState: StrategyWorldState): string {
+  return isCharacterFogMode(worldState) ? formatStatBand(value) : statPercent(value);
+}
+
+function formatForeignForceStatValue(
+  value: unknown,
+  worldState: StrategyWorldState,
+  isOwnRealm: boolean,
+): string {
+  if (!isOwnRealm && isRestrictedIntelMode(worldState)) {
+    return formatStatBand(value);
+  }
+  return statPercent(value);
 }
 
 function safePopulation(value: unknown): string {
@@ -491,7 +521,7 @@ function personStrongholdName(
   const strongholdId = character.strongholdId ?? 0;
   if (strongholdId <= 0) return "—";
   const sh = worldState.strongholds.find((s) => s.id === strongholdId);
-  return sh?.name ?? `据点#${strongholdId}`;
+  return sh?.name?.trim() || "—";
 }
 
 function lookupPlayerDiplomacy(
@@ -623,6 +653,34 @@ function countForceOwnCharacters(worldState: StrategyWorldState, forceId: number
   });
 }
 
+/** 封地合计(本势力)，与画面顶部势力状态栏一致。 */
+function formatForceRealmStatCount(
+  worldState: StrategyWorldState,
+  forceId: number,
+  kind: "stronghold" | "character",
+): string {
+  const { forces, strongholds, units, characters, lord } = worldState;
+  const realmRootId = resolveRealmRootId(forceId, forces);
+  const lordName =
+    realmRootId === worldState.playerForceId
+      ? lord.name
+      : resolveForceLordName(worldState, realmRootId);
+
+  if (kind === "stronghold") {
+    const realm = countRealmStrongholds(realmRootId, forces, strongholds);
+    const own = countOwnStrongholds(forceId, strongholds);
+    return `${realm}(${own})`;
+  }
+
+  const realm = countRealmCharacters(realmRootId, forces, strongholds, units, {
+    characters,
+    forceCharacterCount: forces.find((f) => f.id === realmRootId)?.characterCount,
+    lordName,
+  });
+  const own = countForceOwnCharacters(worldState, forceId);
+  return `${realm}(${own})`;
+}
+
 function buildDiplomacyRow(
   worldState: StrategyWorldState,
   force: StrategyForceState
@@ -680,11 +738,11 @@ function strongholdCityGarrison(stronghold: StrategyStrongholdState): number {
     : 0;
 }
 
-function strongholdCategoryLabel(stronghold: StrategyStrongholdState): string {
-  const castle = stronghold.defenseFacilities.find((f) => f.category === "Castle");
-  if (castle?.name?.trim()) return castle.name.trim();
-  if (!stronghold.isHistorical) return "虚构据点";
-  return "据点";
+function strongholdTypeLabel(
+  stronghold: StrategyStrongholdState,
+  worldState: StrategyWorldState,
+): string {
+  return resolveStrongholdTypeLabel(stronghold, worldState);
 }
 
 function strongholdFacilitiesSummary(stronghold: StrategyStrongholdState): string {
@@ -704,8 +762,9 @@ function personLocationLabel(
   switch (character.locationType) {
     case "Stronghold": {
       const strongholdId = character.strongholdId ?? 0;
+      if (strongholdId <= 0) return "—";
       const sh = worldState.strongholds.find((s) => s.id === strongholdId);
-      return sh?.name ?? (strongholdId > 0 ? `据点#${strongholdId}` : "据点");
+      return sh?.name?.trim() || "—";
     }
     case "Unit": {
       const unit = worldState.units.find(
@@ -713,7 +772,7 @@ function personLocationLabel(
           u.commanderId === character.id ||
           u.composition?.some((sub) => sub.commanderId === character.id)
       );
-      return unit?.name ?? "部队";
+      return unit?.name?.trim() || "—";
     }
     case "Map":
       return "地图";
@@ -761,6 +820,57 @@ function personRoleLabel(
   if (character.forceStatus === "Prisoner") return "俘虏";
   if (character.forceStatus === "Task") return "奉行";
   return "—";
+}
+
+function resolveForceLordDisplayName(worldState: StrategyWorldState, forceId: number): string {
+  const force = worldState.forces.find((f) => f.id === forceId);
+  if (!force) return "—";
+  const lordName = worldState.lord.name?.trim();
+  if (forceId === worldState.playerForceId && lordName) return lordName;
+  return `${force.name}当主`;
+}
+
+function findUnitLedByCharacter(
+  worldState: StrategyWorldState,
+  characterId: number
+): StrategyUnitState | null {
+  for (const unit of worldState.units) {
+    if (unit.commanderId === characterId) return unit;
+    if (unit.composition?.some((entry) => entry.commanderId === characterId)) return unit;
+  }
+  return null;
+}
+
+function personSuperiorLabel(
+  worldState: StrategyWorldState,
+  character: StrategyCharacterSummaryState
+): string {
+  const role = personRoleLabel(worldState, character);
+  if (role === "当主" || role === "俘虏") return "—";
+
+  if (character.leaderId && character.leaderId > 0) {
+    const direct = worldState.characters?.find((c) => c.id === character.leaderId);
+    if (direct && !direct.isDead) return direct.name?.trim() || "—";
+  }
+
+  if (role === "领主") return resolveForceLordDisplayName(worldState, character.forceId);
+
+  if (role === "代官") {
+    const strongholdId = character.strongholdId ?? 0;
+    const stronghold = worldState.strongholds.find((s) => s.id === strongholdId);
+    if (stronghold?.lordName?.trim()) return stronghold.lordName.trim();
+    return resolveForceLordDisplayName(worldState, character.forceId);
+  }
+
+  if (role === "将") {
+    const unit = findUnitLedByCharacter(worldState, character.id);
+    if (!unit) return resolveForceLordDisplayName(worldState, character.forceId);
+    if (unit.commanderId === character.id) return resolveForceLordDisplayName(worldState, character.forceId);
+    if (unit.commanderName?.trim()) return unit.commanderName.trim();
+    return resolveForceLordDisplayName(worldState, character.forceId);
+  }
+
+  return resolveForceLordDisplayName(worldState, character.forceId);
 }
 
 function resolvePlayerLordCharacterId(worldState: StrategyWorldState): number | null {
@@ -874,13 +984,19 @@ export function forceIntelListRows(
       status: forcePoliticalStatusLabel(force.status),
       suzerainName,
       relation: forceRelationToPlayer(worldState, force.id),
-      strongholdCount: String(countOwnStrongholds(force.id, worldState.strongholds)),
-      characterCount: String(countForceOwnCharacters(worldState, force.id)),
+      strongholdCount:
+        !isOwnRealm && isRestrictedIntelMode(worldState)
+          ? "—"
+          : formatForceRealmStatCount(worldState, force.id, "stronghold"),
+      characterCount:
+        !isOwnRealm && isRestrictedIntelMode(worldState)
+          ? "—"
+          : formatForceRealmStatCount(worldState, force.id, "character"),
       soldiers: formatSoldiers(countForceOwnSoldiers(worldState, force.id)),
       money: formatMoney(force.money),
       food: formatFoodGo(force.food),
-      prestige: statPercent(force.prestige),
-      orthodoxy: statPercent(force.orthodoxy),
+      prestige: formatForeignForceStatValue(force.prestige, worldState, isOwnRealm),
+      orthodoxy: formatForeignForceStatValue(force.orthodoxy, worldState, isOwnRealm),
       successorName: resolveSuccessorName(worldState, force.id),
       arrearsMoney: formatMoney(force.internalArrearsMoney ?? 0),
       arrearsFood: formatFoodGo(force.internalArrearsFoodGo ?? 0),
@@ -906,37 +1022,60 @@ export function strongholdIntelRows(
     .map((sh) => {
       const garrison = strongholdCityGarrison(sh);
       const siegeThreat = sh.siegeThreat ?? null;
+      const masked = isKnownStrongholdIntelMasked(sh, playerForceId);
+      const obscurePersonnel = masked;
       return {
         id: sh.id,
         name: sh.name,
         forceName: forceName(worldState, sh.forceId),
         position: `(${sh.x}, ${sh.y})`,
-        category: strongholdCategoryLabel(sh),
-        lordName: sh.lordName?.trim() || "—",
-        mayorName: sh.mayorName?.trim() || "—",
-        population: safePopulation(sh.population),
-        stability: statPercent(sh.stability),
-        popularFeelings: statPercent(sh.popularFeelings),
-        maintenance: strongholdMaintenanceMoney(sh.population),
-        cityGenerals: formatCityGenerals(worldState, sh.id),
-        wounded: formatSoldiers(sh.garrisonWounded ?? 0),
-        morale: statPercent(sh.morale),
-        training: statPercent(sh.training),
-        cultureName: sh.cultureName?.trim() || "—",
-        religionName: sh.religionName?.trim() || "—",
-        defense: formatDefense(sh.defense),
-        garrisonTotal: formatSoldiers(garrison),
-        money: formatMoney(sh.money),
-        food: formatFoodGo(sh.food),
-        pollTaxRate: `${statPercent(sh.pollTaxRate)}%`,
-        agricultureTaxRate: `${statPercent(sh.agricultureTaxRate)}%`,
-        commerceTaxRate: `${statPercent(sh.commerceTaxRate)}%`,
-        tariffTaxRate: `${statPercent(sh.tariffTaxRate)}%`,
+        category: strongholdTypeLabel(sh, worldState),
+        scale: strongholdHoverFieldValue(sh, "规模", resolveStrongholdScaleLabel(sh.population)),
+        lordName: obscurePersonnel ? UNKNOWN_INTEL : (sh.lordName?.trim() || "—"),
+        mayorName: obscurePersonnel ? UNKNOWN_INTEL : (sh.mayorName?.trim() || "—"),
+        population: strongholdHoverFieldValue(sh, "人口", safePopulation(sh.population)),
+        stability: strongholdHoverFieldValue(sh, "治安", statPercent(sh.stability)),
+        popularFeelings: strongholdHoverFieldValue(sh, "民心", statPercent(sh.popularFeelings)),
+        maintenance: strongholdHoverFieldValue(
+          sh,
+          "维护费",
+          strongholdMaintenanceMoney(sh.population)
+        ),
+        cityGenerals: strongholdHoverFieldValue(
+          sh,
+          "城内将",
+          formatCityGenerals(worldState, sh.id)
+        ),
+        wounded: strongholdHoverFieldValue(sh, "负伤", formatSoldiers(sh.garrisonWounded ?? 0)),
+        morale: strongholdHoverFieldValue(sh, "士气", statPercent(sh.morale)),
+        training: strongholdHoverFieldValue(sh, "训练度", statPercent(sh.training)),
+        cultureName: strongholdHoverFieldValue(sh, "文化", sh.cultureName?.trim() || "—"),
+        religionName: strongholdHoverFieldValue(sh, "信仰", sh.religionName?.trim() || "—"),
+        defense: strongholdHoverFieldValue(sh, "城防", formatDefense(sh.defense)),
+        garrisonTotal: strongholdHoverFieldValue(sh, "兵力", formatSoldiers(garrison)),
+        money: strongholdHoverFieldValue(sh, "金钱", formatMoney(sh.money)),
+        food: strongholdHoverFieldValue(sh, "粮食", formatFoodGo(sh.food)),
+        pollTaxRate: strongholdHoverFieldValue(sh, "人头税", `${statPercent(sh.pollTaxRate)}%`),
+        agricultureTaxRate: strongholdHoverFieldValue(
+          sh,
+          "农业税",
+          `${statPercent(sh.agricultureTaxRate)}%`
+        ),
+        commerceTaxRate: strongholdHoverFieldValue(
+          sh,
+          "商业税",
+          `${statPercent(sh.commerceTaxRate)}%`
+        ),
+        tariffTaxRate: strongholdHoverFieldValue(sh, "关税", `${statPercent(sh.tariffTaxRate)}%`),
         isLordResidence: oxMark(sh.isLordResidence),
         isFictional: oxMark(!sh.isHistorical),
         isAssault: oxMark(siegeThreat === "Assault"),
         isEncircle: oxMark(siegeThreat === "Encircle"),
-        facilities: strongholdFacilitiesSummary(sh),
+        facilities: strongholdHoverFieldValue(
+          sh,
+          "设施",
+          strongholdFacilitiesSummary(sh)
+        ),
       };
     });
 
@@ -969,13 +1108,14 @@ export function personIntelRows(
         strongholdName: personStrongholdName(worldState, c),
         isFamily: oxMark(personIsFamilyMember(worldState, c)),
         role: personRoleLabel(worldState, c),
+        superior: personSuperiorLabel(worldState, c),
         location: personLocationLabel(worldState, c),
         locationType: personLocationTypeLabel(c.locationType),
-        leadership: statPercent(c.leadership),
-        power: statPercent(c.power),
-        politics: statPercent(c.politics),
-        strategy: statPercent(c.strategy),
-        charm: statPercent(c.charm),
+        leadership: formatPersonStatValue(c.leadership, worldState),
+        power: formatPersonStatValue(c.power, worldState),
+        politics: formatPersonStatValue(c.politics, worldState),
+        strategy: formatPersonStatValue(c.strategy, worldState),
+        charm: formatPersonStatValue(c.charm, worldState),
         loyalty: statPercent(c.loyalty ?? p?.friendship),
         status: personStatusLabel(c.forceStatus),
         healthStatus: healthStatusLabel(c.isSick),
@@ -1001,22 +1141,22 @@ export function personIntelRows(
         desire: statPercent(p?.desire),
         drinking: statPercent(p?.drinking),
         fortune: statPercent(p?.fortune),
-        skillInfantry: statPercent(s?.infantry),
-        skillRide: statPercent(s?.ride),
-        skillArchery: statPercent(s?.archery),
-        skillFirelock: statPercent(s?.firelock),
-        skillSealing: statPercent(s?.sealing),
-        skillMilitary: statPercent(s?.military),
-        skillFighting: statPercent(s?.fighting),
-        skillSpy: statPercent(s?.spy),
-        skillAgriculture: statPercent(s?.agriculture),
-        skillCommerce: statPercent(s?.commerce),
-        skillConstruct: statPercent(s?.construct),
-        skillSmelt: statPercent(s?.smelt),
-        skillEloquence: statPercent(s?.eloquence),
-        skillCourt: statPercent(s?.court),
-        skillSociality: statPercent(s?.sociality),
-        skillHealing: statPercent(s?.healing),
+        skillInfantry: formatPersonStatValue(s?.infantry, worldState),
+        skillRide: formatPersonStatValue(s?.ride, worldState),
+        skillArchery: formatPersonStatValue(s?.archery, worldState),
+        skillFirelock: formatPersonStatValue(s?.firelock, worldState),
+        skillSealing: formatPersonStatValue(s?.sealing, worldState),
+        skillMilitary: formatPersonStatValue(s?.military, worldState),
+        skillFighting: formatPersonStatValue(s?.fighting, worldState),
+        skillSpy: formatPersonStatValue(s?.spy, worldState),
+        skillAgriculture: formatPersonStatValue(s?.agriculture, worldState),
+        skillCommerce: formatPersonStatValue(s?.commerce, worldState),
+        skillConstruct: formatPersonStatValue(s?.construct, worldState),
+        skillSmelt: formatPersonStatValue(s?.smelt, worldState),
+        skillEloquence: formatPersonStatValue(s?.eloquence, worldState),
+        skillCourt: formatPersonStatValue(s?.court, worldState),
+        skillSociality: formatPersonStatValue(s?.sociality, worldState),
+        skillHealing: formatPersonStatValue(s?.healing, worldState),
       };
     });
 
@@ -1099,23 +1239,23 @@ export function forceDetailIntelRows(
   const row = findForceRow(worldState, forceId);
   if (!row) return [];
 
-  return enrichCultureReligionGroupRows(worldState, [
-    { label: "势力", value: row.name },
+  return [
+    { label: "名称", value: row.name },
     { label: "当主", value: row.lordName },
     { label: "居城", value: row.residenceName },
     { label: "文化", value: row.cultureName },
     { label: "信仰", value: row.religionName },
-    { label: "政治地位", value: row.status },
+    { label: "状态", value: row.status },
     { label: "宗主", value: row.suzerainName },
     { label: "继承人", value: row.successorName },
+    { label: "兵力", value: row.soldiers },
     { label: "据点数", value: row.strongholdCount },
     { label: "现任", value: row.characterCount },
-    { label: "兵力", value: row.soldiers },
     { label: "金钱", value: row.money },
     { label: "粮食", value: row.food },
     { label: "威望", value: row.prestige },
     { label: "正统", value: row.orthodoxy },
-  ]);
+  ];
 }
 
 /** 某势力视角的外交列表（封地势力展示全表，他势力仅展示与己关系）。 */
@@ -1173,10 +1313,7 @@ export function strongholdDetailFieldRows(
 ): IntelFieldRow[] {
   const stronghold = worldState.strongholds.find((s) => s.id === strongholdId);
   if (!stronghold) return [];
-  return enrichCultureReligionGroupRows(
-    worldState,
-    strongholdDetailIntelRows(worldState, stronghold, { includeBattleIntel: false })
-  );
+  return strongholdDetailIntelRows(worldState, stronghold, { includeBattleIntel: false });
 }
 
 export function strongholdIntroText(

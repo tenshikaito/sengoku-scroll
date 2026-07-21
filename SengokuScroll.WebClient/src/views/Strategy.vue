@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { ElMessageBox } from "element-plus";
 import {
   advanceDay,
@@ -8,6 +9,7 @@ import {
   hasLocalStrategySave,
   getMovementTrace,
   getStrategyState,
+  getStrategyMapMaster,
   loadScenario,
   orderUnitAttack,
   orderUnitSiege,
@@ -27,9 +29,13 @@ import {
   type StrategyEconomySettlementDetail,
   type StrategyMovementTraceEntry,
   type StrategyWorldState,
+  type StrategyMapMasterState,
   type MapPoint,
 } from "@/api/strategy";
 import StrategyMapCanvas from "@/components/strategy/StrategyMapCanvas.vue";
+import StrategyMapLoadingScene, {
+  type StrategyMapLoadingPhase,
+} from "@/components/strategy/StrategyMapLoadingScene.vue";
 import StrategyIntelBar from "@/components/strategy/StrategyIntelBar.vue";
 import StrategyMapPopup from "@/components/strategy/StrategyMapPopup.vue";
 import StrategyEntityIntelDialog, {
@@ -53,6 +59,7 @@ import {
 } from "@/utils/strategyMessageScope";
 import StrategyEconomySettlementDialog from "@/components/strategy/StrategyEconomySettlementDialog.vue";
 import StrategyIntelSystemDialog from "@/components/strategy/StrategyIntelSystemDialog.vue";
+import StrategyOperableUnitList from "@/components/strategy/StrategyOperableUnitList.vue";
 import StrategySystemMenuDialog from "@/components/strategy/StrategySystemMenuDialog.vue";
 import StrategyForceCommandPopup from "@/components/strategy/StrategyForceCommandPopup.vue";
 import StrategyCellIntelHover from "@/components/strategy/StrategyCellIntelHover.vue";
@@ -73,7 +80,7 @@ import {
   DEFAULT_ROUTE_VISIBILITY_POLICY,
   filterUnitsForRouteDisplay,
 } from "@/strategyMapInteraction/routeVisibilityPolicy";
-import { resolveAnchoredPanelPlacement, type AnchorSide, type AnchorVerticalAlign } from "@/utils/mapCellAnchor";
+import { resolveAnchoredPanelPlacement, resolveAnchoredPanelPlacementForSide, type AnchorSide, type AnchorVerticalAlign } from "@/utils/mapCellAnchor";
 import { parseEconomySettlementFromEvent } from "@/utils/normalizeStrategyEvent";
 import {
   findPointOnPath,
@@ -86,7 +93,8 @@ import {
   movePathDebugEntries,
 } from "@/utils/movePathDebug";
 import type { UnitDirectiveValue } from "@/utils/unitDirective";
-import { landmarkAtCell, mapTileInfo } from "@/utils/mapTileLookup";
+import { landmarkAtCell, mapTileInfo, roadAtCell } from "@/utils/mapTileLookup";
+import { mapMasterMatchesScenario } from "@/utils/strategyMapDefaults";
 import { logStrategyMapCoords, logHoverIntelLayoutDebug, rectToScreenDebug } from "@/utils/strategyMapDebug";
 import { attackApBlockReason, parseApiErrorCode, siegeApBlockReason } from "@/utils/strategyActionRules";
 import {
@@ -94,7 +102,23 @@ import {
   strategicReportDetailText,
 } from "@/utils/strategyNotifications";
 import { messageCategoryLabel } from "@/utils/messageCategories";
+import {
+  canShowCellHoverIntel,
+  convoysAtCellForIntel,
+  isTileVisible,
+  messengersAtCellForIntel,
+  strongholdsAtCellForIntel,
+  unitsAtCellForIntel,
+} from "@/utils/strategyFogCell";
+import { findOperableUnit, isMapOperableUnit, operableUnitAsMapState } from "@/utils/strategyOperableUnits";
+import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
+import {
+  readGameStartSettings,
+  writeGameStartSettings,
+  type GameStartSettings,
+} from "@/utils/strategyGameStartSettings";
 
+const router = useRouter();
 const HOVER_INTEL_W = 280;
 const HOVER_INTEL_H = 360;
 const HOVER_INTEL_DUAL_GAP = 8;
@@ -102,6 +126,11 @@ const MENU_POPUP_W = 200;
 const MENU_POPUP_H = 180;
 
 const state = ref<StrategyWorldState | null>(null);
+const mapMaster = ref<StrategyMapMasterState | null>(null);
+const initialLoading = ref(true);
+const lastGameStartSettings = ref<GameStartSettings | null>(null);
+const initialLoadPhase = ref<StrategyMapLoadingPhase>("map");
+const initialLoadError = ref("");
 const loading = ref(false);
 const error = ref("");
 const info = ref("");
@@ -115,6 +144,12 @@ const mapCanvasRef = ref<InstanceType<typeof StrategyMapCanvas> | null>(null);
 const menuPopupRef = ref<InstanceType<typeof StrategyMapPopup> | null>(null);
 const cornerPopupRef = ref<InstanceType<typeof StrategyMapPopup> | null>(null);
 const hoverIntelLayerRef = ref<HTMLElement | null>(null);
+const mapTopOverlayRef = ref<HTMLElement | null>(null);
+const mapTopOverlayHeight = ref(56);
+/** 可操作部队列表与顶部 overlay（含情报/系统按钮、势力情报栏）之间的额外间距。 */
+const UNIT_ROSTER_TOP_GAP = 8;
+const UNIT_ROSTER_BOTTOM_RESERVE = 132;
+let mapTopOverlayResizeObserver: ResizeObserver | null = null;
 const intelPinnedCell = ref<{ x: number; y: number } | null>(null);
 const intelLayerHovered = ref(false);
 const movementTrace = ref<StrategyMovementTraceEntry[]>([]);
@@ -140,6 +175,7 @@ const {
   mapCellSelectionEnabled,
   mapRightClickEnabled,
   popupMode,
+  secondaryPopupMode,
   onSelectUnit,
   onSelectStronghold,
   onSelectConvoy,
@@ -185,6 +221,7 @@ const expeditionDialogVisible = ref(false);
 const pendingSplitUnitName = ref<string | undefined>(undefined);
 const intelSystemVisible = ref(false);
 const intelSystemInitialTab = ref("force");
+const intelSystemInitialRealmFilter = ref<IntelRealmFilterMode>("all");
 const systemMenuVisible = ref(false);
 const forceCommandVisible = ref(false);
 const forceStatusRef = ref<HTMLElement | null>(null);
@@ -208,9 +245,20 @@ const dateText = computed(() => {
   return ` ${d.year}年${month}月${day}日`;
 });
 
-const selectedUnit = computed(
-  () => state.value?.units.find((u) => u.id === selectedUnitId.value) ?? null
+const selectedOperableUnit = computed(() => {
+  if (!state.value || selectedUnitId.value == null) return null;
+  return findOperableUnit(state.value, selectedUnitId.value);
+});
+
+const selectedOperableUnitDisplayName = computed(
+  () => selectedOperableUnit.value?.unit.name ?? "",
 );
+
+const selectedUnit = computed(() => {
+  const entry = selectedOperableUnit.value;
+  if (!entry || !state.value) return null;
+  return operableUnitAsMapState(state.value, entry);
+});
 
 const selectedStronghold = computed(
   () => state.value?.strongholds.find((s) => s.id === selectedStrongholdId.value) ?? null
@@ -301,11 +349,67 @@ const playerForceStats = computed(() => {
 /** 地图右下角：势力 / 封地 / 外交 着色模式。 */
 const mapColorMode = ref<StrategyMapColorMode>("Realm");
 
-/** 默认战略（暂停）；进行 = 自动推进（后续实装）。 */
+/** 默认战略（暂停）；进行 = 按倍速自动推进。 */
 const gamePaused = ref(true);
 
-/** 倍速占位；后续实装自动推进间隔。 */
+/** 1 / 2 / 4 倍速：进行模式下每推进 1 日的间隔 = 基准毫秒 ÷ 倍速。 */
 const gameSpeed = ref<1 | 2 | 4>(1);
+
+/** 1 倍速下每游戏日的基础间隔（毫秒）；2 倍速 ≈ 1 秒/日，4 倍速 ≈ 0.5 秒/日。 */
+const AUTO_DAY_BASE_MS = 2000;
+
+let autoAdvanceTimer: ReturnType<typeof setTimeout> | null = null;
+let autoAdvanceGeneration = 0;
+
+function clearAutoAdvanceTimer() {
+  autoAdvanceGeneration += 1;
+  if (autoAdvanceTimer !== null) {
+    clearTimeout(autoAdvanceTimer);
+    autoAdvanceTimer = null;
+  }
+}
+
+function autoAdvanceDelayMs(): number {
+  return AUTO_DAY_BASE_MS / gameSpeed.value;
+}
+
+function scheduleAutoAdvance(afterMs: number) {
+  clearAutoAdvanceTimer();
+  if (gamePaused.value || initialLoading.value) return;
+
+  const generation = autoAdvanceGeneration;
+  autoAdvanceTimer = setTimeout(() => {
+    autoAdvanceTimer = null;
+    if (generation !== autoAdvanceGeneration || gamePaused.value) return;
+    void runAutoAdvanceTick(generation);
+  }, afterMs);
+}
+
+async function runAutoAdvanceTick(generation: number) {
+  if (generation !== autoAdvanceGeneration || gamePaused.value) return;
+  if (initialLoading.value || !state.value) {
+    scheduleAutoAdvance(200);
+    return;
+  }
+  // 业务：玩家指令/API 请求进行中时不叠加重推进
+  if (loading.value) {
+    scheduleAutoAdvance(200);
+    return;
+  }
+
+  await onAdvanceDay();
+
+  if (generation !== autoAdvanceGeneration || gamePaused.value) return;
+  scheduleAutoAdvance(autoAdvanceDelayMs());
+}
+
+function syncAutoAdvanceLoop() {
+  if (gamePaused.value) {
+    clearAutoAdvanceTimer();
+    return;
+  }
+  scheduleAutoAdvance(autoAdvanceDelayMs());
+}
 
 /** M4 可改为从难度/设置读取；M3 起可接入同盟势力列表。 */
 const routeVisibilityContext = computed(() => ({
@@ -313,14 +417,6 @@ const routeVisibilityContext = computed(() => ({
   playerForceId: playerForce.value?.id ?? 1,
   allyForceIds: [] as readonly number[],
 }));
-
-function cellEntities<T extends { x: number; y: number }>(items: T[], x: number, y: number) {
-  return items.filter((item) => item.x === x && item.y === y);
-}
-
-function cellEntity<T extends { x: number; y: number }>(items: T[], x: number, y: number) {
-  return cellEntities(items, x, y)[0] ?? null;
-}
 
 /** 底栏情报：跟随鼠标悬停格；栏位始终显示。 */
 const intelBarX = computed(() => hoverCell.value?.x ?? null);
@@ -339,13 +435,13 @@ const intelY = computed(() => intelBarCell.value?.y ?? null);
 
 const intelStronghold = computed(() =>
   state.value && intelX.value !== null && intelY.value !== null
-    ? cellEntity(state.value.strongholds, intelX.value, intelY.value)
+    ? strongholdsAtCellForIntel(state.value, intelX.value, intelY.value)[0] ?? null
     : null
 );
 
 const intelUnit = computed(() =>
   state.value && intelX.value !== null && intelY.value !== null
-    ? cellEntity(state.value.units, intelX.value, intelY.value)
+    ? unitsAtCellForIntel(state.value, intelX.value, intelY.value)[0] ?? null
     : null
 );
 
@@ -358,34 +454,13 @@ function fieldBattlefieldAt(x: number, y: number) {
   return bf?.kind === "Field" ? bf : null;
 }
 
-function entityCountAt(x: number, y: number): number {
-  if (!state.value) return 0;
-  let count =
-    cellEntities(state.value.strongholds, x, y).length +
-    cellEntities(state.value.supplyConvoys, x, y).length +
-    cellEntities(state.value.messengers, x, y).length;
-  if (battlefieldAt(x, y)) {
-    count += 1;
-  } else {
-    count += cellEntities(state.value.units, x, y).length;
-  }
-  return count;
-}
-
-const pinnedCellEntityCount = computed(() => {
-  if (!intelPinnedCell.value) return 0;
-  return entityCountAt(intelPinnedCell.value.x, intelPinnedCell.value.y);
-});
-
 const hoverUnit = computed(() => intelUnit.value);
 
-const hoverStronghold = computed(() =>
-  hoverUnit.value ? null : intelStronghold.value
-);
+const hoverStronghold = computed(() => intelStronghold.value);
 
 const hoverConvoy = computed(() => {
   if (!state.value || intelX.value === null || intelY.value === null) return null;
-  return cellEntity(state.value.supplyConvoys, intelX.value, intelY.value);
+  return convoysAtCellForIntel(state.value, intelX.value, intelY.value)[0] ?? null;
 });
 
 const hoverUnitId = computed(() => hoverUnit.value?.id ?? null);
@@ -399,6 +474,34 @@ const scopedEventFeed = computed(() =>
   })
 );
 
+const unitRosterFloatStyle = computed(() => {
+  // 业务：随顶栏实测高度下移，避免势力情报折行时遮住「可操作部队」列表
+  const top = mapTopOverlayHeight.value + UNIT_ROSTER_TOP_GAP;
+  return {
+    top: `${top}px`,
+    maxHeight: `calc(100% - ${top}px - ${UNIT_ROSTER_BOTTOM_RESERVE}px)`,
+  };
+});
+
+function updateMapTopOverlayHeight() {
+  const el = mapTopOverlayRef.value;
+  if (!el) return;
+  const height = Math.ceil(el.getBoundingClientRect().height);
+  if (height > 0) mapTopOverlayHeight.value = height;
+}
+
+function bindMapTopOverlayObserver() {
+  mapTopOverlayResizeObserver?.disconnect();
+  mapTopOverlayResizeObserver = null;
+
+  const el = mapTopOverlayRef.value;
+  if (!el) return;
+
+  updateMapTopOverlayHeight();
+  mapTopOverlayResizeObserver = new ResizeObserver(() => updateMapTopOverlayHeight());
+  mapTopOverlayResizeObserver.observe(el);
+}
+
 /** 浏览态悬停：固定格点悬浮框，移入框内可滚动而不消失。 */
 const showHoverIntel = computed(
   () =>
@@ -409,18 +512,19 @@ const showHoverIntel = computed(
     !battleConfirmVisible.value &&
     !battleResultVisible.value &&
     intelPinnedCell.value !== null &&
-    pinnedCellEntityCount.value > 0
+    state.value !== null &&
+    canShowCellHoverIntel(state.value, intelPinnedCell.value.x, intelPinnedCell.value.y)
 );
 
 function intelBoxCountAt(x: number, y: number): number {
   if (!state.value) return 0;
   let count = 0;
-  if (cellEntities(state.value.strongholds, x, y).length > 0) count += 1;
-  if (fieldBattlefieldAt(x, y)) count += 1;
-  else if (cellEntities(state.value.units, x, y).length > 0) count += 1;
+  if (strongholdsAtCellForIntel(state.value, x, y).length > 0) count += 1;
+  if (fieldBattlefieldAt(x, y) && isTileVisible(state.value, x, y)) count += 1;
+  else if (unitsAtCellForIntel(state.value, x, y).length > 0) count += 1;
   if (
-    cellEntities(state.value.supplyConvoys, x, y).length +
-      cellEntities(state.value.messengers, x, y).length >
+    convoysAtCellForIntel(state.value, x, y).length +
+      messengersAtCellForIntel(state.value, x, y).length >
     0
   ) {
     count += 1;
@@ -623,27 +727,25 @@ function onViewportChange() {
 }
 
 const intelRoad = computed(() => {
-  if (!state.value || intelX.value === null || intelY.value === null) return null;
-  return (
-    state.value.map.roadCells?.find((r) => r.x === intelX.value && r.y === intelY.value) ?? null
-  );
+  if (!mapMaster.value || intelX.value === null || intelY.value === null) return null;
+  return roadAtCell(mapMaster.value, intelX.value, intelY.value);
 });
 
 const intelTileInfo = computed(() => {
-  if (!state.value || intelBarX.value === null || intelBarY.value === null) {
+  if (!mapMaster.value || intelBarX.value === null || intelBarY.value === null) {
     return { terrainName: null, regionName: null };
   }
-  return mapTileInfo(state.value.map, intelBarX.value, intelBarY.value);
+  return mapTileInfo(mapMaster.value, intelBarX.value, intelBarY.value);
 });
 
 const intelLandmark = computed(() => {
-  if (!state.value || intelBarX.value === null || intelBarY.value === null) return null;
-  return landmarkAtCell(state.value.map, intelBarX.value, intelBarY.value);
+  if (!mapMaster.value || intelBarX.value === null || intelBarY.value === null) return null;
+  return landmarkAtCell(mapMaster.value, intelBarX.value, intelBarY.value);
 });
 
 const intelBarStronghold = computed(() =>
   state.value && intelBarX.value !== null && intelBarY.value !== null
-    ? cellEntity(state.value.strongholds, intelBarX.value, intelBarY.value)
+    ? strongholdsAtCellForIntel(state.value, intelBarX.value, intelBarY.value)[0] ?? null
     : null
 );
 
@@ -665,6 +767,21 @@ const cornerHintMode = computed((): "moveSelect" | "attackSelect" | "mergeSelect
 const menuPopupMode = computed(() => {
   const mode = popupMode.value;
   if (
+    mode === "none" ||
+    mode === "moveSelect" ||
+    mode === "attackSelect" ||
+    mode === "mergeSelect" ||
+    mode === "splitSelect"
+  ) {
+    return null;
+  }
+  return mode;
+});
+
+const secondaryMenuPopupMode = computed(() => {
+  const mode = secondaryPopupMode.value;
+  if (
+    !mode ||
     mode === "none" ||
     mode === "moveSelect" ||
     mode === "attackSelect" ||
@@ -989,6 +1106,24 @@ const popupStyle = computed(() => {
   if (!menuAnchor.value) return { display: "none" };
 
   const anchor = menuAnchor.value;
+  const panel = {
+    left: 0,
+    top: 0,
+    width: mapPanelRef.value.clientWidth,
+    height: mapPanelRef.value.clientHeight,
+  };
+
+  if (anchor.panelAnchorRect) {
+    const side = anchor.anchorSide ?? "left";
+    const pos = resolveAnchoredPanelPlacementForSide(
+      anchor.panelAnchorRect,
+      panel,
+      { width: MENU_POPUP_W, height: MENU_POPUP_H },
+      side
+    );
+    return { left: `${pos.left}px`, top: `${pos.top}px` };
+  }
+
   if (mapCanvasRef.value) {
     const cellRect = mapCanvasRef.value.getCellPanelRect(
       anchor.x,
@@ -1029,6 +1164,29 @@ const popupStyle = computed(() => {
   return { left: `${left}px`, top: `${top}px` };
 });
 
+const secondaryPopupStyle = computed(() => {
+  if (!secondaryMenuPopupMode.value || !menuAnchor.value) {
+    return { display: "none" };
+  }
+
+  const base = popupStyle.value;
+  if (base.display === "none") return base;
+
+  const parsePx = (value: string | undefined) => {
+    if (!value) return 0;
+    const n = Number.parseFloat(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const left = parsePx(typeof base.left === "string" ? base.left : undefined);
+  const top = parsePx(typeof base.top === "string" ? base.top : undefined);
+
+  return {
+    left: `${left + MENU_POPUP_W + 12}px`,
+    top: `${top}px`,
+  };
+});
+
 /** 指令菜单 tooltip：菜单在左半屏时向右弹出，否则向左。 */
 const commandTooltipSide = computed<"left" | "right">(() => {
   if (!menuAnchor.value || !mapPanelRef.value) return "right";
@@ -1055,9 +1213,15 @@ function handleHoverCell(
   });
   onHoverCell(cell);
 
-  if (cell && entityCountAt(cell.x, cell.y) > 0) {
+  if (cell && state.value && canShowCellHoverIntel(state.value, cell.x, cell.y)) {
     intelPinnedCell.value = { x: cell.x, y: cell.y };
   } else if (!intelLayerHovered.value) {
+    intelPinnedCell.value = null;
+  } else if (
+    intelPinnedCell.value &&
+    state.value &&
+    !canShowCellHoverIntel(state.value, intelPinnedCell.value.x, intelPinnedCell.value.y)
+  ) {
     intelPinnedCell.value = null;
   }
 }
@@ -1201,7 +1365,13 @@ async function handleSiegeOrder(mode: "Assault" | "Encircle") {
   }
 }
 
-function handleSelectUnit(payload: { unitId: number; screenX: number; screenY: number }) {
+function handleSelectUnit(payload: {
+  unitId: number;
+  screenX: number;
+  screenY: number;
+  panelAnchorRect?: { left: number; top: number; width: number; height: number };
+  anchorSide?: AnchorSide;
+}) {
   closeForceCommandMenu();
   logStrategyMapCoords("select-unit", payload);
   onSelectUnit(payload);
@@ -1445,12 +1615,43 @@ function closeForceCommandMenu() {
 function openForceIntelFromMenu() {
   closeForceCommandMenu();
   intelSystemInitialTab.value = "force";
+  intelSystemInitialRealmFilter.value = "realm";
   intelSystemVisible.value = true;
 }
 
 function openIntelSystemDialog() {
   intelSystemInitialTab.value = "force";
+  intelSystemInitialRealmFilter.value = "all";
   intelSystemVisible.value = true;
+}
+
+function onRosterUnitSelect(unitId: number, event: MouseEvent) {
+  if (selectedUnitId.value === unitId && popupMode.value !== "none") {
+    onCancel();
+    return;
+  }
+
+  const panel = mapPanelRef.value;
+  if (!panel) return;
+
+  const item = event.currentTarget;
+  if (!(item instanceof HTMLElement)) return;
+
+  const panelRect = panel.getBoundingClientRect();
+  const itemRect = item.getBoundingClientRect();
+
+  handleSelectUnit({
+    unitId,
+    screenX: event.clientX,
+    screenY: event.clientY,
+    panelAnchorRect: {
+      left: itemRect.left - panelRect.left,
+      top: itemRect.top - panelRect.top,
+      width: itemRect.width,
+      height: itemRect.height,
+    },
+    anchorSide: "left",
+  });
 }
 
 function isInsideForcePopup(target: EventTarget | null): boolean {
@@ -1479,7 +1680,7 @@ function isBlockingOverlayTarget(target: EventTarget | null): boolean {
 /** 侧栏调试区、顶部提示条等 UI 不应触发「点空白取消地图 Popup」。 */
 function isInsideProtectedChrome(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  return Boolean(target.closest(".side-panel, .error-bar"));
+  return Boolean(target.closest(".side-panel, .map-unit-roster-float, .unit-roster-panel, .error-bar"));
 }
 
 function handleGlobalPointerDown(event: PointerEvent) {
@@ -1541,12 +1742,84 @@ async function refreshMovementTrace() {
   }
 }
 
+async function ensureMapMaster(world?: StrategyWorldState | null) {
+  const scenarioId = world?.scenarioId ?? state.value?.scenarioId ?? "mini_kanto";
+  const width = world?.map.width ?? state.value?.map.width ?? 20;
+  const height = world?.map.height ?? state.value?.map.height ?? 20;
+
+  if (mapMasterMatchesScenario(mapMaster.value, scenarioId, width, height)) {
+    return;
+  }
+
+  mapMaster.value = await getStrategyMapMaster();
+}
+
+async function startGameWithSettings(settings: GameStartSettings) {
+  lastGameStartSettings.value = settings;
+  writeGameStartSettings(settings);
+  initialLoading.value = true;
+  initialLoadError.value = "";
+  initialLoadPhase.value = "map";
+  error.value = "";
+  info.value = "";
+
+  try {
+    mapMaster.value = await getStrategyMapMaster();
+    initialLoadPhase.value = "state";
+    state.value = await loadScenario({
+      scenarioId: settings.scenarioId,
+      difficulty: settings.difficulty,
+      customStartOptions:
+        settings.difficulty === "Custom" ? settings.customStartOptions : undefined,
+    });
+    selectedUnitId.value = null;
+    selectedStrongholdId.value = null;
+    selectedConvoyId.value = null;
+    selectedCell.value = null;
+    battleConfirmVisible.value = false;
+    battleResultVisible.value = false;
+    intelDialogVisible.value = false;
+    eventFeed.value = [];
+    pendingNotifications.value = [];
+    settlementDialogVisible.value = false;
+    settlementDetail.value = null;
+    mapInteraction.reset();
+    resetMovePath();
+    if (usingMockFallback.value) {
+      info.value = "Live API 不可达，已自动使用 Mock 数据（见下方诊断面板）。";
+    } else if (lastRequest.value?.source === "mock") {
+      info.value = "当前为 Mock 模式。";
+    }
+    initialLoading.value = false;
+    await refreshMovementTrace();
+  } catch (e) {
+    initialLoadPhase.value = "error";
+    initialLoadError.value = e instanceof Error ? e.message : "加载失败";
+    error.value = initialLoadError.value;
+  }
+}
+
+function goToGameStartSettings() {
+  void router.push({ name: "Home", query: { configure: "1" } });
+}
+
+async function bootstrapGame() {
+  const settings = lastGameStartSettings.value ?? readGameStartSettings();
+  if (!settings) {
+    goToGameStartSettings();
+    return;
+  }
+  await startGameWithSettings(settings);
+}
+
 async function fetchGameState() {
   loading.value = true;
   error.value = "";
   info.value = "";
   try {
-    state.value = await getStrategyState();
+    const next = await getStrategyState();
+    await ensureMapMaster(next);
+    state.value = next;
     selectedUnitId.value = null;
     selectedStrongholdId.value = null;
     selectedConvoyId.value = null;
@@ -1575,31 +1848,19 @@ async function fetchGameState() {
 
 /** 开发用：从剧本 JSON 重新初始化后端内存仿真。 */
 async function reloadScenario() {
-  loading.value = true;
-  error.value = "";
-  info.value = "";
-  try {
-    state.value = await loadScenario("mini_kanto");
-    selectedUnitId.value = null;
-    selectedStrongholdId.value = null;
-    selectedConvoyId.value = null;
-    selectedCell.value = null;
-    battleConfirmVisible.value = false;
-    battleResultVisible.value = false;
-    intelDialogVisible.value = false;
-    eventFeed.value = [];
-    pendingNotifications.value = [];
-    settlementDialogVisible.value = false;
-    settlementDetail.value = null;
-    mapInteraction.reset();
-    resetMovePath();
-    info.value = "已重新加载剧本（世界已初始化）";
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : "加载剧本失败";
-  } finally {
-    loading.value = false;
-    await refreshMovementTrace();
+  if (lastGameStartSettings.value) {
+    loading.value = true;
+    try {
+      await startGameWithSettings(lastGameStartSettings.value);
+      info.value = "已按当前开局设置重新加载剧本";
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "重新加载失败";
+    } finally {
+      loading.value = false;
+    }
+    return;
   }
+  goToGameStartSettings();
 }
 
 function switchApiMode(mode: StrategyApiMode) {
@@ -1618,6 +1879,7 @@ function appendEvents(events: StrategyEvent[]) {
 }
 
 async function onAdvanceDay() {
+  if (loading.value) return;
   loading.value = true;
   error.value = "";
   try {
@@ -1626,6 +1888,8 @@ async function onAdvanceDay() {
     appendEvents(response.events ?? []);
   } catch (e) {
     error.value = e instanceof Error ? e.message : "推进日期失败";
+    // 业务：自动推进失败时切回战略，避免空转重试
+    if (!gamePaused.value) gamePaused.value = true;
   } finally {
     loading.value = false;
     await refreshMovementTrace();
@@ -1672,13 +1936,37 @@ async function onLoadSave() {
 onMounted(() => {
   window.addEventListener("pointerdown", handleGlobalPointerDown, true);
   window.addEventListener("resize", updateHoverIntelPosition);
-  void fetchGameState();
+  window.addEventListener("resize", updateMapTopOverlayHeight);
+
+  const settings = readGameStartSettings();
+  if (!settings) {
+    initialLoading.value = false;
+    goToGameStartSettings();
+    return;
+  }
+  void startGameWithSettings(settings);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("pointerdown", handleGlobalPointerDown, true);
   window.removeEventListener("resize", updateHoverIntelPosition);
+  window.removeEventListener("resize", updateMapTopOverlayHeight);
+  mapTopOverlayResizeObserver?.disconnect();
+  mapTopOverlayResizeObserver = null;
+  clearAutoAdvanceTimer();
 });
+
+watch([gamePaused, gameSpeed], () => syncAutoAdvanceLoop());
+
+watch(
+  () => [state.value, initialLoading.value] as const,
+  () => {
+    void nextTick(() => bindMapTopOverlayObserver());
+    if (!gamePaused.value && !initialLoading.value && state.value) {
+      syncAutoAdvanceLoop();
+    }
+  },
+);
 </script>
 
 <template>
@@ -1690,6 +1978,7 @@ onBeforeUnmount(() => {
       <aside class="side-panel">
         <h3>调试</h3>
         <el-button size="small" :loading="loading" @click="reloadScenario">重新加载剧本</el-button>
+        <el-button size="small" @click="goToGameStartSettings">开局设置</el-button>
         <el-button
           type="primary"
           size="small"
@@ -1744,23 +2033,41 @@ onBeforeUnmount(() => {
         </ul>
 
         <h3>选中单位</h3>
-        <template v-if="selectedUnit">
-          <p class="unit-name" :style="{ color: getForceColorCss(selectedUnit.forceId) }">
-            {{ selectedUnit.name }}
+        <template v-if="selectedOperableUnit">
+          <p
+            class="unit-name"
+            :style="{ color: getForceColorCss(selectedOperableUnit.unit.forceId) }"
+          >
+            {{ selectedOperableUnitDisplayName }}
+            <span v-if="!isMapOperableUnit(selectedOperableUnit)" class="offmap-tag">视野外</span>
           </p>
           <ul class="unit-stats">
-            <li>位置：({{ selectedUnit.x }}, {{ selectedUnit.y }})</li>
-            <li>兵数：{{ formatSoldiers(selectedUnit.soldiers) }}</li>
-            <li>移动力：{{ selectedUnit.movement }}</li>
-            <li>AP：{{ selectedUnit.ap }}</li>
-            <li>状态：{{ selectedUnit.status }}</li>
-            <li v-if="selectedUnit.status === 'Moving'" class="ap-hint">
+            <li v-if="isMapOperableUnit(selectedOperableUnit)">
+              位置：({{ selectedOperableUnit.unit.x }}, {{ selectedOperableUnit.unit.y }})
+            </li>
+            <li v-else>位置：视野外（仅侧栏可操作）</li>
+            <li>兵数：{{ formatSoldiers(selectedOperableUnit.unit.soldiers) }}</li>
+            <li v-if="isMapOperableUnit(selectedOperableUnit)">
+              移动力：{{ selectedOperableUnit.unit.movement }}
+            </li>
+            <li>AP：{{ selectedOperableUnit.unit.ap }}</li>
+            <li>状态：{{ selectedOperableUnit.unit.status }}</li>
+            <li
+              v-if="isMapOperableUnit(selectedOperableUnit) && selectedOperableUnit.unit.status === 'Moving'"
+              class="ap-hint"
+            >
               移动中：若 AP 不足，需再推进数日沿路径继续（见下方移动诊断）。
             </li>
           </ul>
-          <p class="hint">点击地图上的己方单位打开指令菜单。</p>
+          <p class="hint">
+            {{
+              isMapOperableUnit(selectedOperableUnit)
+                ? "点击地图上的己方单位打开指令菜单。"
+                : "该部队当前不在视野内，可在右侧列表选中后下达指令（若已实装）。"
+            }}
+          </p>
         </template>
-        <p v-else class="empty">点击地图上的单位进行选择</p>
+        <p v-else class="empty">点击地图或右侧列表中的单位进行选择</p>
 
         <h3 v-if="movementTrace.length">移动诊断（Live）</h3>
         <ol v-if="movementTrace.length" class="trace-list">
@@ -1783,10 +2090,18 @@ onBeforeUnmount(() => {
 
       <div class="map-column">
         <main ref="mapPanelRef" class="map-panel" @contextmenu.prevent="handleMapContextMenu">
+          <StrategyMapLoadingScene
+            v-if="initialLoading"
+            :phase="initialLoadPhase"
+            :map-name="mapMaster?.name ?? '迷你关东试玩'"
+            :error="initialLoadError"
+            @retry="bootstrapGame"
+          />
           <StrategyMapCanvas
-            v-if="state"
+            v-if="state && mapMaster && !initialLoading"
             ref="mapCanvasRef"
             :world-state="state"
+            :map-master="mapMaster"
             :selected-unit-id="selectedUnitId"
             :selected-convoy-id="selectedConvoyId"
             :hover-unit-id="hoverUnitId"
@@ -1811,6 +2126,7 @@ onBeforeUnmount(() => {
 
           <div
             v-if="state"
+            ref="mapTopOverlayRef"
             class="map-overlay map-overlay--top"
             @pointerdown.stop
             @click.stop
@@ -1821,9 +2137,9 @@ onBeforeUnmount(() => {
                 <div class="map-time-control map-float-panel">
                   <span class="date">{{ dateText }}</span>
                   <el-radio-group v-model="gameSpeed" size="small" class="speed-radios">
-                    <el-radio-button :label="1" title="1 倍速（后续实装）">▶</el-radio-button>
-                    <el-radio-button :label="2" title="2 倍速（后续实装）">▶▶</el-radio-button>
-                    <el-radio-button :label="4" title="4 倍速（后续实装）">▶▶▶</el-radio-button>
+                    <el-radio-button :label="1" title="1 倍速">▶</el-radio-button>
+                    <el-radio-button :label="2" title="2 倍速">▶▶</el-radio-button>
+                    <el-radio-button :label="4" title="4 倍速">▶▶▶</el-radio-button>
                   </el-radio-group>
                 </div>
                 <div class="map-message-zone">
@@ -1930,7 +2246,8 @@ onBeforeUnmount(() => {
                   type="primary"
                   size="large"
                   class="game-pace-btn"
-                  title="进入进行（自动推进，后续实装）"
+                  :disabled="initialLoading || !state"
+                  title="进入进行：按左上角倍速自动推进日期"
                   @click="gamePaused = false"
                 >
                   进行
@@ -1940,7 +2257,7 @@ onBeforeUnmount(() => {
                   type="primary"
                   size="large"
                   class="game-pace-btn"
-                  title="进入战略（暂停，手动操作）"
+                  title="进入战略：暂停自动推进，可手动下达指令"
                   @click="gamePaused = true"
                 >
                   战略
@@ -1948,6 +2265,14 @@ onBeforeUnmount(() => {
               </div>
               <StrategyMapViewControls v-model="mapColorMode" class="map-bottom-view" />
             </div>
+          </div>
+
+          <div v-if="state" class="map-unit-roster-float" :style="unitRosterFloatStyle">
+            <StrategyOperableUnitList
+              :world-state="state"
+              :selected-unit-id="selectedUnitId"
+              @select="onRosterUnitSelect"
+            />
           </div>
 
           <StrategyMapPopup
@@ -1976,6 +2301,20 @@ onBeforeUnmount(() => {
             @cancel="handlePopupCancel"
           />
           <StrategyMapPopup
+            v-if="secondaryMenuPopupMode && menuAnchor"
+            class="map-popup-layer map-popup-layer--anchor map-popup-layer--secondary"
+            :style="secondaryPopupStyle"
+            :mode="secondaryMenuPopupMode"
+            :entity-name="popupStronghold?.name"
+            :x="menuAnchor.x"
+            :y="menuAnchor.y"
+            is-stronghold
+            :can-expedition="canExpeditionStronghold"
+            @begin-expedition="handleBeginExpedition"
+            @show-intel="openIntelDialog"
+            @cancel="handlePopupCancel"
+          />
+          <StrategyMapPopup
             v-if="popupUsesCorner"
             ref="cornerPopupRef"
             class="map-popup-layer map-popup-layer--corner"
@@ -1984,8 +2323,8 @@ onBeforeUnmount(() => {
             :y="selectedCell?.y ?? 0"
             @cancel="handlePopupCancel"
           />
-          <div v-if="!state" class="map-placeholder">
-            <el-empty description="正在加载 mini_kanto 剧本…" />
+          <div v-if="!state && !initialLoading" class="map-placeholder">
+            <el-empty description="未能加载剧本数据" />
           </div>
         </main>
       </div>
@@ -2072,6 +2411,7 @@ onBeforeUnmount(() => {
       :visible="intelSystemVisible"
       :world-state="state"
       :initial-tab="intelSystemInitialTab"
+      :initial-realm-filter="intelSystemInitialRealmFilter"
       @update:visible="intelSystemVisible = $event"
     />
     <StrategySystemMenuDialog
@@ -2413,6 +2753,30 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
+.map-unit-roster-float {
+  position: absolute;
+  right: 12px;
+  z-index: 13;
+  width: min(240px, 28vw);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+
+.map-unit-roster-float :deep(.unit-roster-panel) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.map-unit-roster-float :deep(.unit-roster-list) {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .strategy-body {
   display: flex;
   flex: 1;
@@ -2453,6 +2817,18 @@ onBeforeUnmount(() => {
   margin: 0 0 8px;
   font-weight: 600;
   font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.offmap-tag {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+  padding: 0 6px;
 }
 
 .unit-stats {

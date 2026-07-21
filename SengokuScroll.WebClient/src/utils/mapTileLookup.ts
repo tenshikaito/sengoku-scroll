@@ -1,30 +1,48 @@
-import type { StrategyMapLandmarkState, StrategyMapState } from "@/api/strategyTypes";
+import type { StrategyMapMasterState } from "@/api/strategyTypes";
 
 export interface MapTileInfo {
   terrainName: string | null;
   regionName: string | null;
 }
 
-export function mapTileIndex(map: StrategyMapState, x: number, y: number): number {
+export function mapTileIndex(map: Pick<StrategyMapMasterState, "width">, x: number, y: number): number {
   return y * map.width + x;
 }
 
-export function mapTileInfo(map: StrategyMapState, x: number, y: number): MapTileInfo {
-  if (x < 0 || y < 0 || x >= map.width || y >= map.height) {
+export function mapTileInfo(
+  mapMaster: StrategyMapMasterState,
+  x: number,
+  y: number
+): MapTileInfo {
+  if (x < 0 || y < 0 || x >= mapMaster.width || y >= mapMaster.height) {
     return { terrainName: null, regionName: null };
   }
 
-  const index = mapTileIndex(map, x, y);
+  const index = mapTileIndex(mapMaster, x, y);
+  const terrainId = mapMaster.terrainIds[index] ?? 0;
+  const regionId = mapMaster.regionIds[index] ?? 0;
+
+  const terrain = mapMaster.terrains.find((t) => t.id === terrainId);
+  const region = regionId > 0 ? mapMaster.regions.find((r) => r.id === regionId) : undefined;
+
   return {
-    terrainName: map.tileTerrainNames?.[index] ?? null,
-    regionName: map.tileRegionNames?.[index] ?? null,
+    terrainName: terrain?.name ?? (terrainId > 0 ? `地形#${terrainId}` : null),
+    regionName: region?.name ?? null,
   };
 }
 
 export function landmarkAtCell(
-  map: StrategyMapState,
+  mapMaster: StrategyMapMasterState,
   x: number,
   y: number
-): StrategyMapLandmarkState | null {
-  return map.landmarks?.find((lm) => lm.x === x && lm.y === y) ?? null;
+) {
+  return mapMaster.landmarks?.find((lm) => lm.x === x && lm.y === y) ?? null;
+}
+
+export function roadAtCell(
+  mapMaster: StrategyMapMasterState,
+  x: number,
+  y: number
+) {
+  return mapMaster.roadCells?.find((r) => r.x === x && r.y === y) ?? null;
 }

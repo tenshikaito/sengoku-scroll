@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace SengokuScroll.Domain.World;
 
+/// <summary>行优先格点网格：terrain 为地形 Id，region 为地图区域 Id（气候/文化分区；0=无）。</summary>
 public class TileMap
 {
     private readonly byte[] terrain;

@@ -1,8 +1,11 @@
 export type {
   StrategyWorldState,
+  StrategyLoadRequest,
+  StrategyMapMasterState,
   StrategyForceState,
   StrategyStrongholdState,
   StrategyUnitState,
+  StrategyUnitRosterEntry,
   StrategySupplyConvoyState,
   StrategyMessengerState,
   StrategyBattlefieldState,
@@ -12,6 +15,7 @@ export type {
 export {
   loadScenario,
   getStrategyState,
+  getStrategyMapMaster,
   orderUnitAttack,
   orderUnitSiege,
   mergeUnits,

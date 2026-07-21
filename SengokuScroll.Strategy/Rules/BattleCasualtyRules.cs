@@ -13,16 +13,9 @@ namespace SengokuScroll.Strategy.Rules;
 /// </summary>
 public static class BattleCasualtyRules
 {
-    /// <summary>败退后至少保留的残部比例（相对战前兵数）。</summary>
+    /// <summary>败退后至少保留的残部比例（相对战前兵数；与难度无关）。</summary>
     public static double MinDefeatSurvivorRatio(StrategyDifficulty difficulty)
-        => difficulty switch
-        {
-            StrategyDifficulty.Easy => 0.60,
-            StrategyDifficulty.Normal => 0.50,
-            StrategyDifficulty.Hard => 0.42,
-            StrategyDifficulty.Legendary => 0.35,
-            _ => 0.50
-        };
+        => StrategyDifficultyRules.DefaultDefeatSurvivorRatio;
 
     /// <summary>对瞬间战/战术战结果施加合理伤亡上限。</summary>
     public static InstantBattleOutcome CapOutcome(InstantBattleOutcome outcome, StrategyDifficulty difficulty)

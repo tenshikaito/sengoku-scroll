@@ -23,6 +23,9 @@ public sealed class UnitTypeDefinition
 
     public int Cost { get; set; }
 
+    /// <summary>战略地图视野半径（曼哈顿距离 |dx|+|dy| ≤ range）。</summary>
+    public int SightRange { get; set; } = 2;
+
     public int MaintenanceMoney { get; set; }
 
     public int MaintenanceFood { get; set; }

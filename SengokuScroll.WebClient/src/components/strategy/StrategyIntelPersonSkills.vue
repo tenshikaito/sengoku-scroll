@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import StrategyIntelFieldList from "./StrategyIntelFieldList.vue";
+import StrategyIntelBasicDescriptions from "./StrategyIntelBasicDescriptions.vue";
 import type { IntelFieldRow } from "@/utils/strategyIntelRows";
 
 const props = defineProps<{
@@ -11,7 +11,7 @@ const hasRows = computed(() => props.rows.length > 0);
 </script>
 
 <template>
-  <StrategyIntelFieldList v-if="hasRows" :rows="rows" variant="dialog" :columns="2" />
+  <StrategyIntelBasicDescriptions v-if="hasRows" :rows="rows" :column="2" />
   <p v-else class="placeholder">请选择人物。</p>
 </template>
 

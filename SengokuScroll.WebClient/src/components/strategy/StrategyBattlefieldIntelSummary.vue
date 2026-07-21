@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { StrategyBattlefieldState } from "@/api/strategy";
 import StrategyIntelFieldList from "./StrategyIntelFieldList.vue";
-import { formatFoodGo, formatMoney, formatSoldiers } from "@/utils/strategyDisplayUnits";
+import { formatFoodGo, formatMoney, formatSiegeSoldiers, formatSoldiers } from "@/utils/strategyDisplayUnits";
 
 defineProps<{
   battlefield: StrategyBattlefieldState;
+  playerForceId: number;
 }>();
 
 function siegeThreatLabel(value: string | undefined | null): string {
@@ -53,7 +54,13 @@ function battlefieldStatusRows(battlefield: StrategyBattlefieldState) {
           variant="hover"
           :rows="[
             { label: '势力', value: entry.forceName },
-            { label: '兵数', value: formatSoldiers(entry.soldiers) },
+            {
+              label: '兵数',
+              value:
+                battlefield.kind === 'Siege'
+                  ? formatSiegeSoldiers(entry.soldiers, entry.forceId, playerForceId)
+                  : formatSoldiers(entry.soldiers),
+            },
             { label: '士气', value: `${Math.max(0, Math.min(100, entry.morale))}%` },
             { label: '金钱', value: formatMoney(entry.money ?? 0) },
             { label: '粮草', value: formatFoodGo(entry.food ?? 0) },

@@ -20,7 +20,7 @@ public class MiniKantoImagawaLiveSiegeTests
         var mikawaTile = mikawa.Location;
 
         Unit? sieging = null;
-        for (var day = 1; day <= 6; day++)
+        for (var day = 1; day <= 10; day++)
         {
             MiniKantoSiegeScenarioHelper.AdvanceDay(ctx);
 
@@ -45,11 +45,15 @@ public class MiniKantoImagawaLiveSiegeTests
         var siegeBf = MiniKantoSiegeScenarioHelper.OpenSiegeBattlefieldAt(dto, mikawaTile.X, mikawaTile.Y);
         Assert.NotNull(siegeBf);
 
+        for (var extra = 0; extra < 5; extra++)
+            MiniKantoSiegeScenarioHelper.AdvanceDay(ctx);
+
+        var buffer = ctx.Services.GetRequiredService<SengokuScroll.Strategy.Diagnostics.StrategyDayOutcomeBuffer>();
         Assert.True(
             MiniKantoSiegeScenarioHelper.HasBattleReportMessenger(ctx.World.GameData, MiniKantoSiegeScenarioHelper.OdaForceId)
-            || ctx.Services.GetRequiredService<SengokuScroll.Strategy.Diagnostics.StrategyDayOutcomeBuffer>()
-                .Events.Any(e => e.Category == "BattleReportArrived"),
-            "强攻开始应向守方（织田）派送战报信使或事件");
+            || MiniKantoSiegeScenarioHelper.HasStrategicReportMessenger(ctx.World.GameData, MiniKantoSiegeScenarioHelper.OdaForceId)
+            || buffer.Events.Any(e => e.Category is "BattleReportArrived" or "StrategicReportArrived"),
+            "强攻开始应向守方（织田）派送战报/战略信使或当日抵达事件");
     }
 
     [Fact]

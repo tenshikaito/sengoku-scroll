@@ -57,7 +57,8 @@ public static class StrategyTestWorldBuilder
             {
                 Strongholds = [],
                 Characters = [],
-                Units = []
+                Units = [],
+                Roads = []
             },
             GameMasterData = new GameMasterData
             {

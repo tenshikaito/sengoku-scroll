@@ -142,7 +142,7 @@ public class MiniKantoImagawaMainSiegeTests
 
         Assert.Equal(new Point3(4, 4), world.GameData.Units[MiniKantoSiegeScenarioHelper.OdaVanguardId].Location);
         Assert.Equal(new Point3(5, 4), world.GameData.Units[MiniKantoSiegeScenarioHelper.ImagawaVanguardId].Location);
-        Assert.Equal(new Point3(6, 6), world.GameData.Units[MiniKantoSiegeScenarioHelper.ImagawaMainId].Location);
+        Assert.Equal(new Point3(9, 12), world.GameData.Units[MiniKantoSiegeScenarioHelper.ImagawaMainId].Location);
         Assert.Equal(UnitDirective.Occupy, world.GameData.Units[MiniKantoSiegeScenarioHelper.ImagawaMainId].Directive);
     }
 }

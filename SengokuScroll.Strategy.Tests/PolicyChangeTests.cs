@@ -12,10 +12,12 @@ public class PolicyChangeHostTests
         using var host = new StrategySimulationHost();
         Assert.True(host.LoadScenario("mini_kanto").IsSuccess);
 
-        var lord = host.GetState().Value!.Lord;
+        var state = host.GetState().Value!;
+        var lord = state.Lord;
         Assert.Equal("织田信长", lord.Name);
-        Assert.Equal(1, lord.X);
-        Assert.Equal(4, lord.Y);
+        Assert.Null(lord.UnitId);
+        Assert.Equal(2, lord.X);
+        Assert.Equal(8, lord.Y);
     }
 
     [Fact]

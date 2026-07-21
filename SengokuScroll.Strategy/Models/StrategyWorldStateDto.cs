@@ -12,6 +12,7 @@ using SengokuScroll.Domain.Definitions;
 using SengokuScroll.Domain.Extensions;
 using SengokuScroll.Domain.Types;
 using SengokuScroll.Domain.World;
+using SengokuScroll.Strategy.Vision;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Models;
@@ -34,12 +35,21 @@ public sealed record StrategyWorldStateDto
     /// <summary>进行中的地图战场（交战格折叠显示）。</summary>
     public required IReadOnlyList<StrategyBattlefieldStateDto> Battlefields { get; init; }
 
+    /// <summary>迷雾外己方部队摘要（无坐标，供侧栏列表）。</summary>
+    public required IReadOnlyList<StrategyUnitRosterEntryDto> OwnUnitRoster { get; init; }
+
     public required IReadOnlyList<StrategySupplyConvoyStateDto> SupplyConvoys { get; init; }
 
     public required IReadOnlyList<StrategyMessengerStateDto> Messengers { get; init; }
 
     /// <summary>将领摘要（统计本势力将领数等）。</summary>
     public required IReadOnlyList<StrategyCharacterSummaryDto> Characters { get; init; }
+
+    /// <summary>在地图上独立行动的将领（溃逃回城等）。</summary>
+    public required IReadOnlyList<StrategyMapCharacterStateDto> MapCharacters { get; init; }
+
+    /// <summary>谍报获得的情报条目（非自势力）。</summary>
+    public required IReadOnlyList<StrategyEspionageIntelEntryDto> EspionageIntel { get; init; }
 
     /// <summary>玩家势力视角外交（目标势力 + 关系）。</summary>
     public required IReadOnlyList<StrategyDiplomacyStateDto> Diplomacies { get; init; }
@@ -58,9 +68,15 @@ public sealed record StrategyWorldStateDto
 
     /// <summary>剧本 Master Data 快照（情报系统查阅用）。</summary>
     public required StrategyMasterDataSnapshotDto MasterData { get; init; }
+
+    /// <summary>玩家势力战争迷雾快照（explored / visible / known）。</summary>
+    public StrategyVisibilityDto? Visibility { get; init; }
+
+    /// <summary>本局生效的开局选项（难度预设或 Custom 快照）。</summary>
+    public GameStartOptionsDto? StartOptions { get; init; }
 }
 
-/// <summary>地图尺寸与名称。</summary>
+/// <summary>地图尺寸与名称（静态格点数据见 <see cref="StrategyMapMasterDto"/>）。</summary>
 public sealed record StrategyMapStateDto
 {
     public required string Name { get; init; }
@@ -68,18 +84,6 @@ public sealed record StrategyMapStateDto
     public required int Width { get; init; }
 
     public required int Height { get; init; }
-
-    /// <summary>道路格（region 层；typeId&gt;0）。</summary>
-    public required IReadOnlyList<StrategyRoadCellDto> RoadCells { get; init; }
-
-    /// <summary>逐格地形名（行优先，长度 = Width × Height）。</summary>
-    public required IReadOnlyList<string> TileTerrainNames { get; init; }
-
-    /// <summary>逐格政治区域名（行优先；无区域为 null）。</summary>
-    public required IReadOnlyList<string?> TileRegionNames { get; init; }
-
-    /// <summary>地图地标。</summary>
-    public required IReadOnlyList<StrategyMapLandmarkDto> Landmarks { get; init; }
 }
 
 /// <summary>地图地标 DTO。</summary>
@@ -178,6 +182,9 @@ public sealed record StrategyCharacterSummaryDto
 
     public required int StrongholdId { get; init; }
 
+    /// <summary>直属上司角色 Id；0 表示无。</summary>
+    public required int LeaderId { get; init; }
+
     /// <summary>Map | Stronghold | Unit</summary>
     public required string LocationType { get; init; }
 
@@ -225,6 +232,40 @@ public sealed record StrategyCharacterSummaryDto
     public required int Loyalty { get; init; }
 }
 
+/// <summary>地图上独立行动的将领（溃逃、回城途中等）。</summary>
+public sealed record StrategyMapCharacterStateDto
+{
+    public required int Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public required int ForceId { get; init; }
+
+    public required int X { get; init; }
+
+    public required int Y { get; init; }
+
+    public required bool MapVisible { get; init; }
+}
+
+/// <summary>谍报情报摘要（前端判断展示精度与过期）。</summary>
+public sealed record StrategyEspionageIntelEntryDto
+{
+    public required string TargetKind { get; init; }
+
+    public required int TargetId { get; init; }
+
+    public required string Scope { get; init; }
+
+    public required string Precision { get; init; }
+
+    public required int ExpiresYear { get; init; }
+
+    public required int ExpiresMonth { get; init; }
+
+    public required int ExpiresDay { get; init; }
+}
+
 public sealed record StrategyMasterDataEntryDto
 {
     public required int Id { get; init; }
@@ -250,6 +291,8 @@ public sealed record StrategyMasterDataSnapshotDto
     public required IReadOnlyList<StrategyMasterDataEntryDto> ReligionGroups { get; init; }
 
     public required IReadOnlyList<StrategyMasterDataEntryDto> Religions { get; init; }
+
+    public required IReadOnlyList<StrategyMasterDataEntryDto> Weathers { get; init; }
 
     public required IReadOnlyList<StrategyMasterDataEntryDto> StrongholdTypes { get; init; }
 
@@ -362,6 +405,12 @@ public sealed record StrategyStrongholdStateDto
 
     public required string Name { get; init; }
 
+    /// <summary>据点类型 Id（平城/平山城/山城）。</summary>
+    public required byte TypeId { get; init; }
+
+    /// <summary>据点类型显示名。</summary>
+    public required string TypeName { get; init; }
+
     public required int ForceId { get; init; }
 
     public required int X { get; init; }
@@ -433,6 +482,22 @@ public sealed record StrategyStrongholdStateDto
 
     /// <summary>当前被进攻状态：Assault=强攻，Encircle=围城；无则 null。</summary>
     public string? SiegeThreat { get; init; }
+
+    /// <summary>迷雾层：Visible | Known | Hidden。</summary>
+    public string? VisibilityTier { get; init; }
+
+    /// <summary>谍报军事：兵力档位（未知/高/中/低）；精确谍报时为 null，读 GarrisonSoldiers。</summary>
+    public string? EspionageSoldiersBand { get; init; }
+
+    public string? EspionageMoraleBand { get; init; }
+
+    public string? EspionageTrainingBand { get; init; }
+
+    public string? EspionagePopulationBand { get; init; }
+
+    public string? EspionageFoodBand { get; init; }
+
+    public string? EspionageMoneyBand { get; init; }
 }
 
 /// <summary>经济设施摘要（M4-d）。</summary>
@@ -532,6 +597,47 @@ public sealed record StrategyUnitStateDto
 
     /// <summary>所属地图战场 Id；0 表示未入战。</summary>
     public int BattlefieldId { get; init; }
+
+    /// <summary>是否在地图层渲染（迷雾外己方单位仍可在侧栏列出）。</summary>
+    public bool MapVisible { get; init; } = true;
+
+    /// <summary>情报模糊兵数（如 **** / 3***）；为空则显示 <see cref="Soldiers"/>。</summary>
+    public string? SoldiersDisplay { get; init; }
+
+    /// <summary>情报模糊士气档（高/中/低）。</summary>
+    public string? MoraleBand { get; init; }
+
+    /// <summary>情报模糊训练档（高/中/低）。</summary>
+    public string? TrainingBand { get; init; }
+}
+
+/// <summary>迷雾外己方部队摘要（不含地图坐标与路径）。</summary>
+public sealed record StrategyUnitRosterEntryDto
+{
+    public required int Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public required int ForceId { get; init; }
+
+    public required int X { get; init; }
+
+    public required int Y { get; init; }
+
+    public required int Soldiers { get; init; }
+
+    public required string Status { get; init; }
+
+    public required string Directive { get; init; }
+
+    public required int Ap { get; init; }
+
+    public required string SupplyStatus { get; init; }
+
+    public string? CommanderName { get; init; }
+
+    /// <summary>当前不在玩家视野内。</summary>
+    public required bool OffMap { get; init; }
 }
 
 /// <summary>战场内按势力汇总的参战摘要（悬浮框用）。</summary>
@@ -907,13 +1013,77 @@ public sealed record StrategyMessengerStateDto
     public string? PendingDirective { get; init; }
 }
 
+/// <summary>地图单格坐标（visible 列表等）。</summary>
+public sealed record StrategyMapCellDto
+{
+    public required int X { get; init; }
+
+    public required int Y { get; init; }
+}
+
+/// <summary>玩家势力战争迷雾 DTO。</summary>
+public sealed record StrategyVisibilityDto
+{
+    public required string FogMode { get; init; }
+
+    public required string IntelMode { get; init; }
+
+    public required string ControlMode { get; init; }
+
+    public required bool InstantEventMessages { get; init; }
+
+    public required bool AllySharedVision { get; init; }
+
+    public required int MapWidth { get; init; }
+
+    public required int MapHeight { get; init; }
+
+    /// <summary>Explored bitset（32 位字数组，行优先）。</summary>
+    public required IReadOnlyList<uint> ExploredBits { get; init; }
+
+    public required IReadOnlyList<StrategyMapCellDto> VisibleCells { get; init; }
+
+    public required IReadOnlyList<int> KnownStrongholdIds { get; init; }
+}
+
+/// <summary>开局选项 DTO（供前端展示）。</summary>
+public sealed record GameStartOptionsDto
+{
+    public required string FogMode { get; init; }
+
+    public required string IntelMode { get; init; }
+
+    public required string ControlMode { get; init; }
+
+    public required bool AllySharedVision { get; init; }
+
+    public required bool InstantEventMessages { get; init; }
+}
+
+/// <summary>存档中的探索态。</summary>
+public sealed record StrategyVisibilitySaveDto
+{
+    public required IReadOnlyList<uint> ExploredBits { get; init; }
+
+    public required IReadOnlyList<int> KnownStrongholdIds { get; init; }
+}
+
 /// <summary>将 <see cref="GameWorld"/> 映射为 API DTO。</summary>
 public static class StrategyWorldStateMapper
 {
-    public static StrategyWorldStateDto ToDto(GameWorld world, string scenarioId, StrategyScenarioMeta meta)
+    public static StrategyWorldStateDto ToDto(
+        GameWorld world,
+        string scenarioId,
+        StrategyScenarioMeta meta,
+        StrategyVisibilityLedger? visibilityLedger = null,
+        StrategyEspionageIntelLedger? espionageLedger = null)
     {
         var tileMap = world.GameMapMasterData.TileMap;
         var date = world.GameData.GameDate;
+        var options = meta.StartOptions;
+        var visibilityState = visibilityLedger?.GetOrCreate(meta.PlayerForceId);
+        var intelPolicy = IntelPolicyFactory.Create(options.IntelMode);
+        var visibleCells = visibilityState?.VisibleCells ?? [];
         var lordLocation = StrategyLordHelper.ResolveLocation(world.GameData, meta);
         var lordResidenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
             meta.PlayerForceId,
@@ -941,11 +1111,7 @@ public static class StrategyWorldStateMapper
             {
                 Name = world.GameMapMasterData.Name,
                 Width = tileMap.Width,
-                Height = tileMap.Height,
-                RoadCells = MapRoadCells(tileMap, world.GameMapMasterData.Roads),
-                TileTerrainNames = MapTileTerrainNames(tileMap, world.GameMapMasterData.Terrains),
-                TileRegionNames = MapTileRegionNames(tileMap, world.GameMapMasterData),
-                Landmarks = MapLandmarks(world.GameMapMasterData.Landmarks)
+                Height = tileMap.Height
             },
             Date = new StrategyDateStateDto
             {
@@ -981,28 +1147,93 @@ public static class StrategyWorldStateMapper
                     };
                 })
                 .OrderBy(f => f.Id)],
-            Strongholds = [.. world.GameData.Strongholds.Values
-                .Select(s => MapStronghold(s, meta, world.GameData, world.GameMasterData))
-                .OrderBy(s => s.Id)],
-            Units = [.. world.GameData.Units.Values
-                .Where(u => u.IsMilitary && u.Soldier > 0)
-                .Select(u => MapUnit(u, meta, world.GameData))
-                .OrderBy(u => u.Id)],
+            Strongholds = visibilityState is null
+                ? [.. world.GameData.Strongholds.Values
+                    .Select(s => MapStronghold(s, meta, world.GameData, world.GameMasterData))
+                    .OrderBy(s => s.Id)]
+                : [.. world.GameData.Strongholds.Values
+                    .Select(s => MapStronghold(s, meta, world.GameData, world.GameMasterData))
+                    .Select(dto => StrategyFogDtoRules.ApplyStrongholdFog(
+                        dto, meta, world.GameData, visibilityState, tileMap.Width))
+                    .Where(dto => dto is not null)
+                    .Cast<StrategyStrongholdStateDto>()
+                    .Select(dto => ApplyStrongholdEspionageMask(dto, meta, world.GameData, espionageLedger))
+                    .OrderBy(s => s.Id)],
+            Units = MapFoggedUnits(world, meta, visibilityState, intelPolicy, visibleCells, espionageLedger),
+            OwnUnitRoster = MapOwnUnitRoster(world, meta, visibilityState),
             Battlefields = [.. world.GameData.Battlefields.Values
                 .Where(b => !b.IsClosed)
+                .Where(b => visibilityState is null
+                    || StrategyFogDtoRules.IsMapEntityVisible(
+                        b.Location.X, b.Location.Y, meta, visibilityState))
                 .Select(b => MapBattlefield(b, world.GameData))
                 .OrderBy(b => b.Id)],
             SupplyConvoys = [.. world.GameData.SupplyConvoys.Values
+                .Where(c => visibilityState is null
+                    || StrategyFogDtoRules.IsMapMobileEntityVisible(
+                        c.Location.X, c.Location.Y, c.ForceId, meta, world.GameData, visibilityState))
                 .Select(c => MapConvoy(c, world.GameData))
                 .OrderBy(c => c.Id)],
             Messengers = [.. world.GameData.Messengers.Values
+                .Where(m => visibilityState is null
+                    || StrategyFogDtoRules.IsMapMobileEntityVisible(
+                        m.Location.X, m.Location.Y, m.ForceId, meta, world.GameData, visibilityState))
                 .Select(m => MapMessenger(m, world.GameData))
                 .OrderBy(m => m.Id)],
             Characters = [.. world.GameData.Characters.Values
                 .Select(c => MapCharacter(c, world.GameData.GameDate))
                 .OrderBy(c => c.Id)],
+            MapCharacters = MapMapCharacters(world, meta, visibilityState),
+            EspionageIntel = MapEspionageIntel(espionageLedger),
             Diplomacies = MapPlayerDiplomacies(meta.PlayerForceId, world.GameData),
-            MasterData = MapMasterData(world.GameMasterData, world.GameMapMasterData)
+            MasterData = MapMasterData(world.GameMasterData, world.GameMapMasterData),
+            Visibility = visibilityLedger?.BuildDto(world, meta),
+            StartOptions = StrategyFogDtoRules.ToOptionsDto(options)
+        };
+    }
+
+    public static StrategyMapMasterDto ToMapMasterDto(GameWorld world, string scenarioId)
+    {
+        var master = world.GameMapMasterData;
+        var tileMap = master.TileMap;
+
+        return new StrategyMapMasterDto
+        {
+            ScenarioId = scenarioId,
+            Name = master.Name,
+            Width = tileMap.Width,
+            Height = tileMap.Height,
+            Terrains = [.. master.Terrains
+                .Select(kv => new StrategyTerrainDefDto
+                {
+                    Id = kv.Key,
+                    Key = kv.Value.Description,
+                    Name = kv.Value.Name,
+                    MovementCost = kv.Value.MovementCost
+                })
+                .OrderBy(t => t.Id)],
+            Regions = [.. master.Regions.Values
+                .Select(r => new StrategyRegionDefDto
+                {
+                    Id = r.Id,
+                    Key = r.Description,
+                    Name = r.Name
+                })
+                .OrderBy(r => r.Id)],
+            RoadTypes = [.. master.Roads.Values
+                .Select(r => new StrategyRoadTypeDefDto
+                {
+                    Id = r.Id,
+                    Key = r.Description,
+                    Name = r.Name,
+                    SpeedBonus = r.SpeedBonus,
+                    MovementCost = r.MovementCostOverride
+                })
+                .OrderBy(r => r.Id)],
+            TerrainIds = MapTerrainIds(tileMap),
+            RegionIds = MapRegionIds(tileMap),
+            RoadCells = MapRoadCells(world.GameMapData.Roads, master.Roads, tileMap),
+            Landmarks = MapLandmarks(master.Landmarks)
         };
     }
 
@@ -1072,6 +1303,7 @@ public static class StrategyWorldStateMapper
                         ("description", x.Description))
                 })
                 .OrderBy(x => x.Id)],
+            Weathers = StrategyMasterDataWeatherCatalog.BuildEntries(),
             StrongholdTypes = [.. gameMaster.StrongholdTypes.Values
                 .Select(x => new StrategyMasterDataEntryDto
                 {
@@ -1209,6 +1441,71 @@ public static class StrategyWorldStateMapper
             Enums = StrategyMasterDataEnumCatalog.BuildEntries()
         };
 
+    private static StrategyStrongholdStateDto ApplyStrongholdEspionageMask(
+        StrategyStrongholdStateDto dto,
+        StrategyScenarioMeta meta,
+        GameData gameData,
+        StrategyEspionageIntelLedger? espionageLedger)
+    {
+        if (meta.StartOptions.IntelMode == StrategyIntelMode.Full)
+            return dto;
+
+        return EspionageIntelRules.ApplyStrongholdMask(
+            dto,
+            meta.PlayerForceId,
+            gameData,
+            espionageLedger);
+    }
+
+    private static IReadOnlyList<StrategyEspionageIntelEntryDto> MapEspionageIntel(
+        StrategyEspionageIntelLedger? espionageLedger)
+        => espionageLedger is null
+            ? []
+            : [.. espionageLedger.Snapshot().Select(r => new StrategyEspionageIntelEntryDto
+            {
+                TargetKind = r.TargetKind.ToString(),
+                TargetId = r.TargetId,
+                Scope = r.Scope.ToString(),
+                Precision = r.Precision.ToString(),
+                ExpiresYear = r.ExpiresDate.Year,
+                ExpiresMonth = r.ExpiresDate.Month,
+                ExpiresDay = r.ExpiresDate.Day
+            })];
+
+    private static IReadOnlyList<StrategyMapCharacterStateDto> MapMapCharacters(
+        GameWorld world,
+        StrategyScenarioMeta meta,
+        ForceVisibilityState? visibilityState)
+    {
+        var options = meta.StartOptions;
+        return [.. world.GameData.Characters.Values
+            .Where(c => !c.IsDead && c.LocationType == Character.CharacterLocationType.Map)
+            .Select(c =>
+            {
+                var mapVisible = visibilityState is null
+                    || options.FogMode == StrategyFogMode.None
+                    || StrategyFogDtoRules.IsMapMobileEntityVisible(
+                        c.Location.X,
+                        c.Location.Y,
+                        c.ForceId,
+                        meta,
+                        world.GameData,
+                        visibilityState);
+
+                return new StrategyMapCharacterStateDto
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    ForceId = c.ForceId,
+                    X = c.Location.X,
+                    Y = c.Location.Y,
+                    MapVisible = mapVisible
+                };
+            })
+            .Where(c => c.MapVisible)
+            .OrderBy(c => c.Id)];
+    }
+
     private static StrategyCharacterSummaryDto MapCharacter(Character c, GameDate gameDate)
     {
         var age = Math.Max(0, gameDate.Year - c.Birthday.Year);
@@ -1226,6 +1523,7 @@ public static class StrategyWorldStateMapper
             StrongholdId = c.LocationType == Character.CharacterLocationType.Stronghold
                 ? c.LocationStrongholdId
                 : c.StrongholdId,
+            LeaderId = c.LeaderId,
             LocationType = c.LocationType.ToString(),
             ForceStatus = c.ForceStatus.ToString(),
             Leadership = c.Leadership,
@@ -1234,7 +1532,7 @@ public static class StrategyWorldStateMapper
             Strategy = c.Strategy,
             Charm = c.Charm,
             CultureName = "日本",
-            ReligionName = "神道",
+            ReligionName = "神道教",
             YearsInForce = 0,
             Sex = c.Sex.ToString(),
             Age = age,
@@ -1339,7 +1637,7 @@ public static class StrategyWorldStateMapper
             Morale = 80,
             Training = 70,
             CultureName = "日本",
-            ReligionName = "神道",
+            ReligionName = "神道教",
             Money = 0,
             TargetUnitId = m.TargetUnitId,
             TargetUnitName = targetUnit?.Name,
@@ -1390,7 +1688,7 @@ public static class StrategyWorldStateMapper
             Morale = 75,
             Training = 65,
             CultureName = "日本",
-            ReligionName = "神道",
+            ReligionName = "神道教",
             Money = c.CargoMoney,
             TargetUnitId = c.TargetUnitId,
             TargetUnitName = targetUnit?.Name,
@@ -1491,6 +1789,98 @@ public static class StrategyWorldStateMapper
         };
     }
 
+    private static IReadOnlyList<StrategyUnitStateDto> MapFoggedUnits(
+        GameWorld world,
+        StrategyScenarioMeta meta,
+        ForceVisibilityState? visibilityState,
+        IIntelPolicy intelPolicy,
+        HashSet<(int X, int Y)> visibleCells,
+        StrategyEspionageIntelLedger? espionageLedger)
+    {
+        if (visibilityState is null)
+        {
+            return [.. world.GameData.Units.Values
+                .Where(u => u.IsMilitary && u.Soldier > 0)
+                .Select(u => MapUnit(u, meta, world.GameData))
+                .OrderBy(u => u.Id)];
+        }
+
+        var mapUnits = new List<StrategyUnitStateDto>();
+        foreach (var unit in world.GameData.Units.Values.OrderBy(u => u.Id))
+        {
+            var placement = StrategyFogDtoRules.ClassifyUnit(
+                unit, meta, world.GameData, visibilityState);
+            if (placement != StrategyFogDtoRules.UnitFogPlacement.Map)
+                continue;
+
+            var dto = MapUnit(unit, meta, world.GameData) with { MapVisible = true };
+            dto = intelPolicy.ApplyUnitIntelMask(dto, world, meta, meta.PlayerForceId, visibleCells);
+            if (meta.StartOptions.IntelMode != StrategyIntelMode.Full)
+            {
+                dto = EspionageIntelRules.ApplyUnitMask(
+                    dto,
+                    meta.PlayerForceId,
+                    world.GameData,
+                    espionageLedger);
+            }
+
+            mapUnits.Add(dto);
+        }
+
+        return mapUnits;
+    }
+
+    private static IReadOnlyList<StrategyUnitRosterEntryDto> MapOwnUnitRoster(
+        GameWorld world,
+        StrategyScenarioMeta meta,
+        ForceVisibilityState? visibilityState)
+    {
+        if (visibilityState is null)
+            return [];
+
+        var roster = new List<StrategyUnitRosterEntryDto>();
+        foreach (var unit in world.GameData.Units.Values.OrderBy(u => u.Id))
+        {
+            var placement = StrategyFogDtoRules.ClassifyUnit(
+                unit, meta, world.GameData, visibilityState);
+            if (placement != StrategyFogDtoRules.UnitFogPlacement.Roster)
+                continue;
+
+            roster.Add(ToRosterEntry(unit, meta, world.GameData));
+        }
+
+        return roster;
+    }
+
+    private static StrategyUnitRosterEntryDto ToRosterEntry(
+        Unit unit,
+        StrategyScenarioMeta meta,
+        GameData gameData)
+    {
+        meta.Intel.Units.TryGetValue(unit.Id, out var overlay);
+        var commander = overlay?.CommanderName;
+        if (unit.LeaderId > 0 && gameData.Characters.TryGetValue(unit.LeaderId, out var commanderCharacter))
+            commander = commanderCharacter.Name;
+        else if (string.IsNullOrWhiteSpace(commander) && meta.LordUnitId == unit.Id)
+            commander = meta.LordName;
+
+        return new StrategyUnitRosterEntryDto
+        {
+            Id = unit.Id,
+            Name = unit.Name,
+            ForceId = unit.ForceId,
+            X = unit.Location.X,
+            Y = unit.Location.Y,
+            Soldiers = unit.Soldier,
+            Status = unit.Status.ToString(),
+            Directive = unit.Directive.ToString(),
+            Ap = unit.Ap,
+            SupplyStatus = SupplyStatusEvaluator.EvaluateStatus(unit, gameData),
+            CommanderName = string.IsNullOrWhiteSpace(commander) ? null : commander,
+            OffMap = true
+        };
+    }
+
     private static StrategyUnitStateDto MapUnit(Unit u, StrategyScenarioMeta meta, GameData gameData)
     {
         meta.Intel.Units.TryGetValue(u.Id, out var overlay);
@@ -1526,7 +1916,7 @@ public static class StrategyWorldStateMapper
             Morale = u.Morale,
             Training = u.Training,
             CultureName = overlay?.CultureName ?? "日本",
-            ReligionName = overlay?.ReligionName ?? "神道",
+            ReligionName = overlay?.ReligionName ?? "神道教",
             Money = u.Money,
             Composition = MapUnitComposition(u, gameData),
             SupplyStatus = SupplyStatusEvaluator.EvaluateStatus(u, gameData),
@@ -1587,76 +1977,54 @@ public static class StrategyWorldStateMapper
     }
 
     private static IReadOnlyList<StrategyRoadCellDto> MapRoadCells(
-        TileMap tileMap,
-        IReadOnlyDictionary<int, RoadDefinition> roads)
+        IReadOnlyDictionary<int, byte> roadCells,
+        IReadOnlyDictionary<int, RoadDefinition> roads,
+        TileMap tileMap)
     {
-        var cells = new List<StrategyRoadCellDto>();
+        var cells = new List<StrategyRoadCellDto>(roadCells.Count);
 
-        for (var y = 0; y < tileMap.Height; y++)
+        foreach (var (index, typeId) in roadCells)
         {
-            for (var x = 0; x < tileMap.Width; x++)
+            if (typeId == 0)
+                continue;
+
+            var p = tileMap.ToPoint3(index);
+            roads.TryGetValue(typeId, out var roadDef);
+            var movementCost = roadDef?.MovementCostOverride
+                ?? Math.Max(1, 2 - (roadDef?.SpeedBonus ?? 0));
+
+            cells.Add(new StrategyRoadCellDto
             {
-                var p = new Common.Types.Point3(x, y);
-                var typeId = tileMap.GetRegion(p);
-                if (typeId == 0)
-                    continue;
-
-                roads.TryGetValue(typeId, out var roadDef);
-                var movementCost = roadDef?.MovementCostOverride
-                    ?? Math.Max(1, 2 - (roadDef?.SpeedBonus ?? 0));
-
-                cells.Add(new StrategyRoadCellDto
-                {
-                    X = x,
-                    Y = y,
-                    TypeId = typeId,
-                    TypeName = roadDef?.Name ?? $"道路#{typeId}",
-                    Level = typeId,
-                    SpeedBonus = roadDef?.SpeedBonus ?? 0,
-                    MovementCost = movementCost
-                });
-            }
+                X = p.X,
+                Y = p.Y,
+                TypeId = typeId,
+                TypeName = roadDef?.Name ?? $"道路#{typeId}",
+                Level = typeId,
+                SpeedBonus = roadDef?.SpeedBonus ?? 0,
+                MovementCost = movementCost
+            });
         }
 
+        cells.Sort(static (a, b) => a.Y != b.Y ? a.Y.CompareTo(b.Y) : a.X.CompareTo(b.X));
         return cells;
     }
 
-    private static IReadOnlyList<string> MapTileTerrainNames(
-        TileMap tileMap,
-        IReadOnlyDictionary<int, TerrainDefinition> terrains)
+    private static IReadOnlyList<int> MapTerrainIds(TileMap tileMap)
     {
-        var names = new string[tileMap.Length];
-        for (var y = 0; y < tileMap.Height; y++)
-        {
-            for (var x = 0; x < tileMap.Width; x++)
-            {
-                var terrainId = tileMap.GetTerrain(new Common.Types.Point3(x, y));
-                names[y * tileMap.Width + x] = terrains.TryGetValue(terrainId, out var def)
-                    ? def.Name
-                    : $"地形#{terrainId}";
-            }
-        }
+        var ids = new int[tileMap.Length];
+        for (var i = 0; i < tileMap.Length; i++)
+            ids[i] = tileMap[i].Terrain;
 
-        return names;
+        return ids;
     }
 
-    private static IReadOnlyList<string?> MapTileRegionNames(TileMap tileMap, GameMapMasterData master)
+    private static IReadOnlyList<int> MapRegionIds(TileMap tileMap)
     {
-        var names = new string?[tileMap.Length];
-        var grid = master.PoliticalRegionGrid;
-        if (grid.Length != tileMap.Length)
-            return names;
+        var ids = new int[tileMap.Length];
+        for (var i = 0; i < tileMap.Length; i++)
+            ids[i] = tileMap[i].Region;
 
-        for (var i = 0; i < grid.Length; i++)
-        {
-            var regionId = grid[i];
-            if (regionId == 0)
-                continue;
-
-            names[i] = master.Regions.TryGetValue(regionId, out var def) ? def.Name : $"区域#{regionId}";
-        }
-
-        return names;
+        return ids;
     }
 
     private static IReadOnlyList<StrategyMapLandmarkDto> MapLandmarks(
@@ -1692,10 +2060,15 @@ public static class StrategyWorldStateMapper
 
         var facilities = MapDefenseFacilities(s, masterData);
 
+        var typeId = s.TypeId != 0 ? s.TypeId : (byte)1;
+        masterData.StrongholdTypes.TryGetValue(typeId, out var strongholdType);
+
         return new StrategyStrongholdStateDto
         {
             Id = s.Id,
             Name = s.Name,
+            TypeId = typeId,
+            TypeName = strongholdType?.Name ?? (typeId == 1 ? "平城" : $"据点类型#{typeId}"),
             ForceId = s.ForceId,
             X = s.Location.X,
             Y = s.Location.Y,
@@ -1711,7 +2084,7 @@ public static class StrategyWorldStateMapper
             Morale = s.ForceActor.Morale,
             Training = s.ForceActor.Training,
             CultureName = overlay?.CultureName ?? "日本",
-            ReligionName = overlay?.ReligionName ?? "神道",
+            ReligionName = overlay?.ReligionName ?? "神道教",
             Money = s.ForceActor.Money,
             GarrisonSoldiers = s.ForceActor.Soldier,
             GarrisonWounded = s.ForceActor.Patient,
@@ -1850,4 +2223,8 @@ public static class StrategyWorldStateMapper
 
         return route;
     }
+
+    private static bool IsOwnRealmForce(int forceId, int playerForceId, GameData gameData)
+        => TributeRoutingHelper.ResolveRealmRootForceId(forceId, gameData)
+           == TributeRoutingHelper.ResolveRealmRootForceId(playerForceId, gameData);
 }

@@ -2,6 +2,7 @@ using SengokuScroll.Common.Types;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Strategy.Data.Models;
+using static SengokuScroll.Domain.Entities.Character;
 
 namespace SengokuScroll.Strategy.Helpers;
 
@@ -13,9 +14,12 @@ namespace SengokuScroll.Strategy.Helpers;
 /// </remarks>
 public static class StrategyLordHelper
 {
-    /// <summary>当主当前所在格：领兵时在部队格，否则在居城/剧本据点格。</summary>
+    /// <summary>当主当前所在格：优先跟随当主角色状态，其次剧本绑定的部队/据点。</summary>
     public static Point3 ResolveLocation(GameData gameData, StrategyScenarioMeta meta)
     {
+        if (TryResolveLordCharacterLocation(gameData, meta, out var fromCharacter))
+            return fromCharacter;
+
         if (meta.LordUnitId is int unitId
             && gameData.Units.TryGetValue(unitId, out var lordUnit))
             return lordUnit.Location;
@@ -30,6 +34,58 @@ public static class StrategyLordHelper
             .FirstOrDefault();
 
         return fallback?.Location ?? new Point3(0, 0);
+    }
+
+    private static bool TryResolveLordCharacterLocation(
+        GameData gameData,
+        StrategyScenarioMeta meta,
+        out Point3 location)
+    {
+        location = default;
+        var lordCharacterId = StrategyStrongholdLordHelper.ResolveForceLordCharacterId(
+            meta.PlayerForceId,
+            meta,
+            gameData);
+        if (lordCharacterId <= 0
+            || !gameData.Characters.TryGetValue(lordCharacterId, out var lordCharacter))
+        {
+            return false;
+        }
+
+        if (lordCharacter.LocationType == CharacterLocationType.Unit)
+        {
+            var ledUnit = gameData.Units.Values.FirstOrDefault(u => u.LeaderId == lordCharacter.Id);
+            if (ledUnit is not null)
+            {
+                location = ledUnit.Location;
+                return true;
+            }
+
+            // 业务：部队已不在地图时，仍用将领当前格（溃逃/回城途中），避免误回落居城
+            location = lordCharacter.Location;
+            return true;
+        }
+
+        if (lordCharacter.LocationType == CharacterLocationType.Stronghold)
+        {
+            var strongholdId = lordCharacter.StrongholdId > 0
+                ? lordCharacter.StrongholdId
+                : lordCharacter.LocationStrongholdId;
+            if (strongholdId > 0
+                && gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+            {
+                location = stronghold.Location;
+                return true;
+            }
+        }
+
+        if (lordCharacter.LocationType == CharacterLocationType.Map)
+        {
+            location = lordCharacter.Location;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>信使出发据点 Id：优先取当主所在格据点，否则取势力首个据点。</summary>

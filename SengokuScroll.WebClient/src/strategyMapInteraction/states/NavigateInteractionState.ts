@@ -3,6 +3,7 @@ import type {
   MapSelectConvoyPayload,
   MapSelectStrongholdPayload,
   MapSelectUnitPayload,
+  MapSelectUnitStrongholdPayload,
   StrategyMapInteractionContext,
 } from "../types";
 import { StrategyMapInteractionState } from "../StrategyMapInteractionState";
@@ -11,6 +12,7 @@ import { ForeignStrongholdCommandInteractionState } from "./ForeignStrongholdCom
 import { ForeignUnitCommandInteractionState } from "./ForeignUnitCommandInteractionState";
 import { StrongholdCommandInteractionState } from "./StrongholdCommandInteractionState";
 import { UnitCommandInteractionState } from "./UnitCommandInteractionState";
+import { UnitStrongholdCommandInteractionState } from "./UnitStrongholdCommandInteractionState";
 
 /** 大地图浏览：点击单位/据点打开对应菜单。 */
 export class NavigateInteractionState extends StrategyMapInteractionState {
@@ -26,6 +28,15 @@ export class NavigateInteractionState extends StrategyMapInteractionState {
     const location = ctx.resolveUnitLocation(payload.unitId);
     if (!location) return;
 
+    const strongholdId = ctx.resolveStrongholdAtCell(location.x, location.y);
+    if (strongholdId !== null) {
+      UnitStrongholdCommandInteractionState.openFromNavigate(ctx, {
+        ...payload,
+        strongholdId,
+      });
+      return;
+    }
+
     ctx.setSelectedUnitId(payload.unitId);
     ctx.setSelectedStrongholdId(null);
     ctx.setSelectedConvoyId(null);
@@ -36,6 +47,8 @@ export class NavigateInteractionState extends StrategyMapInteractionState {
       y: location.y,
       screenX: payload.screenX,
       screenY: payload.screenY,
+      panelAnchorRect: payload.panelAnchorRect,
+      anchorSide: payload.anchorSide,
     });
 
     if (ctx.isPlayerUnit(payload.unitId)) {
@@ -43,6 +56,13 @@ export class NavigateInteractionState extends StrategyMapInteractionState {
     } else {
       ctx.transitionTo(new ForeignUnitCommandInteractionState());
     }
+  }
+
+  override onSelectUnitAndStronghold(
+    ctx: StrategyMapInteractionContext,
+    payload: MapSelectUnitStrongholdPayload
+  ): void {
+    UnitStrongholdCommandInteractionState.openFromNavigate(ctx, payload);
   }
 
   override onSelectStronghold(

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import type { IntelTableColumnDef } from "@/utils/strategyIntelSystemColumns";
+import { resolveIntelBandTone } from "@/utils/strategyIntelDisplay";
 
 const props = defineProps<{
   rows: Array<Record<string, unknown>>;
@@ -44,6 +45,12 @@ function onCurrentChange(row: Record<string, unknown> | null) {
 function resolveRowClass({ row }: { row: Record<string, unknown> }) {
   return props.rowClassName?.(row) ?? "";
 }
+
+function resolveBandClass(value: unknown, col: IntelTableColumnDef): string {
+  if (!col.band) return "";
+  const tone = resolveIntelBandTone(value == null ? "" : String(value));
+  return tone ? `intel-band intel-band--${tone}` : "";
+}
 </script>
 
 <template>
@@ -69,7 +76,13 @@ function resolveRowClass({ row }: { row: Record<string, unknown> }) {
       :align="col.align"
       :header-cell-class-name="col.devOnly ? 'intel-dev-header' : ''"
       show-overflow-tooltip
-    />
+    >
+      <template #default="{ row }">
+        <span :class="resolveBandClass(row[col.prop], col)">
+          {{ row[col.prop] }}
+        </span>
+      </template>
+    </el-table-column>
   </el-table>
 </template>
 
@@ -81,5 +94,20 @@ function resolveRowClass({ row }: { row: Record<string, unknown> }) {
 :deep(th.el-table__cell.intel-dev-header) {
   color: #e2e8f0;
   font-weight: 500;
+}
+
+:deep(.intel-band--high) {
+  color: red;
+  font-weight: 600;
+}
+
+:deep(.intel-band--mid) {
+  color: orange;
+  font-weight: 600;
+}
+
+:deep(.intel-band--low) {
+  color: green;
+  font-weight: 600;
 }
 </style>

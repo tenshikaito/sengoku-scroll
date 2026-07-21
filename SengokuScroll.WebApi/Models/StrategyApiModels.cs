@@ -1,9 +1,17 @@
+using SengokuScroll.Strategy.Models;
+
 namespace SengokuScroll.WebApi.Models;
 
 /// <summary>加载剧本请求。</summary>
 public sealed class LoadScenarioRequest
 {
     public required string ScenarioId { get; init; }
+
+    /// <summary>Easy | Normal | Hard | Custom；省略则沿用剧本 JSON。</summary>
+    public string? Difficulty { get; init; }
+
+    /// <summary>Custom 难度下的开局选项。</summary>
+    public GameStartOptionsDto? CustomStartOptions { get; init; }
 }
 
 /// <summary>地图格点。</summary>
@@ -114,4 +122,19 @@ public sealed class DeployFromStrongholdRequest
     public int? Food { get; init; }
 
     public int? Money { get; init; }
+}
+
+/// <summary>登记谍报成果（开发/任务用）。</summary>
+public sealed class RecordEspionageIntelRequest
+{
+    /** Stronghold | Unit */
+    public required string TargetKind { get; init; }
+
+    public required int TargetId { get; init; }
+
+    /** Military | Domestic | Both */
+    public required string Scope { get; init; }
+
+    /** Fuzzy | Exact */
+    public required string Precision { get; init; }
 }

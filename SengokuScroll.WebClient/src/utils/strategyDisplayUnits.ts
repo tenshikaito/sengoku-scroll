@@ -18,6 +18,25 @@ export function formatSoldiers(count: unknown): string {
   return `${safe.toLocaleString()}人`;
 }
 
+/** 围城等场景下遮蔽敌方兵力：仅保留首位数字，其余为 *（如 3***人）。 */
+export function maskSoldiersFirstDigit(count: unknown): string {
+  const n = Number(count);
+  const safe = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+  if (safe <= 0) return "0人";
+  const text = String(safe);
+  if (text.length <= 1) return `${text}人`;
+  return `${text[0]}${"*".repeat(text.length - 1)}人`;
+}
+
+export function formatSiegeSoldiers(
+  count: unknown,
+  forceId: number,
+  playerForceId: number,
+): string {
+  if (forceId === playerForceId) return formatSoldiers(count);
+  return maskSoldiersFirstDigit(count);
+}
+
 /** 粮草（合）→ 石（仅数值）。 */
 export function formatFoodKoku(go: unknown): string {
   return formatScaledAmount(go, GO_PER_KOKU);

@@ -253,7 +253,7 @@ internal static class StrategyDefaultMasterDataSeed
         => new()
         {
             [ShintoReligionId] = CreateReligion(
-                ShintoReligionId, "神道", "日本本土多神信仰。", ShintoReligionGroupId, "神道教", 35),
+                ShintoReligionId, "神道教", "日本本土多神信仰。", ShintoReligionGroupId, "神道教", 35),
             [HokkeReligionId] = CreateReligion(
                 HokkeReligionId, "法华宗", "以《法华经》为中心的佛教宗派。", BuddhismReligionGroupId, "佛教", 25),
             [NichirenReligionId] = CreateReligion(
@@ -330,6 +330,7 @@ internal static class StrategyDefaultMasterDataSeed
                 Attack = 10,
                 Defense = 8,
                 Movement = 4,
+                SightRange = StrategyTroopSightRanges.Resolve(StrategyTroopTypes.Ashigaru),
                 CultureId = JapaneseCultureId
             },
             [StrategyTroopTypes.Archer] = new()
@@ -341,6 +342,7 @@ internal static class StrategyDefaultMasterDataSeed
                 Defense = 6,
                 AttackRange = 2,
                 Movement = 4,
+                SightRange = StrategyTroopSightRanges.Resolve(StrategyTroopTypes.Archer),
                 CultureId = JapaneseCultureId
             },
             [StrategyTroopTypes.Cavalry] = new()
@@ -351,6 +353,7 @@ internal static class StrategyDefaultMasterDataSeed
                 Attack = 12,
                 Defense = 7,
                 Movement = 6,
+                SightRange = StrategyTroopSightRanges.Resolve(StrategyTroopTypes.Cavalry),
                 CultureId = JapaneseCultureId
             },
             [StrategyTroopTypes.Matchlock] = new()
@@ -360,6 +363,7 @@ internal static class StrategyDefaultMasterDataSeed
                 Description = "火绳枪部队。",
                 Attack = 11,
                 Defense = 5,
+                SightRange = StrategyTroopSightRanges.Resolve(StrategyTroopTypes.Matchlock),
                 AttackRange = 2,
                 Movement = 3,
                 CultureId = JapaneseCultureId

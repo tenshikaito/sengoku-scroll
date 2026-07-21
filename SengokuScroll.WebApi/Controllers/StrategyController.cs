@@ -18,7 +18,23 @@ public class StrategyController(StrategySimulationHost simulationHost) : Control
     /// <summary>加载 JSON 剧本（如 mini_kanto）。</summary>
     [HttpPost("load")]
     public IActionResult Load([FromBody] LoadScenarioRequest request)
-        => ToActionResult(simulationHost.LoadScenario(request.ScenarioId));
+    {
+        StrategyLoadOptions? loadOptions = null;
+        if (!string.IsNullOrWhiteSpace(request.Difficulty) || request.CustomStartOptions is not null)
+        {
+            loadOptions = new StrategyLoadOptions
+            {
+                Difficulty = string.IsNullOrWhiteSpace(request.Difficulty)
+                    ? null
+                    : StrategyDifficultyRules.Parse(request.Difficulty),
+                CustomStartOptions = request.CustomStartOptions is null
+                    ? null
+                    : GameStartOptionsMapper.FromDto(request.CustomStartOptions)
+            };
+        }
+
+        return ToActionResult(simulationHost.LoadScenario(request.ScenarioId, loadOptions));
+    }
 
     /// <summary>令指定军事单位寻路并向目标格移动（逐日执行）。</summary>
     [HttpPost("units/{unitId:int}/move")]
@@ -110,10 +126,30 @@ public class StrategyController(StrategySimulationHost simulationHost) : Control
     public IActionResult AdvanceDay()
         => ToAdvanceDayResult(simulationHost.AdvanceDay());
 
+    /// <summary>登记谍报成果（约 2 个月后过期；开发/任务用）。</summary>
+    [HttpPost("espionage-intel")]
+    public IActionResult RecordEspionageIntel([FromBody] RecordEspionageIntelRequest request)
+        => ToActionResult(simulationHost.RecordEspionageIntel(
+            request.TargetKind,
+            request.TargetId,
+            request.Scope,
+            request.Precision));
+
     /// <summary>获取当前世界状态。</summary>
     [HttpGet("state")]
     public IActionResult GetState()
         => ToActionResult(simulationHost.GetState());
+
+    /// <summary>获取当前剧本地图静态主数据（前端启动时加载一次）。</summary>
+    [HttpGet("map")]
+    public IActionResult GetMapMaster()
+    {
+        var result = simulationHost.GetMapMaster();
+        if (result.IsSuccess)
+            return Ok(result.Value);
+
+        return BadRequest(new ApiErrorResponse(result.Error?.Code ?? "Unknown"));
+    }
 
     /// <summary>导出当前仿真 JSON 存档。</summary>
     [HttpGet("save")]

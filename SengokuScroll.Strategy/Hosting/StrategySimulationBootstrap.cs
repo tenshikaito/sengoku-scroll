@@ -12,7 +12,7 @@ using SengokuScroll.Localization;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Extensions;
-using SengokuScroll.Strategy.Helpers;
+using SengokuScroll.Strategy.Vision;
 
 namespace SengokuScroll.Strategy.Hosting;
 
@@ -50,6 +50,8 @@ public static class StrategySimulationBootstrap
         services.AddSingleton<StrategyPendingEventStore>();
         services.AddSingleton<StrategyFieldEngagementRegistry>();
         services.AddSingleton<StrategyForceLordRegistry>();
+        services.AddSingleton<StrategyVisibilityLedger>();
+        services.AddSingleton<StrategyMessageLedger>();
         services.AddSingleton(scenarioMeta);
         services.AddSingleton<StrategyUnitMoveTraceObserver>();
         services.AddSingleton<IUnitMoveObserver>(sp => sp.GetRequiredService<StrategyUnitMoveTraceObserver>());
@@ -59,6 +61,7 @@ public static class StrategySimulationBootstrap
         var sp = scope.ServiceProvider;
 
         sp.GetRequiredService<StrategyForceLordRegistry>().Initialize(scenarioMeta);
+        sp.GetRequiredService<StrategyVisibilityLedger>().Initialize(world, scenarioMeta);
 
         return new StrategySimulationScope(
             root,

@@ -21,7 +21,7 @@ public class UnitMergeSplitDeployTests
 
         var world = GetWorld(host);
         var source = world.GameData.Units[1];
-        var target = CloneAdjacentFriendlyUnit(world, source, new Point3(5, 4));
+        var target = CloneAdjacentFriendlyUnit(world, source, new Point3(9, 8));
 
         var sourceSubCount = source.SubUnitIds.Count;
         var targetSubCount = target.SubUnitIds.Count;
@@ -47,12 +47,12 @@ public class UnitMergeSplitDeployTests
         var splitSoldiers = world.GameData.SubUnits[splitSubId].Soldier;
         var beforeCount = world.GameData.Units.Count;
 
-        var result = host.OrderUnitSplit(parent.Id, [splitSubId], new Point2(5, 4), "分遣队");
+        var result = host.OrderUnitSplit(parent.Id, [splitSubId], new Point2(9, 8), "分遣队");
         Assert.True(result.IsSuccess);
         Assert.Equal(beforeCount + 1, world.GameData.Units.Count);
 
         var newUnit = world.GameData.Units.Values.Single(u =>
-            u.Id != parent.Id && u.ForceId == parent.ForceId && u.Location.IsSameTile(new Point3(5, 4)));
+            u.Id != parent.Id && u.ForceId == parent.ForceId && u.Location.IsSameTile(new Point3(9, 8)));
         Assert.Equal(splitSoldiers, newUnit.Soldier);
         Assert.DoesNotContain(splitSubId, parent.SubUnitIds);
         Assert.True(parent.Soldier >= UnitSplitRules.MinSoldiersPerSide);

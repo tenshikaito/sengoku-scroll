@@ -17,6 +17,7 @@ public static class GameWorldSnapshotExtensions
             Units = gameWorld.GameMapData.Units.ToDictionary(
                 kv => kv.Key,
                 kv => new List<int>(kv.Value)),
+            Roads = new(gameWorld.GameMapData.Roads),
         };
 
         var gameDataView = new GameDataViewModel()

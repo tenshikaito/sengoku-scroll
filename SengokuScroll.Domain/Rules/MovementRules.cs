@@ -24,8 +24,10 @@ public class MovementRules(IGameContext context)
         var cost = terrain.MovementCost;
 
         var tileMap = context.GameWorldContext.GameMapMasterData.TileMap;
-        var roadId = tileMap.GetRegion(location);
+        var mapData = context.GameWorldContext.GameWorld.GameMapData;
         var roads = context.GameWorldContext.GameMapMasterData.Roads;
+        var tileIndex = tileMap.GetIndex(location);
+        mapData.Roads.TryGetValue(tileIndex, out var roadId);
         // 业务：道路可覆盖地形成本或按 SpeedBonus 减免，最低为 1
         if (roadId > 0 && roads.TryGetValue(roadId, out var road))
         {

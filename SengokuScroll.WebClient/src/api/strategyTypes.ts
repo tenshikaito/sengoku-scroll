@@ -8,7 +8,7 @@ export interface MapPoint {
 export interface StrategyWorldState {
   scenarioId: string;
   playerForceId: number;
-  /** Easy | Normal | Hard | Legendary */
+  /** Easy | Normal | Hard | Custom */
   difficulty?: string;
   /** 本局固定随机种子 */
   simulationSeed?: number;
@@ -18,6 +18,8 @@ export interface StrategyWorldState {
   forces: StrategyForceState[];
   strongholds: StrategyStrongholdState[];
   units: StrategyUnitState[];
+  /** 迷雾外己方部队摘要（无坐标）。 */
+  ownUnitRoster?: StrategyUnitRosterEntry[];
   /** 进行中地图交战格（折叠显示用）。 */
   battlefields?: StrategyBattlefieldState[];
   supplyConvoys: StrategySupplyConvoyState[];
@@ -26,8 +28,43 @@ export interface StrategyWorldState {
   diplomacies: StrategyDiplomacyState[];
   /** 将领摘要（id + 所属势力）；用于本势力将领数统计。 */
   characters?: StrategyCharacterSummaryState[];
+  /** 地图上独立行动的将领（溃逃回城等）。 */
+  mapCharacters?: StrategyMapCharacterState[];
+  /** 谍报获得的情报条目。 */
+  espionageIntel?: StrategyEspionageIntelEntry[];
   /** 剧本 Master Data 快照。 */
   masterData?: StrategyMasterDataSnapshot;
+  /** 玩家战争迷雾（explored / visible / known）。 */
+  visibility?: StrategyVisibilityState;
+  /** 本局开局选项快照。 */
+  startOptions?: GameStartOptionsState;
+}
+
+export interface StrategyLoadRequest {
+  scenarioId: string;
+  difficulty?: "Easy" | "Normal" | "Hard" | "Custom";
+  customStartOptions?: GameStartOptionsState;
+}
+
+export interface StrategyVisibilityState {
+  fogMode: string;
+  intelMode: string;
+  controlMode: string;
+  instantEventMessages: boolean;
+  allySharedVision: boolean;
+  mapWidth: number;
+  mapHeight: number;
+  exploredBits: number[];
+  visibleCells: MapPoint[];
+  knownStrongholdIds: number[];
+}
+
+export interface GameStartOptionsState {
+  fogMode: string;
+  intelMode: string;
+  controlMode: string;
+  allySharedVision: boolean;
+  instantEventMessages: boolean;
 }
 
 export interface StrategyCharacterSummaryState {
@@ -35,6 +72,8 @@ export interface StrategyCharacterSummaryState {
   forceId: number;
   name?: string;
   strongholdId?: number;
+  /** 直属上司角色 Id。 */
+  leaderId?: number;
   /** Map | Stronghold | Unit */
   locationType?: string;
   /** Idle | UnitAction | Task | Prisoner */
@@ -63,6 +102,26 @@ export interface StrategyCharacterSummaryState {
   loyalty?: number;
 }
 
+/** 地图上独立行动的将领。 */
+export interface StrategyMapCharacterState {
+  id: number;
+  name: string;
+  forceId: number;
+  x: number;
+  y: number;
+  mapVisible?: boolean;
+}
+
+export interface StrategyEspionageIntelEntry {
+  targetKind: string;
+  targetId: number;
+  scope: string;
+  precision: string;
+  expiresYear: number;
+  expiresMonth: number;
+  expiresDay: number;
+}
+
 export interface StrategyMasterDataEntry {
   id: number;
   name: string;
@@ -84,6 +143,7 @@ export interface StrategyMasterDataSnapshot {
   characterDefinitions: StrategyMasterDataEntry[];
   terrains: StrategyMasterDataEntry[];
   climates: StrategyMasterDataEntry[];
+  weathers: StrategyMasterDataEntry[];
   regions: StrategyMasterDataEntry[];
   roads: StrategyMasterDataEntry[];
   landmarks: StrategyMasterDataEntry[];
@@ -128,13 +188,44 @@ export interface StrategyMapState {
   name: string;
   width: number;
   height: number;
-  roadCells?: StrategyRoadCellState[];
-  /** 逐格地形名（行优先）。 */
-  tileTerrainNames?: string[];
-  /** 逐格政治区域名（行优先；无区域为 null）。 */
-  tileRegionNames?: (string | null)[];
-  /** 地图地标（GameMapMasterData.Landmarks）。 */
-  landmarks?: StrategyMapLandmarkState[];
+}
+
+export interface StrategyTerrainDef {
+  id: number;
+  key: string;
+  name: string;
+  movementCost: number;
+}
+
+export interface StrategyRegionDef {
+  id: number;
+  key: string;
+  name: string;
+}
+
+export interface StrategyRoadTypeDef {
+  id: number;
+  key: string;
+  name: string;
+  speedBonus: number;
+  movementCost?: number;
+}
+
+/** 地图静态主数据（启动时加载一次，不随日推进重复下发）。 */
+export interface StrategyMapMasterState {
+  scenarioId: string;
+  name: string;
+  width: number;
+  height: number;
+  terrains: StrategyTerrainDef[];
+  regions: StrategyRegionDef[];
+  roadTypes: StrategyRoadTypeDef[];
+  /** 行优先地形 Id。 */
+  terrainIds: number[];
+  /** 行优先区域 Id（0 = 无）。 */
+  regionIds: number[];
+  roadCells: StrategyRoadCellState[];
+  landmarks: StrategyMapLandmarkState[];
 }
 
 export interface StrategyMapLandmarkState {
@@ -192,6 +283,10 @@ export interface StrategyForceState {
 export interface StrategyStrongholdState {
   id: number;
   name: string;
+  /** 据点类型 Id（平城/平山城/山城）。 */
+  typeId: number;
+  /** 据点类型显示名。 */
+  typeName: string;
   forceId: number;
   x: number;
   y: number;
@@ -225,6 +320,14 @@ export interface StrategyStrongholdState {
   defenseFacilities: StrategyDefenseFacilityState[];
   /** 当前被进攻状态：Assault=强攻，Encircle=围城。 */
   siegeThreat?: string | null;
+  /** Visible | Known | Hidden */
+  visibilityTier?: string | null;
+  espionageSoldiersBand?: string | null;
+  espionageMoraleBand?: string | null;
+  espionageTrainingBand?: string | null;
+  espionagePopulationBand?: string | null;
+  espionageFoodBand?: string | null;
+  espionageMoneyBand?: string | null;
 }
 
 export interface StrategyDefenseFacilityState {
@@ -277,6 +380,28 @@ export interface StrategyUnitState {
   supplyStatus: string;
   foodDaysRemaining: number;
   inTransitSupplies: StrategyInTransitSupply[];
+  /** 是否在地图层绘制（迷雾外己方单位可在侧栏列出）。 */
+  mapVisible?: boolean;
+  /** 情报模糊兵数（**** / 3***）。 */
+  soldiersDisplay?: string | null;
+  moraleBand?: string | null;
+  trainingBand?: string | null;
+}
+
+/** 迷雾外己方部队摘要（侧栏列表）。 */
+export interface StrategyUnitRosterEntry {
+  id: number;
+  name: string;
+  forceId: number;
+  x: number;
+  y: number;
+  soldiers: number;
+  status: string;
+  directive: string;
+  ap: number;
+  supplyStatus: string;
+  commanderName?: string | null;
+  offMap: boolean;
 }
 
 /** 战场内按势力汇总的参战摘要。 */

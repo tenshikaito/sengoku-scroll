@@ -80,24 +80,40 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
       options.hoverCell.value = cell;
     },
     resolveUnitLocation: (unitId) => {
-      const unit = options.worldState.value?.units.find((u) => u.id === unitId);
-      return unit ? { x: unit.x, y: unit.y } : null;
+      const world = options.worldState.value;
+      if (!world) return null;
+      const unit = world.units.find((u) => u.id === unitId);
+      if (unit) return { x: unit.x, y: unit.y };
+      const roster = world.ownUnitRoster?.find((u) => u.id === unitId);
+      return roster ? { x: roster.x, y: roster.y } : null;
     },
     resolveStrongholdLocation: (strongholdId) => {
       const sh = options.worldState.value?.strongholds.find((s) => s.id === strongholdId);
       return sh ? { x: sh.x, y: sh.y } : null;
+    },
+    resolveStrongholdAtCell: (x, y) => {
+      const sh = options.worldState.value?.strongholds.find((s) => s.x === x && s.y === y);
+      return sh?.id ?? null;
     },
     resolveConvoyLocation: (convoyId) => {
       const convoy = options.worldState.value?.supplyConvoys.find((c) => c.id === convoyId);
       return convoy ? { x: convoy.x, y: convoy.y } : null;
     },
     isSelectableUnit: (unitId) => {
-      const unit = options.worldState.value?.units.find((u) => u.id === unitId);
-      return unit?.forceId === playerForceId;
+      const world = options.worldState.value;
+      if (!world) return false;
+      const unit = world.units.find((u) => u.id === unitId);
+      if (unit?.forceId === playerForceId) return true;
+      const roster = world.ownUnitRoster?.find((u) => u.id === unitId);
+      return roster?.forceId === playerForceId;
     },
     isPlayerUnit: (unitId) => {
-      const unit = options.worldState.value?.units.find((u) => u.id === unitId);
-      return unit?.forceId === playerForceId;
+      const world = options.worldState.value;
+      if (!world) return false;
+      const unit = world.units.find((u) => u.id === unitId);
+      if (unit?.forceId === playerForceId) return true;
+      const roster = world.ownUnitRoster?.find((u) => u.id === unitId);
+      return roster?.forceId === playerForceId;
     },
     isPlayerStronghold: (strongholdId) => {
       const sh = options.worldState.value?.strongholds.find((s) => s.id === strongholdId);
@@ -187,6 +203,7 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
   const mapCellSelectionEnabled = computed(() => snapshot.value.mapCellSelectionEnabled);
   const mapRightClickEnabled = computed(() => snapshot.value.mapRightClickEnabled);
   const popupMode = computed(() => snapshot.value.popupMode);
+  const secondaryPopupMode = computed(() => snapshot.value.secondaryPopupMode ?? null);
   const stateId = computed(() => snapshot.value.id);
 
   return {
@@ -203,6 +220,7 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
     mapCellSelectionEnabled,
     mapRightClickEnabled,
     popupMode,
+    secondaryPopupMode,
     reset: () => machine.reset(),
     onSelectUnit: (payload: MapSelectUnitPayload) => machine.onSelectUnit(payload),
     onSelectStronghold: (payload: MapSelectStrongholdPayload) => machine.onSelectStronghold(payload),

@@ -51,6 +51,10 @@ export class StrategyMapInteractionMachine {
     this.current.onSelectStronghold(this.ctx, payload);
   }
 
+  onSelectUnitAndStronghold(payload: import("./types").MapSelectUnitStrongholdPayload): void {
+    this.current.onSelectUnitAndStronghold(this.ctx, payload);
+  }
+
   onSelectConvoy(payload: import("./types").MapSelectConvoyPayload): void {
     this.current.onSelectConvoy(this.ctx, payload);
   }

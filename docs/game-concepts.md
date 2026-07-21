@@ -1,6 +1,6 @@
 # SengokuScroll 游戏概念词典（Game Concepts Reference）
 
-> 版本：1.3 | 日期：2026-07-15 | 索引：[设计文档索引](./README.md)
+> 版本：1.6 | 日期：2026-07-21 | 索引：[设计文档索引](./README.md)
 
 本文档是 **游戏中所有已定义概念的权威清单**：每个概念给出中英名称、一句话定义、实装状态与关键代码/设计引用。
 
@@ -66,6 +66,9 @@
 
 | 日期 | 版本 | 变更摘要 |
 |------|------|----------|
+| 2026-07-21 | 1.6 | 谍报台账（2 月过期、scope/精度）；溃灭将领地图逐日回城；进行/倍速自动推进 UI；ForceIntel 不再因视野自动模糊兵数 |
+| 2026-07-19 | 1.5 | 战争迷雾/情报：`GameStartOptions`、三层视野、Known 据点、InstantEventMessages 双通道；详见 [`strategy-fog-of-war-design.md`](strategy-fog-of-war-design.md) |
+| 2026-07-17 | 1.4 | 道路实例迁至 `GameMapData.Roads`；地图区域写入 `TileMap.region`；移除 `PoliticalRegionGrid` / 剧本 `politicalRegions` |
 | 2026-07-15 | 1.3.1 | 劝降后降方离场+收编；胜方占敌城自动强攻；地图交战 BF 白底红字折叠图标 |
 | 2026-07-14 | 1.2 | 难度框架、战报写实投递、逃入友城、本局固定种子、溃灭/逃城事件可见 |
 | 2026-07-13 | 1.1 | 驻军简化为城内兵数 + Support 守城单位；移除野战驻军/议和退还 |
@@ -100,6 +103,8 @@
 | AFT | 战后处理 Aftermath | §3.5 | ✅ |
 | DES | 部队溃灭 Unit Destruction | §3.5 | ✅ |
 | RTG | 溃逃 Routing | §3.5 | 📋 |
+| FOG | 战争迷雾 Fog of War | §3.7 | ✅ |
+| ESP | 谍报 Espionage Intel | §3.7 | ✅ |
 | ECO | 经济与日结算 Economy | §4 | ✅ |
 | MKT | 据点市场 Market | §4.3 | ✅ |
 | CVY | 运输队 SupplyConvoy | §4.4 | ✅ |
@@ -122,7 +127,8 @@
 |------|------|------|----------|
 | **游戏世界 GameWorld** | 策略模式顶层容器：地图主数据 + 主数据表 + 运行时 `GameData`。 | ✅ | `SengokuScroll.Domain/GameWorld.cs` |
 | **运行时数据 GameData** | 当前局内全部可变动实体（势力、据点、单位、子编制、角色、运输队、信使、日期、**SimulationSeed**）。 | ✅ | `SengokuScroll.Domain/GameData.cs` |
-| **地图主数据 GameMapMasterData** | 静态地图：TileMap、地形、道路、政治区域网格、地标。 | ✅ | `SengokuScroll.Domain/GameMapMasterData.cs` |
+| **地图主数据 GameMapMasterData** | 静态地图：TileMap（地形 + **region 层**）、地形/气候/区域/道路**类型**定义、地标。 | ✅ | `SengokuScroll.Domain/GameMapMasterData.cs` |
+| **地图运行时索引 GameMapData** | 可变格点数据：角色/据点/单位位置索引、**道路实例**（`tileIndex → roadTypeId` 稀疏字典）。 | ✅ | `SengokuScroll.Domain/GameMapData.cs` |
 | **主数据 GameMasterData** | 兵种、城防设施类型等配置表。 | ✅ | `SengokuScroll.Domain/GameMasterData.cs` |
 | **世界快照 StrategyWorldStateDto** | 前端地图/面板用的只读摘要 DTO。 | ✅ | `SengokuScroll.Strategy/Models/StrategyWorldStateDto.cs` |
 
@@ -186,8 +192,8 @@
 | 概念 | 定义 | 状态 | 相关文件 |
 |------|------|------|----------|
 | **地标 Landmark** | 与 playable 据点分离的地图标记（神社、名山等）；用于推断史实性。 | ✅ | `Landmark.cs` |
-| **政治区域 Region** | 独立于道路层的收粮日历、气候区域。 | ✅ | `Region.cs`；`HarvestRules.cs` |
-| **道路 Road** | 写入 TileMap；提供 `SpeedBonus` / 移动消耗 override。 | ✅ | `Road.cs`；`MovementRules.cs` |
+| **地图区域 Region** | 气候/收粮日历区域；格点归属存于 `TileMap.region` 层，定义表见 `GameMapMasterData.Regions`。 | ✅ | `RegionDefinition`；`HarvestRules.cs`；`RegionLocationHelper` |
+| **道路 Road** | 类型定义在 `GameMapMasterData.Roads`；格点实例在 `GameMapData.Roads`；提供 `SpeedBonus` / `MovementCostOverride`。 | ✅ | `RoadDefinition`；`MovementRules.cs` |
 | **设施 FacilityType** | 据点内设施：主家、兵营、市场、旅館等。 | 📋 | `Types/FacilityType.cs` |
 
 ### 1.7 非军事地图实体（迁移中）
@@ -279,7 +285,7 @@
 
 | 概念 | 定义 | 状态 | 相关文件 |
 |------|------|------|----------|
-| **瓦片单位列表 Tile Unit Index** | 每格 `List<unitId>`（多军占格）；空间真相，不为 Support 目标所替代。 | 📋 | `GameMapData`（待改） |
+| **瓦片单位列表 Tile Unit Index** | 每格 `List<unitId>`（多军占格）；空间真相，不为 Support 目标所替代。 | ✅ | `GameMapData.Units` |
 | **军事同格堆叠** | 仅 **① 同一势力** 或 **② 同一场 War 的共战方（已 Join）** 可叠。平时同盟不可军事同格（挡路则绕）。 | 📋 | 设计规格 |
 | **中立** | 双向：与交战任一方均非己非共战 → **不得进入已交战格**；与非共战方亦不可军事叠。 | 📋 | 设计规格 |
 | **战场容器 Battlefield** | 敌对军事（或攻城令）同格创建；两侧各为列表；地图可折叠显示交战双方；存对峙日/战记/回放，汇总入战争情报。 | 📋 | 替代一对一 `ActionTarget` 对峙 |
@@ -335,7 +341,7 @@
 | **战后士气** | 胜方涨士气，负方跌；低士气禁战。 | ✅ | `BattleMoraleRules.cs` |
 | **败方重整** | 设 `Retreat` 方针、补 AP、清攻击令；**不强制后撤一格**。 | ✅ | `BattleRetreatRules.cs` |
 | **逃入友城 Flee to Stronghold** | 败后邻格/同格友城且城格未被敌占 → 残部吸入城内守备并移除野战单位。 | ✅ | `BattleFleeToStrongholdRules.cs` |
-| **败退残部下限** | 按难度保留战前兵力一定比例，避免追击必灭。 | ✅ | `StrategyDifficultyRules` · `BattleAftermathHelper` |
+| **败退残部下限** | 全难度统一保留战前兵力 50%，避免追击必灭。 | ✅ | `StrategyDifficultyRules` · `BattleAftermathHelper` |
 | **胜方追击** | 决战后可在 **Battlefield 内**再追：成功→击溃逻辑；失败→败方 Routing 离场，追方原地修正 1 日。 | ✅→📋 | `BattlePursuitRules.cs` |
 | **溃逃 Routing** | 战败未全灭：强制撤离 BF，优先入场方向；Routing 中再接敌易溃散。 | 📋 | 设计规格 |
 | **当主阵亡** | 本场大士气冲击 → 残余推临时总大将或溃走检定 → 政治层继承/灭；战术不自动整场秒崩。 | 📋 | `ForceSuccessionRules`；设计规格 |
@@ -343,7 +349,8 @@
 | **攻击令排队** | 移动后接敌 → 日末 `StrategyBattleResolutionSystem` 结算（非即时）。 | ✅ | `UnitBattleActions` · `StrategyMoveEngagementSystem` |
 | **部队溃灭 Unit Destruction** | 败方 `Soldier ≤ 0` 时：从地图移除 Unit、处理将领命运、分配战利品。 | ✅ | `UnitDestructionRules.cs` |
 | **战利品 Loot** | 胜方获得败方约 45% 粮草、35% 金钱（万分比可配置）。 | ✅ | `UnitDestructionRules` |
-| **将领命运 Commander Fate** | 逃脱（撤至友方据点）/ 被俘（`Prisoner`）/ 阵亡。 | ✅ | `UnitDestructionRules` |
+| **将领命运 Commander Fate** | 逃脱 / 被俘 / 阵亡；逃脱时在溃灭格以 Map 状态现身并寻路回居城（非瞬移）。 | ✅ | `UnitDestructionRules` · `UnitCommanderEscapeHelper` |
+| **将领溃逃回城 Commander Escape** | 寻路失败留溃灭格；`CharacterMoveAction` 单日最多 2 格；DTO `mapCharacters` + 当主坐标跟随。 | ✅ | `UnitCommanderEscapeHelper.cs` · `CharacterMoveAction.cs` · `StrategyLordHelper` |
 | **守城单位溃灭** | 方针 Support 的单位被击溃时同步据点士气。 | ✅ | `StrongholdGarrisonActions.OnGarrisonUnitDestroyed` |
 
 > **注意**：溃灭仅在 **战斗结算后** 触发（`BattleAftermathHelper`），不在日末全局清扫零兵单位，以免误删非战斗场景单位。
@@ -357,8 +364,20 @@
 | **瞬间战结算** | 确定性伤亡与胜负（ResolutionSeed 混入本局 SimulationSeed）。 | ✅ | `InstantBattleCalculator.cs` |
 | **伤亡系数 CasualtyScale** | 因素分解写入并由战术模拟乘入突击伤害（含撤退减伤）。 | ✅ | `BattleFactorBreakdown` · `TacticalBattleSimulator` |
 | **战报投递** | 异格须信使抵达后解锁详情；同格目击即时；**仅简易难度**可当日前线解锁。 | ✅ | `BattleReportDeliveryHelper.cs` · `StrategyDifficultyRules` |
-| **难度 StrategyDifficulty** | Easy / Normal / Hard / Legendary；规则表由 `StrategyDifficultyRules` 扩展。 | ✅ | `StrategyDifficulty.cs` |
+| **难度 StrategyDifficulty** | Easy / Normal / Hard / Custom；仅影响迷雾与消息；战斗数值与难度无关。 | ✅ | `StrategyDifficulty.cs` |
 | **本局种子 SimulationSeed** | 开局固定；剧本可指定；战斗/命运/追击脱离等掷点混入以保证回放。 | ✅ | `GameData.SimulationSeed` |
+
+### 3.7 战争迷雾与谍报（Strategy）
+
+| 概念 | 定义 | 状态 | 关键文件 |
+|------|------|------|----------|
+| **Explored / Visible** | 已探索格持久化；当日可见格由视野源重算。 | ✅ | `StrategyVisibilityLedger` |
+| **Known 据点** | 本 Realm 初始已知 + 剧本 `knownStrongholdIds`；迷雾外显示名称/位置但数值掩码。 | ✅ | `StrategyFogDtoRules` |
+| **FogMode** | None / Force / Character 三档视野策略。 | ✅ | `VisionPolicyFactory` · `VisionPolicies.cs` |
+| **ForceIntel / 谍报** | 进入视野**不再**自动 `****` 兵数；非自势力具体数值须 **谍报台账**（约 2 月过期，scope/精度）。 | ✅ | `EspionageIntelRules` · `StrategyEspionageIntelLedger` |
+| **InstantEventMessages** | UI 摘要可提前展示；信使/Message 仍为权威详情通道。 | ✅ | `StrategyDayOutcomeBuffer` |
+
+详见 [`strategy-fog-of-war-design.md`](strategy-fog-of-war-design.md)。
 
 ---
 
@@ -371,7 +390,7 @@
 | **农业/商业日产** | 产出/30 入市民库存。 | ✅ | `StrategyEconomySystem` |
 | **市民口粮** | 按人口 × 日耗系数扣 `CivilianActor.Food`。 | ✅ | `EconomyRules` |
 | **士兵口粮** | 单位/运输队每日耗粮。 | ✅ | `LogisticsCalculator` |
-| **Region 收粮 Harvest** | 按政治区域日历 bulk 收粮 + 农业税。 | ✅ | `HarvestRules.cs` |
+| **Region 收粮 Harvest** | 按地图区域日历 bulk 收粮 + 农业税。 | ✅ | `HarvestRules.cs` |
 
 ### 4.2 税收 Taxes
 
@@ -548,15 +567,30 @@
 |------|------|------|----------|
 | **StrategyTimeState** | `Paused` / `Running` | ✅ | `StrategyTimeState.cs` |
 | **AdvanceDay** | 日期 +1 → 执行 System 链 | ✅ | `StrategyTimeController.cs` |
+| **进行/战略 UI** | 进行 = 按 ▶/▶▶/▶▶▶ 倍速自动 `advance-day`；战略 = 暂停 | ✅ | `Strategy.vue` |
 
 ### 9.2 日推进 System 顺序（Strategy 层）
 
 ```
-StrategyMarketSystem(8) → StrategyEconomySystem(10) → StrategySupplySystem(15)
-→ StrategyAISystem(18) → StrategyUnitSystem(20) → StrategySiegeSystem(21)
-→ StrategyMoveEngagementSystem(22) → StrategyMessengerSystem(25)
+StrategyTimeSystem(0) → StrategyMarketSystem(8) → StrategyEconomySystem(10)
+→ StrategySupplySystem(15) → StrategyAISystem(18) → StrategyUnitSystem(20)
+→ StrategySiegeSystem(21) → StrategyMoveEngagementSystem(22)
+→ StrategyStrongholdOccupationSystem(23, no-op)
+→ StrategyMessengerSystem(25) / StrategyVisionSystem(25)（同 Order：信使推进 + 谍报过期/视野重算）
 → StrategyBattleResolutionSystem(26)
 ```
+
+### 9.2b Domain 层 System（模式共用占位 / 实装）
+
+| Order | System | 职责 |
+|-------|--------|------|
+| 1 | `ClimateSystem` | 占位；天气 debuff 📋 |
+| 10 | `EconomySystem` | 占位；策略由 `StrategyEconomySystem` 实装 |
+| 20 | `UnitSystem` | 移动中单位路径推进 |
+| 30 | `CharacterSystem` | 地图角色移动 + 日末 AP 恢复 |
+| 40 | `AISystem` | 占位；策略由 `StrategyAISystem`(18) 实装 |
+
+RPG/策略 Host 按模式注册具体 System 实现；Order 数值便于与 Strategy 链对照。
 
 ### 9.3 行动力 AP 与移动
 
@@ -564,7 +598,7 @@ StrategyMarketSystem(8) → StrategyEconomySystem(10) → StrategySupplySystem(1
 |------|------|------|----------|
 | **AP** | 当日剩余移动力；日初恢复（默认 +1） | ✅ | `Unit.Ap` · `GameRuleConfig` |
 | **Movement** | 移动力上限（军事默认封顶 5） | ✅ | `Unit.Movement` |
-| **日移动格数上限** | 单日最多 2 格（道路/AP 富余仍受限），约 **2 日 3 格** | ✅ | `GameRuleConfig.MaxTilesMovedPerDay` · `UnitMoveAction` |
+| **日移动格数上限** | 单日最多 2 格（道路/AP 富余仍受限），约 **2 日 3 格**；**地图角色**（溃逃将领）同限。 | ✅ | `GameRuleConfig.MaxTilesMovedPerDay` · `UnitMoveAction` · `CharacterMoveAction` |
 | **地形消耗** | 地形 cost − 道路 bonus | ✅ | `MovementRules.cs` |
 | **入城额外 AP** | 进入非己方/敌方据点格 | ✅ | `MovementRules` |
 | **攻击 AP / 攻城 AP** | 攻击与攻城指令消耗 | ✅ | `GameRuleConfig` |
@@ -580,7 +614,11 @@ StrategyMarketSystem(8) → StrategyEconomySystem(10) → StrategySupplySystem(1
 ```
 StrategyScenarioDocument
 ├── id, name, version
-├── map（地形、道路、政治区域、landmarks）
+├── map
+│   ├── terrains, terrainGrid
+│   ├── roadTypes, roadTemplates, placedRoads → `GameMapData.Roads`
+│   ├── regions, regionGrid → `TileMap.region`
+│   └── landmarks
 └── scenario
     ├── startDate, playerForceId, lord
     ├── forces[], characters[]

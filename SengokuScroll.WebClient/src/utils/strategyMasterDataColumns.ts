@@ -48,6 +48,10 @@ export const MASTER_DATA_FIELD_COLUMN_LABELS: Record<string, string> = {
   type: "类型",
   member: "成员",
   value: "值",
+  attackerWinRateDelta: "攻方胜率",
+  defenderWinRateDelta: "守方胜率",
+  archerMatchlockScale: "远程倍率",
+  triggerHint: "触发条件",
 };
 
 export const MASTER_DATA_COLUMN_PRESETS: Record<string, IntelTableColumnDef[]> = {
@@ -69,6 +73,13 @@ export const MASTER_DATA_COLUMN_PRESETS: Record<string, IntelTableColumnDef[]> =
     fieldCol("centralization", "中央化", 72),
     fieldCol("doctrinalDifference", "教义差", 72),
     fieldCol("description", "描述", 120),
+  ]),
+  weathers: idName([
+    fieldCol("attackerWinRateDelta", "攻方胜率", 80),
+    fieldCol("defenderWinRateDelta", "守方胜率", 80),
+    fieldCol("archerMatchlockScale", "远程倍率", 80),
+    fieldCol("triggerHint", "触发条件", 160),
+    fieldCol("description", "描述", 160),
   ]),
   strongholdTypes: idName([
     fieldCol("category", "类别", 72),

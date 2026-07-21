@@ -1,9 +1,15 @@
+import type { AnchorSide, PanelRect } from "@/utils/mapCellAnchor";
+
 /** Popup 锚点（格点 + 屏幕坐标）。 */
 export interface StrategyMenuAnchor {
   x: number;
   y: number;
   screenX: number;
   screenY: number;
+  /** 相对地图面板的锚定矩形（如部队列表项）；优先于格块定位。 */
+  panelAnchorRect?: PanelRect;
+  /** 与 panelAnchorRect 联用时固定弹出方向。 */
+  anchorSide?: AnchorSide;
 }
 
 /** 移动目标格（含屏幕坐标，供 API 与失败恢复）。 */
@@ -13,6 +19,8 @@ export interface MapSelectUnitPayload {
   unitId: number;
   screenX: number;
   screenY: number;
+  panelAnchorRect?: PanelRect;
+  anchorSide?: AnchorSide;
 }
 
 export interface MapSelectCellPayload {
@@ -26,6 +34,10 @@ export interface MapSelectStrongholdPayload {
   strongholdId: number;
   screenX: number;
   screenY: number;
+}
+
+export interface MapSelectUnitStrongholdPayload extends MapSelectUnitPayload {
+  strongholdId: number;
 }
 
 export interface MapSelectConvoyPayload {
@@ -108,6 +120,8 @@ export interface StrategyMapInteractionContext {
 
   resolveStrongholdLocation(strongholdId: number): { x: number; y: number } | null;
 
+  resolveStrongholdAtCell(x: number, y: number): number | null;
+
   transitionTo(state: import("./StrategyMapInteractionState").StrategyMapInteractionState): void;
 }
 
@@ -119,6 +133,8 @@ export interface StrategyMapInteractionStateSnapshot {
   mapCellSelectionEnabled: boolean;
   mapRightClickEnabled: boolean;
   popupMode: StrategyMapPopupMode;
+  /** 同格第二套命令菜单（单位 + 据点）。 */
+  secondaryPopupMode?: StrategyMapPopupMode | null;
   menuAnchor: StrategyMenuAnchor | null;
   moveTarget: { x: number; y: number } | null;
 }

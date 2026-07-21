@@ -1,6 +1,6 @@
 # SengokuScroll（战国绘卷）大战略模式开发计划
 
-> 版本：0.6 | 日期：2026-07-09  
+> 版本：0.7 | 日期：2026-07-17  
 > 状态：**M4 进行中**（经济系统重构：民间/市场/贡赋设计 §4 ✅ 文档；M4-a 基础实装）→ M3 试玩验收并行  
 > 上一级：[基本设计](./design-document.md) | 详细设计：[strategy-detail-design.md](./strategy-detail-design.md) | 界面：[strategy-ui-design.md](./strategy-ui-design.md)
 
@@ -219,7 +219,7 @@ M0 计划确认（✅）→ M1 领域与引擎（下一步）→ M2 策略单机
 | M3-a | ✅ `StrategyInstantBattleSystem` + `preview-battle` / `instant-battle` API | ✅ 攻击选格 → 战前确认（瞬间战 / 亲自指挥置灰）+ 胜率预览 |
 | M3-b | ✅ 方针 + 信使 + **攻击命令日结算** + 战报信使 + 运输队返程 + **指挥编制/SubUnit** + 角色/总将 | ✅ 方针 UI、消息区、战报弹窗、同格悬停、底栏恢复、兵种构成表、单位情报分层 |
 | M3-c | ✅ 补给三态 + 运输队/信使非军事单位化 + 地图视图着色 | ✅ 单位/运输队/信使情报对齐；势力/封地/外交地图视图 |
-| M3-d | ✅ 经济月结；简单 AI；本地 JSON 存档；地图地标/政治区域 DTO | ✅ 存档/读档；月度结算；overlay UI；底栏地形/区域/据点/地标 |
+| M3-d | ✅ 经济月结；简单 AI；本地 JSON 存档；地图地标/区域 DTO | ✅ 存档/读档；月度结算；overlay UI；底栏地形/区域/据点/地标 |
 
 **M3 代码纵切**：上表 ✅ 完成；**阶段结束标志**见下方「M3-d 收尾 #1 试玩通过」。
 
@@ -239,9 +239,10 @@ M0 计划确认（✅）→ M1 领域与引擎（下一步）→ M2 策略单机
 |--------|------|------|
 | **P0** | **据点 ↔ 地标关联** | `Stronghold.IsHistorical` 贯通；建造时检测格点 `GameMapMasterData.Landmarks` |
 | **P0** | **虚拟据点收入减益** | `EconomyRules` 按难度档位对无地标背书据点施加税收系数；史实据点不变 |
-| **P1** | 更多剧本/区域网格/地标数据 | 编辑器或 JSON 批量维护 `politicalRegionGrid`、`landmarks` |
+| **P1** | 更多剧本/区域网格/地标数据 | 编辑器或 JSON 批量维护 `regionGrid`、`landmarks` |
 | **P1** | 兵种 `UnitTypes` 配置化 | 见 §M4 原列表 |
 | **P2** | 外交/谍报/战争分数 | 原 M4 范围 |
+| **P2** | 大地图渲染管线 | RM VX 式 2×3 autotile 地形 chunk 烘焙；道路枚举 overlay；主数据与 `worldState` 分离 |
 | **P2** | 路径战争迷雾 / 难度三档 | 见 §6.6 |
 
 ---
@@ -477,16 +478,19 @@ Market 设施绑定（EconomyFacilityIds；CanTrade 优先认 Market 设施）
 
 > **逻辑**：不应看到敌人或非自势力单位的移动路径；敌方 AI 在 M3-d 前通常也无 `route` 数据，但过滤仍应在客户端强制执行。
 
-#### 战争迷雾（Fog of War）
+#### 战争迷雾（Fog of War）— ✅ 2026-07 基础实装
 
-| 内容 | 建议阶段 | 说明 |
-|------|----------|------|
-| 未侦察格不可见 / 灰显 | **M4** | 与 AI 分级、谍报/情报精度一并设计 |
-| 单位「最后已知位置」 | M4 | 离开视野后保留幽灵标记 |
-| 路径可见性三档 | M4 | 与难度设置绑定（§上表） |
-| M2/M3 | **不做** | 全图地形与单位位置可见；仅 **路径线** 按自势力过滤 |
+详见 [`strategy-fog-of-war-design.md`](strategy-fog-of-war-design.md)。
 
-M4 实装战争迷雾时，需同步约束：敌方路径、运输队、信使、据点驻军情报的可见规则（见 strategy-detail §8 情报与 strategy-ui 战报）。
+| 内容 | 状态 | 说明 |
+|------|------|------|
+| `GameStartOptions` + 难度模板 | ✅ | Easy/Normal/Hard/Legendary/Custom |
+| Explored / Visible / Known 据点 | ✅ | `StrategyVisibilityLedger` + 前端地图渲染 |
+| `IVisionPolicy` / `IIntelPolicy` | ✅ | 势力/角色/无迷雾；ForceIntel 为 no-op，非自势力数值由谍报台账 |
+| InstantEventMessages 双通道 | ✅ | UI 摘要 + 信使照常 |
+| 路径可见性三档 | 📋 | 仍用 M2 `routeVisibilityPolicy`；待与 Fog 统一 |
+| 天气 sight/movement debuff | 📋 | 规则表预留 |
+| AI 同级 Intel 快照 | 📋 | 待 AI 接入同一 ledger |
 
 ---
 

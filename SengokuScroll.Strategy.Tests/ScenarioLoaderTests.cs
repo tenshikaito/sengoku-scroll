@@ -18,7 +18,11 @@ public class StrategyScenarioLoaderTests
         Assert.Equal(4, world.GameData.Forces.Count);
         Assert.Equal(10, world.GameData.Strongholds.Count);
         Assert.Equal(3, world.GameData.Units.Count);
-        Assert.Equal(1560, world.GameData.GameDate.Year);
+        Assert.Equal(20, world.GameMapMasterData.TileMap.Width);
+        Assert.Equal(20, world.GameMapMasterData.TileMap.Height);
+        Assert.True(world.GameMapData.Roads.Count >= 12);
+        Assert.Equal(1, world.GameMapMasterData.TileMap.GetRegion(new Common.Types.Point3(0, 0)));
+        Assert.Equal(2, world.GameMapMasterData.TileMap.GetRegion(new Common.Types.Point3(10, 0)));
     }
 
     [Fact]

@@ -17,6 +17,14 @@ import StrategyStrongholdIntelSummary from "./StrategyStrongholdIntelSummary.vue
 import StrategyUnitIntelSummary from "./StrategyUnitIntelSummary.vue";
 import StrategyBattlefieldIntelSummary from "./StrategyBattlefieldIntelSummary.vue";
 import StrategyCellEntitiesCompactSummary from "./StrategyCellEntitiesCompactSummary.vue";
+import {
+  convoysAtCellForIntel,
+  fogDisabled,
+  isTileVisible,
+  messengersAtCellForIntel,
+  strongholdsAtCellForIntel,
+  unitsAtCellForIntel,
+} from "@/utils/strategyFogCell";
 
 const props = defineProps<{
   worldState: StrategyWorldState;
@@ -36,12 +44,8 @@ type CivilEntry =
   | { kind: "convoy"; key: string; convoy: StrategySupplyConvoyState }
   | { kind: "messenger"; key: string; messenger: StrategyMessengerState };
 
-function atCell<T extends { x: number; y: number }>(items: T[]) {
-  return items.filter((item) => item.x === props.x && item.y === props.y);
-}
-
 const strongholdEntries = computed((): StrongholdEntry[] =>
-  atCell(props.worldState.strongholds).map((stronghold) => ({
+  strongholdsAtCellForIntel(props.worldState, props.x, props.y).map((stronghold) => ({
     kind: "stronghold" as const,
     key: `sh-${stronghold.id}`,
     stronghold,
@@ -50,7 +54,11 @@ const strongholdEntries = computed((): StrongholdEntry[] =>
 
 const battlefieldAtCell = computed((): StrategyBattlefieldState | null => {
   const bf = props.worldState.battlefields?.find((b) => b.x === props.x && b.y === props.y);
-  return bf ?? null;
+  if (!bf) return null;
+  if (fogDisabled(props.worldState) || isTileVisible(props.worldState, props.x, props.y)) {
+    return bf;
+  }
+  return null;
 });
 
 const siegeBattlefield = computed((): StrategyBattlefieldState | null =>
@@ -64,7 +72,7 @@ const fieldBattlefield = computed((): StrategyBattlefieldState | null =>
 /** 兵队（军事单位）；已入战场的单位由战场面板汇总，未参战同格部队仍单独展示。 */
 const militaryEntries = computed((): MilitaryEntry[] => {
   const bf = battlefieldAtCell.value;
-  const units = atCell(props.worldState.units);
+  const units = unitsAtCellForIntel(props.worldState, props.x, props.y);
   if (!bf) {
     return units.map((unit) => ({
       kind: "unit" as const,
@@ -86,10 +94,10 @@ const militaryEntries = computed((): MilitaryEntry[] => {
 /** 运输队、信使等非兵队实体。 */
 const civilEntries = computed((): CivilEntry[] => {
   const list: CivilEntry[] = [];
-  for (const convoy of atCell(props.worldState.supplyConvoys)) {
+  for (const convoy of convoysAtCellForIntel(props.worldState, props.x, props.y)) {
     list.push({ kind: "convoy", key: `c-${convoy.id}`, convoy });
   }
-  for (const messenger of atCell(props.worldState.messengers)) {
+  for (const messenger of messengersAtCellForIntel(props.worldState, props.x, props.y)) {
     list.push({ kind: "messenger", key: `m-${messenger.id}`, messenger });
   }
   return list;
@@ -191,7 +199,10 @@ const stackClass = computed(() => {
       variant="battlefield"
       ariaLabel="围城战场情报"
     >
-      <StrategyBattlefieldIntelSummary :battlefield="siegeBattlefield" />
+      <StrategyBattlefieldIntelSummary
+        :battlefield="siegeBattlefield"
+        :player-force-id="worldState.playerForceId"
+      />
     </StrategyIntelPanel>
 
     <StrategyIntelPanel
@@ -199,7 +210,10 @@ const stackClass = computed(() => {
       variant="battlefield"
       ariaLabel="野战战场情报"
     >
-      <StrategyBattlefieldIntelSummary :battlefield="fieldBattlefield" />
+      <StrategyBattlefieldIntelSummary
+        :battlefield="fieldBattlefield"
+        :player-force-id="worldState.playerForceId"
+      />
     </StrategyIntelPanel>
 
     <StrategyIntelPanel

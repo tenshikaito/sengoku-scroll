@@ -45,6 +45,8 @@ export abstract class StrategyMapInteractionState {
 
   onSelectStronghold(_ctx: StrategyMapInteractionContext, _payload: import("./types").MapSelectStrongholdPayload): void {}
 
+  onSelectUnitAndStronghold(_ctx: StrategyMapInteractionContext, _payload: import("./types").MapSelectUnitStrongholdPayload): void {}
+
   onSelectConvoy(_ctx: StrategyMapInteractionContext, _payload: import("./types").MapSelectConvoyPayload): void {}
 
   /** 选中格点；返回非 null 时表示应立刻执行移动 API。 */

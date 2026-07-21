@@ -1,6 +1,6 @@
 # SengokuScroll（战国绘卷）大战略模式详细设计
 
-> 版本：1.5 | 日期：2026-07-15 | 索引：[设计文档索引](./README.md) | 开发计划：[strategy-development-plan.md](./strategy-development-plan.md) | 上一级：[基本设计](./design-document.md) | 共享：[共同详细设计](./shared-detail-design.md) | 界面：[大战略模式界面设计](./strategy-ui-design.md) | 概念：[game-concepts.md](./game-concepts.md)
+> 版本：1.6 | 日期：2026-07-17 | 索引：[设计文档索引](./README.md) | 开发计划：[strategy-development-plan.md](./strategy-development-plan.md) | 上一级：[基本设计](./design-document.md) | 共享：[共同详细设计](./shared-detail-design.md) | 界面：[大战略模式界面设计](./strategy-ui-design.md) | 概念：[game-concepts.md](./game-concepts.md)
 
 ---
 
@@ -422,8 +422,15 @@ StrategyMilitary
 │   └── 非玩家闲置单位每 3 日向最近玩家据点寻路（弱扩张/边境压力）
 ├── 道路系统（M3-d）
 │   ├── 剧本 JSON：`roadTypes` / `roadTemplates` / `placedRoads`（模板可复用编辑）
-│   ├── 写入 TileMap **region** 层；寻路 `MovementRules` 读取 `MovementCostOverride` 或 `SpeedBonus`
-│   └── DTO `map.roadCells[]` + 前端地图绘制官道
+│   ├── 类型 → `GameMapMasterData.Roads`；实例格点 → `GameMapData.Roads`（稀疏 `tileIndex → typeId`）
+│   ├── 寻路 `MovementRules` 读道路类型 `SpeedBonus` 或 `MovementCostOverride`
+│   ├── DTO `map.roadCells[]`；前端以 **枚举贴图 overlay** 绘制（独立于地形 autotile，M4 渲染管线）
+│   └── **不**写入 `TileMap.region`
+├── **地图区域**（M3-d · 气候/收粮）
+│   ├── 剧本 JSON：`regions[]` + `regionGrid[]`（行优先）
+│   ├── 定义 → `GameMapMasterData.Regions`；格点归属 → `TileMap.region` 层
+│   ├── 收粮/气候 `HarvestRules`、`RegionLocationHelper` 读 `TileMap.GetRegion`
+│   └── 底栏显示：`地形 · 区域名`（如 `平地 · 尾张`）；DTO `tileRegionNames[]`
 ├── **地图地标**（M3-d · `GameMapMasterData.Landmarks`）
 │   ├── **与 playable 据点分离**：地标存于地图主数据 `Landmarks`（剧本 JSON `map.landmarks[]`），**不**写入 `GameData.Strongholds`
 │   ├── **独立格点**：可与据点同格或独占一格；API `map.landmarks[]` + 逐格 `tileTerrainNames` / `tileRegionNames`
@@ -431,10 +438,6 @@ StrategyMilitary
 │   └── **据点类型（M4 规划，未实装）**
 │       ├── **史实据点**：玩家在地标格 **建造/放置** 据点 → 认定与地标一致；**不影响**该格税收/收入公式
 │       └── **虚拟据点**：无地标背书的新建/虚构城名 → 按 **游戏难度** 对据点收入施加不同比例 **减益**（具体系数 M4 平衡）
-├── **政治区域**（M3-d · 与道路 region 层独立）
-│   ├── 剧本 JSON：`politicalRegions[]` + `politicalRegionGrid[]`（行优先）
-│   ├── 写入 `GameMapMasterData.PoliticalRegionGrid`；**不**占用 TileMap region（道路专用）
-│   └── 底栏显示：`地形 · 区域名`（如 `平地 · 尾张`）
 ```
 
 ---
@@ -555,6 +558,22 @@ InstantEventFlow
 | `BattleReportDispatchRules` | 战报/对峙信使派遣条件 |
 | `BattleFactorEvaluator` | 全因素评估（见 [`strategy-auto-battle-factors.md`](strategy-auto-battle-factors.md)） |
 | `BattleMoraleRules` | 战后士气涨跌与低士气禁战 |
+
+### 6.5b 战争迷雾与情报（2026-07 实装）
+
+详见 [`strategy-fog-of-war-design.md`](strategy-fog-of-war-design.md)。
+
+| 组件 | 职责 |
+|------|------|
+| `GameStartOptions` / `GameStartOptionsPresets` | 难度模板与 Custom 快照 |
+| `IVisionPolicy` / `IIntelPolicy` | 可见格计算；ForceIntel 下 IIntelPolicy 为 no-op |
+| `StrategyEspionageIntelLedger` | 谍报台账（2 月过期；scope/精度） |
+| `EspionageIntelRules` | 非自势力 DTO masking（视野≠具体数值） |
+| `StrategyVisibilityLedger` | explored bitset、known 据点、日重算 |
+| `StrategyVisionSystem` | 日推进：剔除过期谍报 + 重算 visible |
+| `StrategyFogDtoRules` | 过滤单位/据点/战场 DTO |
+| `InstantEventMessages` | UI 摘要提前；信使/Message 权威不变 |
+| `POST espionage-intel` | 登记谍报（忍者任务玩法 📋） |
 
 ### 6.6 自动战斗的多人同步
 

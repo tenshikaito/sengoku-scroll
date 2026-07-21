@@ -10,6 +10,7 @@ using SengokuScroll.Domain.Actions;
 using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
+using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Unit;
 using static SengokuScroll.Domain.Entities.Character;
@@ -66,16 +67,48 @@ public static class StrategyScenarioLoader
                 })
         };
 
+        var difficulty = StrategyDifficultyRules.Parse(scenario.Difficulty);
+
         return new StrategyScenarioMeta
         {
             PlayerForceId = scenario.PlayerForceId,
-            Difficulty = StrategyDifficultyRules.Parse(scenario.Difficulty),
+            Difficulty = difficulty,
+            StartOptions = GameStartOptionsPresets.Resolve(difficulty, customOverride: null),
+            KnownStrongholdIds = scenario.KnownStrongholdIds,
             LordName = scenario.Lord?.Name ?? "当主",
             LordUnitId = scenario.Lord?.UnitId,
             LordStrongholdId = scenario.Lord?.StrongholdId,
             ForceLordCharacterIds = BuildForceLordCharacterIds(scenario),
             Intel = intel,
             RegionHarvestProfiles = BuildRegionHarvestProfiles(document.Map)
+        };
+    }
+
+    /// <summary>用 UI/联机传入的加载选项覆盖剧本默认难度与开局配置。</summary>
+    public static StrategyScenarioMeta ApplyLoadOptions(
+        StrategyScenarioMeta meta,
+        StrategyLoadOptions? loadOptions)
+    {
+        if (loadOptions is null)
+            return meta;
+
+        var difficulty = loadOptions.Difficulty ?? meta.Difficulty;
+        var startOptions = difficulty == StrategyDifficulty.Custom && loadOptions.CustomStartOptions is not null
+            ? loadOptions.CustomStartOptions
+            : GameStartOptionsPresets.Resolve(difficulty, loadOptions.CustomStartOptions);
+
+        return new StrategyScenarioMeta
+        {
+            PlayerForceId = meta.PlayerForceId,
+            Difficulty = difficulty,
+            StartOptions = startOptions,
+            KnownStrongholdIds = meta.KnownStrongholdIds,
+            LordName = meta.LordName,
+            LordUnitId = meta.LordUnitId,
+            LordStrongholdId = meta.LordStrongholdId,
+            ForceLordCharacterIds = meta.ForceLordCharacterIds,
+            Intel = meta.Intel,
+            RegionHarvestProfiles = meta.RegionHarvestProfiles
         };
     }
 
@@ -94,7 +127,7 @@ public static class StrategyScenarioLoader
     {
         var profiles = new Dictionary<int, RegionHarvestProfile>();
 
-        foreach (var region in map.PoliticalRegions)
+        foreach (var region in map.Regions)
         {
             var events = ResolveHarvestEvents(region);
             profiles[region.Id] = new RegionHarvestProfile
@@ -108,7 +141,7 @@ public static class StrategyScenarioLoader
     }
 
     private static IReadOnlyList<HarvestEventDefinition> ResolveHarvestEvents(
-        StrategyPoliticalRegionDefinition region)
+        StrategyRegionDefinition region)
     {
         if (region.HarvestEvents is { Count: > 0 } custom)
         {
@@ -179,8 +212,7 @@ public static class StrategyScenarioLoader
             throw new InvalidOperationException($"默认地形 '{document.Map.DefaultTerrain}' 未在 terrains 中定义。");
 
         var tileMap = BuildTileMap(document.Map, terrainByKey, defaultTerrain);
-        var politicalRegions = BuildPoliticalRegions(document.Map);
-        var politicalRegionGrid = BuildPoliticalRegionGrid(document.Map);
+        var regions = BuildRegions(document.Map);
         var landmarks = BuildLandmarks(document.Map);
 
         var roads = document.Map.RoadTypes.ToDictionary(
@@ -200,7 +232,7 @@ public static class StrategyScenarioLoader
             {
                 Name = t.Name,
                 Altitude = 0,
-                Description = t.Name,
+                Description = t.Key,
                 MovementCost = t.MovementCost,
                 Type = TerrainType.Plain
             });
@@ -233,7 +265,8 @@ public static class StrategyScenarioLoader
         {
             Strongholds = [],
             Units = [],
-            Characters = []
+            Characters = [],
+            Roads = BuildRoadCells(document.Map, tileMap.Width, tileMap.Height)
         };
 
         var startDate = document.Scenario.StartDate;
@@ -249,8 +282,7 @@ public static class StrategyScenarioLoader
                 TerrainVegatationFeatures = [],
                 TerrainSurfaceFeatures = [],
                 Climates = [],
-                Regions = politicalRegions,
-                PoliticalRegionGrid = politicalRegionGrid,
+                Regions = regions,
                 Roads = roads,
                 Landmarks = landmarks
             },
@@ -615,14 +647,13 @@ public static class StrategyScenarioLoader
             Array.Fill(terrainBytes, (byte)defaultTerrain.Id);
         }
 
-        var regionBytes = new byte[length];
-        ApplyRoadTemplates(regionBytes, map, map.Width, map.Height);
+        var regionBytes = BuildRegionGrid(map, map.Width, map.Height);
 
         return new TileMap(terrainBytes, regionBytes, map.Width, map.Height);
     }
 
-    private static Dictionary<int, RegionDefinition> BuildPoliticalRegions(StrategyMapDefinition map)
-        => map.PoliticalRegions.ToDictionary(
+    private static Dictionary<int, RegionDefinition> BuildRegions(StrategyMapDefinition map)
+        => map.Regions.ToDictionary(
             r => r.Id,
             r => new RegionDefinition
             {
@@ -632,17 +663,17 @@ public static class StrategyScenarioLoader
                 ClimateId = 0
             });
 
-    private static byte[] BuildPoliticalRegionGrid(StrategyMapDefinition map)
+    private static byte[] BuildRegionGrid(StrategyMapDefinition map, int width, int height)
     {
-        var length = map.Width * map.Height;
+        var length = width * height;
         var grid = new byte[length];
-        if (map.PoliticalRegionGrid is not { Count: > 0 } keys)
+        if (map.RegionGrid is not { Count: > 0 } keys)
             return grid;
 
         if (keys.Count != length)
-            throw new InvalidOperationException($"politicalRegionGrid 长度应为 {length}，实际为 {keys.Count}。");
+            throw new InvalidOperationException($"regionGrid 长度应为 {length}，实际为 {keys.Count}。");
 
-        var regionByKey = map.PoliticalRegions.ToDictionary(r => r.Key, StringComparer.OrdinalIgnoreCase);
+        var regionByKey = map.Regions.ToDictionary(r => r.Key, StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < length; i++)
         {
             var key = keys[i];
@@ -654,6 +685,16 @@ public static class StrategyScenarioLoader
         }
 
         return grid;
+    }
+
+    private static Dictionary<int, byte> BuildRoadCells(
+        StrategyMapDefinition map,
+        int width,
+        int height)
+    {
+        var roads = new Dictionary<int, byte>();
+        ApplyRoadTemplates(roads, map, width, height);
+        return roads;
     }
 
     private static Dictionary<int, Landmark> BuildLandmarks(StrategyMapDefinition map)
@@ -673,7 +714,7 @@ public static class StrategyScenarioLoader
     }
 
     private static void ApplyRoadTemplates(
-        byte[] regionBytes,
+        Dictionary<int, byte> roadCells,
         StrategyMapDefinition map,
         int width,
         int height)
@@ -694,7 +735,7 @@ public static class StrategyScenarioLoader
                     continue;
 
                 var index = point.Y * width + point.X;
-                regionBytes[index] = (byte)template.TypeId;
+                roadCells[index] = (byte)template.TypeId;
             }
         }
     }
