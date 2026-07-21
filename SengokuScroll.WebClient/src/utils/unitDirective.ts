@@ -1,3 +1,5 @@
+import { enumLabel, t } from "@/i18n/textLocalizer";
+
 /** 与 Domain UnitDirective 对齐的展示用标签（M3-b）。 */
 export type UnitDirectiveValue = "Move" | "Occupy" | "Raid" | "Support" | "Retreat";
 
@@ -7,17 +9,25 @@ export interface UnitDirectiveOption {
   description: string;
 }
 
-export const UNIT_DIRECTIVE_OPTIONS: UnitDirectiveOption[] = [
-  { value: "Move", label: "移动", description: "按目标推进，遇敌按默认交战" },
-  { value: "Occupy", label: "占领", description: "优先占领途经据点与要地" },
-  { value: "Raid", label: "劫掠", description: "袭扰敌军与补给，避免决战" },
-  { value: "Support", label: "支援", description: "协同友军，巩固防线" },
-  { value: "Retreat", label: "撤退", description: "保存兵力，脱离接触" },
+const UNIT_DIRECTIVE_VALUES: UnitDirectiveValue[] = [
+  "Move",
+  "Occupy",
+  "Raid",
+  "Support",
+  "Retreat",
 ];
 
+export function getUnitDirectiveOptions(): UnitDirectiveOption[] {
+  return UNIT_DIRECTIVE_VALUES.map((value) => ({
+    value,
+    label: t(`enum.unit.directive.${value}`),
+    description: t(`enum.unit.directive.${value}.desc`),
+  }));
+}
+
 export function directiveLabel(value: string | undefined | null): string {
-  if (!value) return "—";
-  return UNIT_DIRECTIVE_OPTIONS.find((o) => o.value === value)?.label ?? value;
+  if (!value) return t("common.emDash");
+  return enumLabel("enum.unit.directive", value, value);
 }
 
 export function pendingPolicyText(
@@ -32,19 +42,14 @@ export function pendingPolicyText(
       m.pendingDirective
   );
   if (!pending?.pendingDirective) return null;
-  return `信使传递中：${directiveLabel(pending.pendingDirective)}`;
+  return t("unit.policy.pending", {
+    directive: directiveLabel(pending.pendingDirective),
+  });
 }
 
 export function siegeModeLabel(value: string | undefined | null): string {
-  switch (value) {
-    case "Encircle":
-      return "包围";
-    case "Assault":
-      return "强攻";
-    case "None":
-    default:
-      return "—";
-  }
+  if (!value || value === "None") return t("common.emDash");
+  return enumLabel("enum.siege.mode", value, value);
 }
 
 export function unitTargetSummary(unit: {
@@ -52,8 +57,14 @@ export function unitTargetSummary(unit: {
   targetUnitName?: string | null;
   directiveTargetId?: number;
 }): string {
-  if (unit.targetUnitName) return `部队·${unit.targetUnitName}`;
-  if (unit.targetStrongholdName) return `据点·${unit.targetStrongholdName}`;
-  if (unit.directiveTargetId && unit.directiveTargetId > 0) return `目标#${unit.directiveTargetId}`;
-  return "—";
+  if (unit.targetUnitName) {
+    return t("unit.target.unit", { name: unit.targetUnitName });
+  }
+  if (unit.targetStrongholdName) {
+    return t("unit.target.stronghold", { name: unit.targetStrongholdName });
+  }
+  if (unit.directiveTargetId && unit.directiveTargetId > 0) {
+    return t("unit.target.id", { id: unit.directiveTargetId });
+  }
+  return t("common.emDash");
 }

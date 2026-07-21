@@ -12,6 +12,8 @@ import { maskSoldiersFirstDigit } from "@/utils/strategyDisplayUnits";
 import { mapTileIndex } from "@/utils/mapTileLookup";
 
 const TILE_SIZE = 48;
+/** 视口超出地图边缘的最远格数（再往外不再平移）。 */
+const VIEWPORT_OVERSCROLL_TILES = 5;
 /** 裁切范围相对视口向外扩展 20%，减少平移时的黑边与频繁重绘。 */
 const VIEWPORT_BUFFER_RATIO = 0.2;
 
@@ -67,10 +69,189 @@ let activePointerId: number | null = null;
 let lastCulledBounds: CellBounds | null = null;
 let viewportRefreshPending = false;
 
+/** 指针在地图边缘 1px 内或移出地图区域时自动平移视口。 */
+const EDGE_ZONE_PX = 1;
+const EDGE_SCROLL_BASE_SPEED = 16;
+let edgeScrollRaf: number | null = null;
+let lastPointerClient = { x: 0, y: 0 };
+
+function clampWorldContainerPosition(x: number, y: number): { x: number; y: number } {
+  if (!hostRef.value || !props.worldState?.map) return { x, y };
+
+  const rect = hostRef.value.getBoundingClientRect();
+  const mapWidthPx = props.worldState.map.width * TILE_SIZE;
+  const mapHeightPx = props.worldState.map.height * TILE_SIZE;
+  const marginPx = VIEWPORT_OVERSCROLL_TILES * TILE_SIZE;
+
+  const minX = rect.width - (mapWidthPx + marginPx) * zoom;
+  const maxX = marginPx * zoom;
+  const minY = rect.height - (mapHeightPx + marginPx) * zoom;
+  const maxY = marginPx * zoom;
+
+  const clampAxis = (value: number, min: number, max: number) =>
+    min <= max ? Math.min(max, Math.max(min, value)) : (min + max) / 2;
+
+  return {
+    x: clampAxis(x, minX, maxX),
+    y: clampAxis(y, minY, maxY),
+  };
+}
+
+function applyWorldContainerPosition(x: number, y: number) {
+  if (!worldContainer) return;
+  const clamped = clampWorldContainerPosition(x, y);
+  worldContainer.position.set(clamped.x, clamped.y);
+}
+
 function resetPointerGesture() {
   isPanning = false;
   pointerDownOnCanvas = false;
   activePointerId = null;
+}
+
+function stopEdgeScroll() {
+  if (edgeScrollRaf !== null) {
+    cancelAnimationFrame(edgeScrollRaf);
+    edgeScrollRaf = null;
+  }
+}
+
+/** 叠在地图上的 UI：指针位于这些元素上时不触发边缘滚动。 */
+const EDGE_SCROLL_UI_BLOCK_SELECTOR = [
+  ".map-overlay",
+  ".map-float-panel",
+  ".map-popup-layer",
+  ".map-unit-roster-float",
+  ".hover-intel-layer",
+  ".map-action-tooltip",
+  ".el-overlay",
+  ".el-message-box",
+  ".el-popper",
+  ".el-dialog",
+].join(", ");
+
+function pointerInsideMapHost(clientX: number, clientY: number): boolean {
+  if (!hostRef.value) return false;
+  const rect = hostRef.value.getBoundingClientRect();
+  return (
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom
+  );
+}
+
+/** 指针是否落在可交互地图画布上（排除叠在上方的悬浮框/控件）。 */
+function isPointerOnMapCanvasSurface(clientX: number, clientY: number): boolean {
+  if (!hostRef.value || !app?.canvas) return false;
+  if (!pointerInsideMapHost(clientX, clientY)) return false;
+
+  const target = document.elementFromPoint(clientX, clientY);
+  if (!(target instanceof Element)) return false;
+  if (target.closest(EDGE_SCROLL_UI_BLOCK_SELECTOR)) return false;
+
+  return hostRef.value.contains(target);
+}
+
+function shouldEdgeScroll(clientX: number, clientY: number): boolean {
+  if (!hostRef.value) return false;
+
+  const rect = hostRef.value.getBoundingClientRect();
+  const outside =
+    clientX < rect.left ||
+    clientX > rect.right ||
+    clientY < rect.top ||
+    clientY > rect.bottom;
+
+  if (outside) return true;
+
+  const localX = clientX - rect.left;
+  const localY = clientY - rect.top;
+  const onEdge =
+    localX < EDGE_ZONE_PX ||
+    localX >= rect.width - EDGE_ZONE_PX ||
+    localY < EDGE_ZONE_PX ||
+    localY >= rect.height - EDGE_ZONE_PX;
+
+  if (!onEdge) return false;
+
+  return isPointerOnMapCanvasSurface(clientX, clientY);
+}
+
+function edgeScrollVelocity(clientX: number, clientY: number): { dx: number; dy: number } {
+  if (!hostRef.value) return { dx: 0, dy: 0 };
+
+  const rect = hostRef.value.getBoundingClientRect();
+  let dx = 0;
+  let dy = 0;
+
+  if (clientX < rect.left || clientX - rect.left < EDGE_ZONE_PX) {
+    dx = EDGE_SCROLL_BASE_SPEED;
+  } else if (clientX > rect.right || clientX - rect.left >= rect.width - EDGE_ZONE_PX) {
+    dx = -EDGE_SCROLL_BASE_SPEED;
+  }
+
+  if (clientY < rect.top || clientY - rect.top < EDGE_ZONE_PX) {
+    dy = EDGE_SCROLL_BASE_SPEED;
+  } else if (clientY > rect.bottom || clientY - rect.top >= rect.height - EDGE_ZONE_PX) {
+    dy = -EDGE_SCROLL_BASE_SPEED;
+  }
+
+  return { dx, dy };
+}
+
+function edgeScrollStep() {
+  edgeScrollRaf = null;
+
+  if (!worldContainer || !hostRef.value || isPanning) {
+    stopEdgeScroll();
+    return;
+  }
+
+  if (!shouldEdgeScroll(lastPointerClient.x, lastPointerClient.y)) {
+    stopEdgeScroll();
+    return;
+  }
+
+  const { dx, dy } = edgeScrollVelocity(lastPointerClient.x, lastPointerClient.y);
+  if (dx === 0 && dy === 0) {
+    stopEdgeScroll();
+    return;
+  }
+
+  const nextX = worldContainer.x + dx;
+  const nextY = worldContainer.y + dy;
+  const clamped = clampWorldContainerPosition(nextX, nextY);
+  if (clamped.x === worldContainer.x && clamped.y === worldContainer.y) {
+    stopEdgeScroll();
+    return;
+  }
+
+  worldContainer.position.set(clamped.x, clamped.y);
+  scheduleViewportRefresh();
+  edgeScrollRaf = requestAnimationFrame(edgeScrollStep);
+}
+
+function syncEdgeScroll() {
+  if (isPanning || !hostRef.value) {
+    stopEdgeScroll();
+    return;
+  }
+
+  if (!shouldEdgeScroll(lastPointerClient.x, lastPointerClient.y)) {
+    stopEdgeScroll();
+    return;
+  }
+
+  const { dx, dy } = edgeScrollVelocity(lastPointerClient.x, lastPointerClient.y);
+  if (dx === 0 && dy === 0) {
+    stopEdgeScroll();
+    return;
+  }
+
+  if (edgeScrollRaf === null) {
+    edgeScrollRaf = requestAnimationFrame(edgeScrollStep);
+  }
 }
 
 function isInsideMap(x: number, y: number): boolean {
@@ -266,8 +447,48 @@ function scheduleViewportRefresh() {
     viewportRefreshPending = false;
     if (needsViewportRedraw()) {
       refreshViewportLayers();
+    } else {
+      notifyViewportChange();
     }
   });
+}
+
+function getViewportWorldRect(): import("./strategyMinimapTypes").MapViewportWorldRect | null {
+  if (!worldContainer || !hostRef.value || !props.worldState?.map) return null;
+
+  const rect = hostRef.value.getBoundingClientRect();
+  const topLeft = worldContainer.toLocal({ x: 0, y: 0 });
+  const bottomRight = worldContainer.toLocal({ x: rect.width, y: rect.height });
+
+  const minX = Math.min(topLeft.x, bottomRight.x);
+  const maxX = Math.max(topLeft.x, bottomRight.x);
+  const minY = Math.min(topLeft.y, bottomRight.y);
+  const maxY = Math.max(topLeft.y, bottomRight.y);
+
+  const map = props.worldState.map;
+  const mapWidthPx = map.width * TILE_SIZE;
+  const mapHeightPx = map.height * TILE_SIZE;
+  const x = Math.max(0, minX);
+  const y = Math.max(0, minY);
+  const right = Math.min(mapWidthPx, maxX);
+  const bottom = Math.min(mapHeightPx, maxY);
+
+  return {
+    x,
+    y,
+    width: Math.max(0, right - x),
+    height: Math.max(0, bottom - y),
+    mapWidthPx,
+    mapHeightPx,
+  };
+}
+
+function panToWorldPoint(worldX: number, worldY: number) {
+  if (!app || !worldContainer || !hostRef.value) return;
+
+  const rect = hostRef.value.getBoundingClientRect();
+  applyWorldContainerPosition(rect.width / 2 - worldX * zoom, rect.height / 2 - worldY * zoom);
+  refreshViewportLayers();
 }
 
 function fitMapToView() {
@@ -286,7 +507,7 @@ function fitMapToView() {
   zoom = Math.max(zoom, 0.4);
 
   worldContainer.scale.set(zoom);
-  worldContainer.position.set(
+  applyWorldContainerPosition(
     (app.screen.width - mapW * zoom) / 2,
     (app.screen.height - mapH * zoom) / 2
   );
@@ -740,7 +961,7 @@ function onWheel(event: WheelEvent) {
 
   zoom = nextZoom;
   worldContainer.scale.set(zoom);
-  worldContainer.position.set(cursorX - worldPos.x * zoom, cursorY - worldPos.y * zoom);
+  applyWorldContainerPosition(cursorX - worldPos.x * zoom, cursorY - worldPos.y * zoom);
   refreshViewportLayers();
 }
 
@@ -776,7 +997,10 @@ function shouldSuppressMapHover(event: PointerEvent): boolean {
 }
 
 function onPointerMove(event: PointerEvent) {
+  lastPointerClient = { x: event.clientX, y: event.clientY };
+
   if (isPanning && worldContainer) {
+    stopEdgeScroll();
     const dx = event.clientX - panStart.x;
     const dy = event.clientY - panStart.y;
 
@@ -784,11 +1008,17 @@ function onPointerMove(event: PointerEvent) {
       didPan = true;
     }
 
-    worldContainer.position.set(containerStart.x + dx, containerStart.y + dy);
+    applyWorldContainerPosition(containerStart.x + dx, containerStart.y + dy);
     if (didPan) {
       scheduleViewportRefresh();
     }
     return;
+  }
+
+  if (shouldEdgeScroll(event.clientX, event.clientY)) {
+    syncEdgeScroll();
+  } else {
+    stopEdgeScroll();
   }
 
   if (shouldSuppressMapHover(event)) {
@@ -805,6 +1035,9 @@ function onPointerMove(event: PointerEvent) {
 
 function onPointerLeave() {
   emit("hoverCell", null);
+  if (!shouldEdgeScroll(lastPointerClient.x, lastPointerClient.y)) {
+    stopEdgeScroll();
+  }
 }
 
 function onPointerUp(event: PointerEvent) {
@@ -886,6 +1119,7 @@ async function initPixi() {
 }
 
 function destroyPixi() {
+  stopEdgeScroll();
   if (app?.canvas) {
     app.canvas.removeEventListener("wheel", onWheel);
     app.canvas.removeEventListener("pointerdown", onPointerDown);
@@ -964,7 +1198,7 @@ function containsPointerTarget(target: EventTarget | null): boolean {
   return hostRef.value.contains(target);
 }
 
-defineExpose({ getCellPanelRect, containsPointerTarget });
+defineExpose({ getCellPanelRect, containsPointerTarget, getViewportWorldRect, panToWorldPoint });
 
 onMounted(initPixi);
 onBeforeUnmount(destroyPixi);

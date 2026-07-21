@@ -1,6 +1,6 @@
 <!-- Layout.vue -->
 <template>
-  <el-container>
+  <el-container class="layout-shell" :class="{ 'layout-shell--immersive': isImmersiveRoute }">
     <!-- 页面顶部导航栏 -->
     <el-header>
       <el-row type="flex" justify="space-between" align="middle">
@@ -35,7 +35,7 @@
     </el-header>
 
     <!-- 页面主体内容 -->
-    <el-main>
+    <el-main class="layout-main" :class="{ 'layout-main--immersive': isImmersiveRoute }">
       <router-view></router-view>
     </el-main>
 
@@ -73,10 +73,13 @@
 </template>
 
 <script setup>
-import { reactive, ref } from "vue";
+import { computed, ref } from "vue";
+import { useRoute } from "vue-router";
 import router from "./router";
 import { login } from "@/api";
-import { ca } from "element-plus/es/locales.mjs";
+
+const route = useRoute();
+const isImmersiveRoute = computed(() => route.name === "strategy");
 
 const isLoggedIn = ref(false);
 const userName = ref("");
@@ -128,5 +131,30 @@ const logout = () => {
 </script>
 
 <style scoped>
-/* 你的样式 */
+.layout-shell {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout-main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-main--immersive {
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-main--immersive > :deep(*) {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
 </style>

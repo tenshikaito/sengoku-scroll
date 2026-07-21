@@ -2,14 +2,15 @@
 import { MASTER_DATA_COLUMN_PRESETS } from "@/utils/strategyMasterDataColumns";
 import {
   HOBBY_CATEGORY_KEYS,
-  HOBBY_CATEGORY_LABELS,
   PERSONALITY_FIELD_KEYS,
-  PERSONALITY_FIELD_LABELS,
 } from "@/utils/strategyCharacterPersonality";
+import { resolveIntelTabLabel } from "@/i18n/intelColumns";
 
 export interface IntelTableColumnDef {
   prop: string;
-  label: string;
+  /** @deprecated 优先使用 labelKey 或 ui.intel.column.{prop} 资源键 */
+  label?: string;
+  labelKey?: string;
   width?: number | string;
   minWidth?: number | string;
   align?: "left" | "center" | "right";
@@ -64,14 +65,14 @@ export const MASTER_DATA_LIST_COLUMN_PRESETS: Record<
 const PERSONALITY_DEV_COLUMNS: IntelTableColumnDef[] = [
   ...PERSONALITY_FIELD_KEYS.map((key) => ({
     prop: key,
-    label: PERSONALITY_FIELD_LABELS[key],
+    labelKey: `enum.personality.${key}`,
     width: 56,
     align: "center" as const,
     devOnly: true,
   })),
   ...HOBBY_CATEGORY_KEYS.map((key) => ({
     prop: key,
-    label: HOBBY_CATEGORY_LABELS[key],
+    labelKey: `enum.hobby.${key}`,
     width: 56,
     align: "center" as const,
     devOnly: true,
@@ -194,13 +195,13 @@ export const STRONGHOLD_LIST_COLUMN_PRESETS: Record<
 
 export const STRONGHOLD_DEFENSE_COLUMNS: IntelTableColumnDef[] = [
   { prop: "category", label: "类别", width: 72 },
-  { prop: "name", label: "设施", minWidth: 96 },
+  { prop: "name", labelKey: "ui.intel.column.facilityName", label: "设施", minWidth: 96 },
   { prop: "level", label: "等级", width: 56, align: "center" },
   { prop: "defense", label: "城防", width: 72, align: "right" },
 ];
 
 const PERSON_ALL: IntelTableColumnDef[] = [
-  { prop: "name", label: "姓名", minWidth: 88 },
+  { prop: "name", labelKey: "ui.intel.column.personName", label: "姓名", minWidth: 88 },
   { prop: "forceName", label: "势力", minWidth: 80 },
   { prop: "strongholdName", label: "据点", minWidth: 96 },
   { prop: "isFamily", label: "一门", width: 52, align: "center" },
@@ -325,44 +326,48 @@ export function listPresetTabsForMainTab(
   switch (mainTab) {
     case "force":
       return [
-        { name: "status", label: "状态" },
-        { name: "military", label: "军备" },
+        { name: "status", label: resolveIntelTabLabel("force", "status", "状态") },
+        { name: "military", label: resolveIntelTabLabel("force", "military", "军备") },
       ];
     case "stronghold":
       return [
-        { name: "status", label: "状态" },
-        { name: "supplies", label: "内政" },
-        { name: "military", label: "军备" },
+        { name: "status", label: resolveIntelTabLabel("stronghold", "status", "状态") },
+        { name: "supplies", label: resolveIntelTabLabel("stronghold", "supplies", "内政") },
+        { name: "military", label: resolveIntelTabLabel("stronghold", "military", "军备") },
       ];
     case "person":
       return [
-        { name: "status", label: "状态" },
-        { name: "office", label: "仕官" },
-        { name: "order", label: "命令" },
-        { name: "personal", label: "个人" },
-        { name: "ability1", label: "能力1" },
-        { name: "ability2", label: "能力2" },
+        { name: "status", label: resolveIntelTabLabel("person", "status", "状态") },
+        { name: "office", label: resolveIntelTabLabel("person", "office", "仕官") },
+        { name: "order", label: resolveIntelTabLabel("person", "order", "命令") },
+        { name: "personal", label: resolveIntelTabLabel("person", "personal", "个人") },
+        { name: "ability1", label: resolveIntelTabLabel("person", "ability1", "能力1") },
+        { name: "ability2", label: resolveIntelTabLabel("person", "ability2", "能力2") },
       ];
   }
 }
 
 export function masterDataPresetTabs(): { name: MasterDataListPreset; label: string }[] {
-  return [
-    { name: "cultureGroups", label: "文化组" },
-    { name: "cultures", label: "文化" },
-    { name: "religionGroups", label: "宗教" },
-    { name: "religions", label: "信仰" },
-    { name: "weathers", label: "天气" },
-    { name: "strongholdTypes", label: "据点类型" },
-    { name: "defenseFacilityTypes", label: "城防设施" },
-    { name: "unitTypes", label: "兵种" },
-    { name: "terrains", label: "地形" },
-    { name: "climates", label: "气候" },
-    { name: "regions", label: "区域" },
-    { name: "roads", label: "道路" },
-    { name: "landmarks", label: "地标" },
-    { name: "terrainVegetationFeatures", label: "植被" },
-    { name: "terrainSurfaceFeatures", label: "地表" },
-    { name: "enums", label: "枚举" },
+  const presets: MasterDataListPreset[] = [
+    "cultureGroups",
+    "cultures",
+    "religionGroups",
+    "religions",
+    "weathers",
+    "strongholdTypes",
+    "defenseFacilityTypes",
+    "unitTypes",
+    "terrains",
+    "climates",
+    "regions",
+    "roads",
+    "landmarks",
+    "terrainVegetationFeatures",
+    "terrainSurfaceFeatures",
+    "enums",
   ];
+  return presets.map((name) => ({
+    name,
+    label: resolveIntelTabLabel("master", name, name),
+  }));
 }

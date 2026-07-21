@@ -1,4 +1,5 @@
 import type { StrategyStrongholdState, StrategyWorldState } from "@/api/strategy";
+import { t } from "@/i18n/textLocalizer";
 
 /** 是否「居城」：当主居城，或已任命领主（lordId>0）之据点。 */
 export function isGovernanceResidence(
@@ -27,8 +28,12 @@ export function strongholdGovernanceBadge(
   stronghold: StrategyStrongholdState,
   worldState?: StrategyWorldState
 ): string {
-  const base = isGovernanceResidence(stronghold, worldState) ? "居城" : "直辖";
-  return stronghold.isHistorical === false ? `${base}·虚构` : base;
+  const base = isGovernanceResidence(stronghold, worldState)
+    ? t("enum.stronghold.governance.residence")
+    : t("enum.stronghold.governance.direct");
+  return stronghold.isHistorical === false
+    ? `${base}·${t("enum.stronghold.governance.fictional")}`
+    : base;
 }
 
 /** @deprecated 使用 isGovernanceResidence */

@@ -16,6 +16,7 @@ import {
   mergeUnits,
   splitUnit,
   deployFromStronghold,
+  recordEspionageIntel,
   moveUnit,
   previewBattle,
   previewUnitPath,
@@ -64,6 +65,7 @@ import StrategySystemMenuDialog from "@/components/strategy/StrategySystemMenuDi
 import StrategyForceCommandPopup from "@/components/strategy/StrategyForceCommandPopup.vue";
 import StrategyCellIntelHover from "@/components/strategy/StrategyCellIntelHover.vue";
 import StrategyMapViewControls from "@/components/strategy/StrategyMapViewControls.vue";
+import type { MapViewportWorldRect } from "@/components/strategy/strategyMinimapTypes";
 import type { MapRouteOverlay, MapMoveRelayMarker } from "@/components/strategy/mapRouteStyles";
 import { getForceColorCss } from "@/components/strategy/forceColors";
 import type { StrategyMapColorMode } from "@/utils/mapEntityColors";
@@ -97,6 +99,12 @@ import { landmarkAtCell, mapTileInfo, roadAtCell } from "@/utils/mapTileLookup";
 import { mapMasterMatchesScenario } from "@/utils/strategyMapDefaults";
 import { logStrategyMapCoords, logHoverIntelLayoutDebug, rectToScreenDebug } from "@/utils/strategyMapDebug";
 import { attackApBlockReason, parseApiErrorCode, siegeApBlockReason } from "@/utils/strategyActionRules";
+import { isForeignIntelRestricted } from "@/utils/strategyIntelDisplay";
+import {
+  isLordAtResidence,
+  LORD_AT_RESIDENCE_REQUIRED_TIP,
+  resolveLordResidenceStronghold,
+} from "@/utils/strategyLordCommands";
 import {
   notificationFromEvent,
   strategicReportDetailText,
@@ -141,6 +149,7 @@ const selectedCell = ref<{ x: number; y: number } | null>(null);
 const hoverCell = ref<{ x: number; y: number; screenX: number; screenY: number } | null>(null);
 const mapPanelRef = ref<HTMLElement | null>(null);
 const mapCanvasRef = ref<InstanceType<typeof StrategyMapCanvas> | null>(null);
+const minimapViewport = ref<MapViewportWorldRect | null>(null);
 const menuPopupRef = ref<InstanceType<typeof StrategyMapPopup> | null>(null);
 const cornerPopupRef = ref<InstanceType<typeof StrategyMapPopup> | null>(null);
 const hoverIntelLayerRef = ref<HTMLElement | null>(null);
@@ -283,12 +292,46 @@ const canSiegePopupStronghold = computed(() => {
   return dist <= 1;
 });
 
-const canExpeditionStronghold = computed(() => {
-  const sh = selectedStronghold.value;
+const isLordAtOwnResidence = computed(() =>
+  state.value ? isLordAtResidence(state.value) : false
+);
+
+const activeStrongholdForCommands = computed(
+  () => selectedStronghold.value ?? popupStronghold.value
+);
+
+const canExpeditionFromStronghold = computed(() => {
+  const sh = activeStrongholdForCommands.value;
   const playerForceId = state.value?.playerForceId;
   if (!sh || playerForceId == null) return false;
   if (sh.forceId !== playerForceId || !sh.isLordResidence) return false;
   return !state.value?.units.some((u) => u.soldiers > 0 && u.x === sh.x && u.y === sh.y);
+});
+
+const canExpedition = computed(
+  () => canExpeditionFromStronghold.value && isLordAtOwnResidence.value
+);
+
+const expeditionTooltip = computed(() => {
+  if (!isLordAtOwnResidence.value) return LORD_AT_RESIDENCE_REQUIRED_TIP;
+  const sh = activeStrongholdForCommands.value;
+  const playerForceId = state.value?.playerForceId;
+  if (!sh || playerForceId == null) return LORD_AT_RESIDENCE_REQUIRED_TIP;
+  if (sh.forceId !== playerForceId || !sh.isLordResidence) {
+    const residence = state.value ? resolveLordResidenceStronghold(state.value) : null;
+    return residence ? `仅可在当主居城 ${residence.name} 出征` : "仅当主居城可出征";
+  }
+  if (state.value?.units.some((u) => u.soldiers > 0 && u.x === sh.x && u.y === sh.y)) {
+    return "据点格已有地图军，须先撤走或消灭驻留部队";
+  }
+  return "从当主居城分配城内兵与将领出征（据点格生成部队）";
+});
+
+const canEspionageStronghold = computed(() => {
+  const sh = popupStronghold.value ?? selectedStronghold.value;
+  if (!sh || !state.value) return false;
+  if (sh.forceId === state.value.playerForceId) return false;
+  return isForeignIntelRestricted(state.value, sh.forceId);
 });
 
 const selectedConvoy = computed(
@@ -722,8 +765,18 @@ watch([showHoverIntel, intelPinnedCell, () => popupMode.value], updateHoverIntel
   deep: true,
 });
 
+function refreshMinimapViewport() {
+  minimapViewport.value = mapCanvasRef.value?.getViewportWorldRect() ?? null;
+}
+
 function onViewportChange() {
   updateHoverIntelPosition();
+  refreshMinimapViewport();
+}
+
+function onMinimapNavigate(payload: { worldX: number; worldY: number }) {
+  mapCanvasRef.value?.panToWorldPoint(payload.worldX, payload.worldY);
+  refreshMinimapViewport();
 }
 
 const intelRoad = computed(() => {
@@ -1273,11 +1326,36 @@ function handleBeginSplit() {
 }
 
 function handleBeginExpedition() {
-  if (!canExpeditionStronghold.value) {
-    void notifyActionBlocked("无法出征", "仅当主居城且据点格无地图军时可出征");
+  if (!canExpedition.value) {
+    void notifyActionBlocked("无法出征", expeditionTooltip.value);
     return;
   }
   expeditionDialogVisible.value = true;
+}
+
+async function handleBeginEspionage() {
+  const sh = popupStronghold.value ?? selectedStronghold.value;
+  if (!sh || !canEspionageStronghold.value) {
+    void notifyActionBlocked("无法谍报", "仅可对情报未明的非本家势力据点展开谍报");
+    return;
+  }
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await recordEspionageIntel({
+      targetKind: "Stronghold",
+      targetId: sh.id,
+      scope: "Both",
+      precision: "Fuzzy",
+    });
+    info.value = `已对 ${sh.name} 完成谍报搜索`;
+    onCancel();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "谍报失败";
+  } finally {
+    loading.value = false;
+  }
 }
 
 async function handleSplitDialogConfirm(payload: { subUnitIds: number[]; unitName?: string }) {
@@ -1933,7 +2011,23 @@ async function onLoadSave() {
   }
 }
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable;
+}
+
+function handleStrategyKeydown(event: KeyboardEvent) {
+  if (event.code !== "Space" && event.key !== " ") return;
+  if (isTypingTarget(event.target)) return;
+  if (initialLoading.value || !state.value) return;
+
+  event.preventDefault();
+  gamePaused.value = !gamePaused.value;
+}
+
 onMounted(() => {
+  window.addEventListener("keydown", handleStrategyKeydown);
   window.addEventListener("pointerdown", handleGlobalPointerDown, true);
   window.addEventListener("resize", updateHoverIntelPosition);
   window.addEventListener("resize", updateMapTopOverlayHeight);
@@ -1948,6 +2042,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener("keydown", handleStrategyKeydown);
   window.removeEventListener("pointerdown", handleGlobalPointerDown, true);
   window.removeEventListener("resize", updateHoverIntelPosition);
   window.removeEventListener("resize", updateMapTopOverlayHeight);
@@ -2263,7 +2358,14 @@ watch(
                   战略
                 </el-button>
               </div>
-              <StrategyMapViewControls v-model="mapColorMode" class="map-bottom-view" />
+              <StrategyMapViewControls
+                v-model="mapColorMode"
+                class="map-bottom-view"
+                :world-state="state"
+                :map-master="mapMaster"
+                :viewport="minimapViewport"
+                @navigate="onMinimapNavigate"
+              />
             </div>
           </div>
 
@@ -2288,13 +2390,18 @@ watch(
             :tooltip-side="commandTooltipSide"
             :can-siege="canSiegePopupStronghold"
             :siege-stronghold-id="popupStronghold?.id ?? null"
-            :can-expedition="canExpeditionStronghold"
+            :can-expedition="canExpedition"
+            :expedition-tooltip="expeditionTooltip"
+            :lord-at-residence="isLordAtOwnResidence"
+            :stronghold-commands-tooltip="LORD_AT_RESIDENCE_REQUIRED_TIP"
+            :can-espionage="canEspionageStronghold"
             @begin-move="handleBeginMove"
             @begin-attack="handleBeginAttack"
             @begin-directive="handleBeginDirective"
             @begin-merge="handleBeginMerge"
             @begin-split="handleBeginSplit"
             @begin-expedition="handleBeginExpedition"
+            @begin-espionage="handleBeginEspionage"
             @siege-assault="handleSiegeOrder('Assault')"
             @siege-encircle="handleSiegeOrder('Encircle')"
             @show-intel="openIntelDialog"
@@ -2309,8 +2416,13 @@ watch(
             :x="menuAnchor.x"
             :y="menuAnchor.y"
             is-stronghold
-            :can-expedition="canExpeditionStronghold"
+            :can-expedition="canExpedition"
+            :expedition-tooltip="expeditionTooltip"
+            :lord-at-residence="isLordAtOwnResidence"
+            :stronghold-commands-tooltip="LORD_AT_RESIDENCE_REQUIRED_TIP"
+            :can-espionage="canEspionageStronghold"
             @begin-expedition="handleBeginExpedition"
+            @begin-espionage="handleBeginEspionage"
             @show-intel="openIntelDialog"
             @cancel="handlePopupCancel"
           />
@@ -2446,11 +2558,13 @@ watch(
 .strategy-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 80px);
-  min-width: 960px;
-  min-height: 640px;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
   gap: 8px;
-  overflow: auto;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 8px;
 }
 
 .map-float-panel {
@@ -2618,7 +2732,7 @@ watch(
 
 .map-column {
   flex: 1;
-  min-width: 640px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -2984,6 +3098,7 @@ watch(
 
 .error-bar {
   margin: 0;
+  flex-shrink: 0;
 }
 
 .event-detail-textarea {

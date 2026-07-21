@@ -1,4 +1,5 @@
 import type { StrategyEvent } from "@/api/strategyTypes";
+import { enumLabel, t } from "@/i18n/textLocalizer";
 
 export type MessageCategoryGroup = "policy" | "battle" | "messenger" | "other";
 
@@ -29,44 +30,7 @@ export function messageCategoryGroup(category: string): MessageCategoryGroup {
 }
 
 export function messageCategoryLabel(category: string): string {
-  switch (category) {
-    case "PolicyApplied":
-      return "方针·即时";
-    case "PolicyDispatched":
-      return "方针·派出";
-    case "PolicyDelivered":
-      return "方针·送达";
-    case "BattleReportArrived":
-      return "战报·抵达";
-    case "StrategicReportArrived":
-      return "情报·抵达";
-    case "StrongholdCaptured":
-      return "据点陷落";
-    case "SiegeOrderStarted":
-      return "围城开始";
-    case "UnitDestroyed":
-      return "部队溃灭";
-    case "UnitFledToStronghold":
-      return "逃入据点";
-    case "BattleResolved":
-      return "战斗";
-    case "BattleLog":
-      return "战斗过程";
-    case "MessengerArrived":
-      return "信使";
-    case "EconomyMonthly":
-      return "月度收支";
-    case "EconomyAnnual":
-      return "年度收支";
-    case "LordTributeDispatched":
-      return "贡纳运输";
-    case "LordTributeArrived":
-      return "贡纳抵达";
-    case "SupplyConvoyArrived":
-      return "补给抵达";
-    default:
-      return category;
-  }
+  return enumLabel("enum.message.category", category, category);
 }
 
 export function filterEventsByGroups(
@@ -85,12 +49,20 @@ export function formatEventsAsPlainText(events: StrategyEvent[]): string {
     .join("\n");
 }
 
-export const MESSAGE_CATEGORY_OPTIONS: { id: MessageCategoryGroup; label: string }[] = [
-  { id: "policy", label: "方针" },
-  { id: "battle", label: "战报" },
-  { id: "messenger", label: "信使" },
-  { id: "other", label: "其他" },
+const MESSAGE_CATEGORY_GROUP_IDS: MessageCategoryGroup[] = [
+  "policy",
+  "battle",
+  "messenger",
+  "other",
 ];
 
-export const DEFAULT_MESSAGE_CATEGORY_SELECTION: MessageCategoryGroup[] =
-  MESSAGE_CATEGORY_OPTIONS.map((o) => o.id);
+export function getMessageCategoryOptions(): { id: MessageCategoryGroup; label: string }[] {
+  return MESSAGE_CATEGORY_GROUP_IDS.map((id) => ({
+    id,
+    label: t(`enum.message.group.${id}`),
+  }));
+}
+
+export const DEFAULT_MESSAGE_CATEGORY_SELECTION: MessageCategoryGroup[] = [
+  ...MESSAGE_CATEGORY_GROUP_IDS,
+];

@@ -2,9 +2,10 @@
 import { computed, ref, watch } from "vue";
 import type { StrategyLordState, StrategyStrongholdState, StrategyUnitState } from "@/api/strategy";
 import {
-  UNIT_DIRECTIVE_OPTIONS,
+  getUnitDirectiveOptions,
   type UnitDirectiveValue,
 } from "@/utils/unitDirective";
+import { useI18n } from "@/i18n";
 
 const props = defineProps<{
   visible: boolean;
@@ -19,6 +20,11 @@ const emit = defineEmits<{
 }>();
 
 const selected = ref<UnitDirectiveValue>("Move");
+const { locale } = useI18n();
+const directiveOptions = computed(() => {
+  locale.value;
+  return getUnitDirectiveOptions();
+});
 
 const lordAtUnit = computed(() => {
   if (!props.unit || !props.lord) return false;
@@ -67,7 +73,7 @@ function submit() {
 
     <el-radio-group v-model="selected" class="directive-list">
       <el-radio
-        v-for="opt in UNIT_DIRECTIVE_OPTIONS"
+        v-for="opt in directiveOptions"
         :key="opt.value"
         :value="opt.value"
         class="directive-item"

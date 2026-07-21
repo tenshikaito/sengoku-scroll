@@ -1034,6 +1034,8 @@ public sealed record StrategyVisibilityDto
 
     public required bool AllySharedVision { get; init; }
 
+    public required bool ShowAllyIntel { get; init; }
+
     public required int MapWidth { get; init; }
 
     public required int MapHeight { get; init; }
@@ -1056,6 +1058,8 @@ public sealed record GameStartOptionsDto
     public required string ControlMode { get; init; }
 
     public required bool AllySharedVision { get; init; }
+
+    public required bool ShowAllyIntel { get; init; }
 
     public required bool InstantEventMessages { get; init; }
 }
@@ -1454,7 +1458,8 @@ public static class StrategyWorldStateMapper
             dto,
             meta.PlayerForceId,
             gameData,
-            espionageLedger);
+            espionageLedger,
+            meta.StartOptions);
     }
 
     private static IReadOnlyList<StrategyEspionageIntelEntryDto> MapEspionageIntel(
@@ -1821,7 +1826,8 @@ public static class StrategyWorldStateMapper
                     dto,
                     meta.PlayerForceId,
                     world.GameData,
-                    espionageLedger);
+                    espionageLedger,
+                    meta.StartOptions);
             }
 
             mapUnits.Add(dto);

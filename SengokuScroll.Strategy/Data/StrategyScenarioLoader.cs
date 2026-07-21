@@ -330,7 +330,8 @@ public static class StrategyScenarioLoader
             }
         }
 
-        ApplyDefaultWarDiplomacy(forces.Values);
+        ApplyScenarioDiplomacy(forces, document.Scenario.Diplomacies);
+        ApplyDefaultWarDiplomacy(forces.Values, document.Scenario.Forces);
         StrategyDefaultMasterDataSeed.Apply(world);
         ApplyDefaultStrongholdDefense(world);
         ApplyDefaultEconomyFacilities(world);
@@ -369,9 +370,65 @@ public static class StrategyScenarioLoader
         }
     }
 
-    /// <summary>剧本未声明外交时，多势力默认互相敌对（M3 最小战争状态）。</summary>
-    private static void ApplyDefaultWarDiplomacy(IEnumerable<Force> forces)
+    /// <summary>应用剧本 JSON 中声明的开局外交（双向）。</summary>
+    private static void ApplyScenarioDiplomacy(
+        Dictionary<int, Force> forces,
+        IReadOnlyList<StrategyDiplomacyDefinition> diplomacies)
     {
+        foreach (var definition in diplomacies)
+        {
+            if (!forces.TryGetValue(definition.ForceId, out var source))
+                throw new InvalidOperationException($"外交配置引用了未知势力 Id：{definition.ForceId}。");
+
+            if (!forces.TryGetValue(definition.TargetForceId, out var target))
+                throw new InvalidOperationException($"外交配置引用了未知势力 Id：{definition.TargetForceId}。");
+
+            if (source.Id == target.Id)
+                throw new InvalidOperationException($"外交配置不能指向自身势力 Id：{source.Id}。");
+
+            var relation = ParseDiplomacyRelation(definition.Relation);
+
+            if (!source.Diplomacies.Any(d => d.TargetForceId == target.Id))
+            {
+                source.Diplomacies.Add(new Diplomacy
+                {
+                    ForceId = source.Id,
+                    TargetForceId = target.Id,
+                    Relation = relation
+                });
+            }
+
+            if (!target.Diplomacies.Any(d => d.TargetForceId == source.Id))
+            {
+                target.Diplomacies.Add(new Diplomacy
+                {
+                    ForceId = target.Id,
+                    TargetForceId = source.Id,
+                    Relation = relation
+                });
+            }
+        }
+    }
+
+    private static Diplomacy.DiplomacyRelation ParseDiplomacyRelation(string? relation)
+        => relation?.Trim() switch
+        {
+            nameof(Diplomacy.DiplomacyRelation.Allied) => Diplomacy.DiplomacyRelation.Allied,
+            nameof(Diplomacy.DiplomacyRelation.Enemy) => Diplomacy.DiplomacyRelation.Enemy,
+            nameof(Diplomacy.DiplomacyRelation.Neutral) => Diplomacy.DiplomacyRelation.Neutral,
+            _ => throw new InvalidOperationException($"未知外交关系：{relation}。")
+        };
+
+    /// <summary>剧本未声明外交时，多势力默认互相敌对（M3 最小战争状态）。</summary>
+    private static void ApplyDefaultWarDiplomacy(
+        IEnumerable<Force> forces,
+        IReadOnlyList<StrategyForceDefinition> definitions)
+    {
+        var excludeFromDefaultDiplomacy = definitions
+            .Where(d => d.ExcludeFromDefaultDiplomacy)
+            .Select(d => d.Id)
+            .ToHashSet();
+
         var list = forces.ToList();
         for (var i = 0; i < list.Count; i++)
         {
@@ -380,6 +437,11 @@ public static class StrategyScenarioLoader
                 var a = list[i];
                 var b = list[j];
                 if (a.Diplomacies.Any(d => d.TargetForceId == b.Id))
+                    continue;
+
+                // 业务：标记为孤立势力时不自动建立外交关系
+                if (excludeFromDefaultDiplomacy.Contains(a.Id)
+                    || excludeFromDefaultDiplomacy.Contains(b.Id))
                     continue;
 
                 // 业务：家臣势力与宗主不自动设为敌对

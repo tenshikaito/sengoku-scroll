@@ -16,6 +16,7 @@ export const GAME_START_PRESETS: Record<PresetDifficultyId, GameStartOptionsStat
     intelMode: "Full",
     controlMode: "FullDirect",
     allySharedVision: true,
+    showAllyIntel: false,
     instantEventMessages: true,
   },
   Normal: {
@@ -23,6 +24,7 @@ export const GAME_START_PRESETS: Record<PresetDifficultyId, GameStartOptionsStat
     intelMode: "ForceIntel",
     controlMode: "DirectiveOnly",
     allySharedVision: false,
+    showAllyIntel: false,
     instantEventMessages: false,
   },
   Hard: {
@@ -30,6 +32,7 @@ export const GAME_START_PRESETS: Record<PresetDifficultyId, GameStartOptionsStat
     intelMode: "ForceIntel",
     controlMode: "DirectiveOnly",
     allySharedVision: false,
+    showAllyIntel: false,
     instantEventMessages: false,
   },
 };
@@ -47,6 +50,7 @@ export function gameStartOptionsEqual(
     a.intelMode === b.intelMode &&
     a.controlMode === b.controlMode &&
     a.allySharedVision === b.allySharedVision &&
+    a.showAllyIntel === b.showAllyIntel &&
     a.instantEventMessages === b.instantEventMessages
   );
 }
@@ -63,13 +67,20 @@ export function resolveDifficultyFromOptions(
   return "Custom";
 }
 
-/** 角色视野下控制模式固定为「仅角色」。 */
+/** 角色视野下控制模式固定为「仅角色」，同盟共享视野强制关闭。 */
 export function enforceCharacterFogControl(options: GameStartOptionsState): boolean {
-  if (options.fogMode === "Character" && options.controlMode !== "DirectiveOnly") {
+  if (options.fogMode !== "Character") return false;
+
+  let changed = false;
+  if (options.controlMode !== "DirectiveOnly") {
     options.controlMode = "DirectiveOnly";
-    return true;
+    changed = true;
   }
-  return false;
+  if (options.allySharedVision) {
+    options.allySharedVision = false;
+    changed = true;
+  }
+  return changed;
 }
 
 const STORAGE_KEY = "sengoku.strategy.gameStartSettings";

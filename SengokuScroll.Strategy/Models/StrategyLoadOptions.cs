@@ -19,15 +19,19 @@ public static class GameStartOptionsMapper
             IntelMode = options.IntelMode.ToString(),
             ControlMode = options.ControlMode.ToString(),
             AllySharedVision = options.AllySharedVision,
+            ShowAllyIntel = options.ShowAllyIntel,
             InstantEventMessages = options.InstantEventMessages
         };
 
     public static GameStartOptions FromDto(GameStartOptionsDto dto)
-        => new()
+    {
+        var fog = Enum.TryParse<StrategyFogMode>(dto.FogMode, ignoreCase: true, out var fogMode)
+            ? fogMode
+            : StrategyFogMode.Force;
+
+        var options = new GameStartOptions
         {
-            FogMode = Enum.TryParse<StrategyFogMode>(dto.FogMode, ignoreCase: true, out var fog)
-                ? fog
-                : StrategyFogMode.Force,
+            FogMode = fog,
             IntelMode = Enum.TryParse<StrategyIntelMode>(dto.IntelMode, ignoreCase: true, out var intel)
                 ? intel
                 : StrategyIntelMode.ForceIntel,
@@ -35,6 +39,10 @@ public static class GameStartOptionsMapper
                 ? control
                 : StrategyControlMode.DirectiveOnly,
             AllySharedVision = dto.AllySharedVision,
+            ShowAllyIntel = dto.ShowAllyIntel,
             InstantEventMessages = dto.InstantEventMessages
         };
+
+        return GameStartOptionsPresets.SanitizeCharacterFogOptions(options);
+    }
 }

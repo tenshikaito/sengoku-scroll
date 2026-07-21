@@ -52,6 +52,7 @@ export interface StrategyVisibilityState {
   controlMode: string;
   instantEventMessages: boolean;
   allySharedVision: boolean;
+  showAllyIntel: boolean;
   mapWidth: number;
   mapHeight: number;
   exploredBits: number[];
@@ -64,6 +65,7 @@ export interface GameStartOptionsState {
   intelMode: string;
   controlMode: string;
   allySharedVision: boolean;
+  showAllyIntel: boolean;
   instantEventMessages: boolean;
 }
 

@@ -2,6 +2,8 @@
 import { ref, watch } from "vue";
 import type { IntelTableColumnDef } from "@/utils/strategyIntelSystemColumns";
 import { resolveIntelBandTone } from "@/utils/strategyIntelDisplay";
+import { resolveIntelColumnLabel } from "@/i18n/intelColumns";
+import { useI18n } from "@/i18n";
 
 const props = defineProps<{
   rows: Array<Record<string, unknown>>;
@@ -17,6 +19,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   "current-change": [row: Record<string, unknown> | null];
 }>();
+
+const { t, locale } = useI18n();
 
 const tableRef = ref<{
   setCurrentRow: (row: Record<string, unknown> | undefined) => void;
@@ -51,6 +55,11 @@ function resolveBandClass(value: unknown, col: IntelTableColumnDef): string {
   const tone = resolveIntelBandTone(value == null ? "" : String(value));
   return tone ? `intel-band intel-band--${tone}` : "";
 }
+
+function columnLabel(col: IntelTableColumnDef): string {
+  locale.value;
+  return resolveIntelColumnLabel(col);
+}
 </script>
 
 <template>
@@ -60,7 +69,7 @@ function resolveBandClass(value: unknown, col: IntelTableColumnDef): string {
     size="small"
     stripe
     border
-    :empty-text="emptyText ?? '暂无数据'"
+    :empty-text="emptyText ?? t('common.empty')"
     :max-height="maxHeight ?? 220"
     :highlight-current-row="highlightCurrent ?? true"
     :row-class-name="props.rowClassName ? resolveRowClass : undefined"
@@ -70,7 +79,7 @@ function resolveBandClass(value: unknown, col: IntelTableColumnDef): string {
       v-for="col in columns"
       :key="col.prop"
       :prop="col.prop"
-      :label="col.label"
+      :label="columnLabel(col)"
       :width="col.width"
       :min-width="col.minWidth"
       :align="col.align"

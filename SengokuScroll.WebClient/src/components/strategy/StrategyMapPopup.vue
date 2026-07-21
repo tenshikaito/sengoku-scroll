@@ -19,6 +19,12 @@ const props = defineProps<{
   siegeStrongholdId?: number | null;
   /** 当主居城可出征 */
   canExpedition?: boolean;
+  expeditionTooltip?: string;
+  /** 当主是否位于本家居城（据点指令总开关） */
+  lordAtResidence?: boolean;
+  strongholdCommandsTooltip?: string;
+  /** 可对当前格敌方据点展开谍报 */
+  canEspionage?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -28,6 +34,7 @@ const emit = defineEmits<{
   beginMerge: [];
   beginSplit: [];
   beginExpedition: [];
+  beginEspionage: [];
   siegeAssault: [];
   siegeEncircle: [];
   showIntel: [];
@@ -58,6 +65,32 @@ const siegeUnavailable = computed(() => siegeBlockReason.value !== null);
 const siegeTooltip = computed(() =>
   siegeBlockReason.value ?? `对相邻敌方据点下达攻城指令（消耗 ${SIEGE_AP_COST} AP）`
 );
+
+const expeditionUnavailable = computed(() => !props.canExpedition);
+const expeditionTip = computed(
+  () => props.expeditionTooltip ?? "从当主居城分配城内兵与将领出征（据点格生成部队）"
+);
+
+const strongholdCommandsUnavailable = computed(() => props.lordAtResidence === false);
+const strongholdCommandsTip = computed(
+  () => props.strongholdCommandsTooltip ?? "当主须在本家居城方可下达据点指令"
+);
+
+function onExpeditionClick() {
+  if (expeditionUnavailable.value) {
+    showUnavailableTip(expeditionTip.value);
+    return;
+  }
+  emit("beginExpedition");
+}
+
+function onStrongholdMutedAction(tip: string) {
+  if (strongholdCommandsUnavailable.value) {
+    showUnavailableTip(strongholdCommandsTip.value);
+    return;
+  }
+  showUnavailableTip(tip);
+}
 </script>
 
 <template>
@@ -147,11 +180,10 @@ const siegeTooltip = computed(() =>
     <template v-else-if="mode === 'strongholdCommand'">
       <div class="actions actions--vertical">
         <StrategyMapActionButton
-          v-if="canExpedition"
-          variant="primary"
+          :variant="expeditionUnavailable ? 'muted' : 'primary'"
           :tooltip-side="tooltipSide"
-          tooltip="从当主居城分配城内兵与将领出征（据点格生成部队）"
-          @click="emit('beginExpedition')"
+          :tooltip="expeditionTip"
+          @click="onExpeditionClick"
         >
           🚩 出征
         </StrategyMapActionButton>
@@ -159,7 +191,7 @@ const siegeTooltip = computed(() =>
           variant="muted"
           :tooltip-side="tooltipSide"
           tooltip="据点建设功能尚未实装"
-          @click="showUnavailableTip('据点建设功能尚未实装')"
+          @click="onStrongholdMutedAction('据点建设功能尚未实装')"
         >
           🏗 建设
         </StrategyMapActionButton>
@@ -167,7 +199,7 @@ const siegeTooltip = computed(() =>
           variant="muted"
           :tooltip-side="tooltipSide"
           tooltip="征兵功能尚未实装"
-          @click="showUnavailableTip('征兵功能尚未实装')"
+          @click="onStrongholdMutedAction('征兵功能尚未实装')"
         >
           ⚔ 征兵
         </StrategyMapActionButton>
@@ -175,7 +207,7 @@ const siegeTooltip = computed(() =>
           variant="muted"
           :tooltip-side="tooltipSide"
           tooltip="任命城主功能尚未实装"
-          @click="showUnavailableTip('任命城主功能尚未实装')"
+          @click="onStrongholdMutedAction('任命城主功能尚未实装')"
         >
           👤 任命城主
         </StrategyMapActionButton>
@@ -183,7 +215,7 @@ const siegeTooltip = computed(() =>
           variant="muted"
           :tooltip-side="tooltipSide"
           tooltip="据点方针设定尚未实装"
-          @click="showUnavailableTip('据点方针设定尚未实装')"
+          @click="onStrongholdMutedAction('据点方针设定尚未实装')"
         >
           📜 设定方针
         </StrategyMapActionButton>
@@ -191,7 +223,7 @@ const siegeTooltip = computed(() =>
           variant="muted"
           :tooltip-side="tooltipSide"
           tooltip="据点运输功能尚未实装"
-          @click="showUnavailableTip('据点运输功能尚未实装')"
+          @click="onStrongholdMutedAction('据点运输功能尚未实装')"
         >
           📦 运输
         </StrategyMapActionButton>
@@ -224,6 +256,15 @@ const siegeTooltip = computed(() =>
           </StrategyMapActionButton>
           <div class="divider" />
         </template>
+        <StrategyMapActionButton
+          v-if="canEspionage"
+          variant="primary"
+          :tooltip-side="tooltipSide"
+          tooltip="对该据点展开谍报搜索，揭示内政或军事情报（约 2 个月有效）"
+          @click="emit('beginEspionage')"
+        >
+          🕵 谍报
+        </StrategyMapActionButton>
         <StrategyMapActionButton
           variant="muted"
           :tooltip-side="tooltipSide"

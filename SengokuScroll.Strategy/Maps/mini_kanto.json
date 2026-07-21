@@ -1,7 +1,7 @@
 {
   "id": "mini_kanto",
   "name": "迷你关东试玩",
-  "version": "1.2",
+  "version": "1.4",
   "map": {
     "width": 20,
     "height": 20,
@@ -980,21 +980,21 @@
     "forces": [
       {
         "id": 1,
-        "name": "织田",
+        "name": "织田家",
         "lordCharacterId": 1,
         "food": 80000000,
         "money": 8000000
       },
       {
         "id": 2,
-        "name": "今川",
+        "name": "今川家",
         "lordCharacterId": 3,
         "food": 70000000,
         "money": 6000000
       },
       {
         "id": 3,
-        "name": "酒井",
+        "name": "酒井家",
         "lordCharacterId": 6,
         "food": 20000000,
         "money": 2000000,
@@ -1003,12 +1003,34 @@
       },
       {
         "id": 4,
-        "name": "北条支系",
+        "name": "北条支系家",
         "lordCharacterId": 7,
         "food": 15000000,
         "money": 1500000,
         "status": "InnerVassal",
         "suzerainForceId": 2
+      },
+      {
+        "id": 5,
+        "name": "里见家",
+        "lordCharacterId": 8,
+        "food": 12000000,
+        "money": 1200000,
+        "excludeFromDefaultDiplomacy": true
+      },
+      {
+        "id": 6,
+        "name": "德川家",
+        "lordCharacterId": 9,
+        "food": 18000000,
+        "money": 1800000
+      }
+    ],
+    "diplomacies": [
+      {
+        "forceId": 1,
+        "targetForceId": 6,
+        "relation": "Allied"
       }
     ],
     "characters": [
@@ -1073,6 +1095,24 @@
         "leadership": 78,
         "power": 72,
         "birthYear": 1510
+      },
+      {
+        "id": 8,
+        "name": "里见义弘",
+        "forceId": 5,
+        "strongholdId": 11,
+        "leadership": 74,
+        "power": 70,
+        "birthYear": 1525
+      },
+      {
+        "id": 9,
+        "name": "德川家康",
+        "forceId": 6,
+        "strongholdId": 12,
+        "leadership": 90,
+        "power": 78,
+        "birthYear": 1542
       }
     ],
     "strongholds": [
@@ -1225,6 +1265,34 @@
         "morale": 70,
         "training": 54,
         "money": 3000000
+      },
+      {
+        "id": 11,
+        "name": "馆山",
+        "forceId": 5,
+        "x": 18,
+        "y": 0,
+        "lordId": 8,
+        "food": 48000000,
+        "population": 27000,
+        "garrisonSoldiers": 900,
+        "morale": 73,
+        "training": 58,
+        "money": 4200000
+      },
+      {
+        "id": 12,
+        "name": "滨松",
+        "forceId": 6,
+        "x": 12,
+        "y": 2,
+        "lordId": 9,
+        "food": 54000000,
+        "population": 33000,
+        "garrisonSoldiers": 1100,
+        "morale": 77,
+        "training": 63,
+        "money": 6000000
       }
     ],
     "units": [

@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import type { StrategyBattlefieldState } from "@/api/strategy";
+import type { StrategyBattlefieldState, StrategyWorldState } from "@/api/strategy";
 import StrategyIntelFieldList from "./StrategyIntelFieldList.vue";
-import { formatFoodGo, formatMoney, formatSiegeSoldiers, formatSoldiers } from "@/utils/strategyDisplayUnits";
+import {
+  battlefieldParticipantFoodLabel,
+  battlefieldParticipantMoneyLabel,
+  battlefieldParticipantMoraleLabel,
+  isForeignIntelRestricted,
+  UNKNOWN_INTEL,
+} from "@/utils/strategyIntelDisplay";
+import { formatSiegeSoldiers, formatSoldiers } from "@/utils/strategyDisplayUnits";
 
 defineProps<{
+  worldState: StrategyWorldState;
   battlefield: StrategyBattlefieldState;
   playerForceId: number;
 }>();
@@ -42,6 +50,21 @@ function battlefieldStatusRows(battlefield: StrategyBattlefieldState) {
 
   return rows;
 }
+
+function participantSoldiersLabel(
+  worldState: StrategyWorldState,
+  battlefield: StrategyBattlefieldState,
+  entry: StrategyBattlefieldState["participants"][number],
+  playerForceId: number,
+): string {
+  if (isForeignIntelRestricted(worldState, entry.forceId)) {
+    if (battlefield.kind === "Siege") {
+      return formatSiegeSoldiers(entry.soldiers, entry.forceId, playerForceId);
+    }
+    return UNKNOWN_INTEL;
+  }
+  return formatSoldiers(entry.soldiers);
+}
 </script>
 
 <template>
@@ -56,14 +79,20 @@ function battlefieldStatusRows(battlefield: StrategyBattlefieldState) {
             { label: '势力', value: entry.forceName },
             {
               label: '兵数',
-              value:
-                battlefield.kind === 'Siege'
-                  ? formatSiegeSoldiers(entry.soldiers, entry.forceId, playerForceId)
-                  : formatSoldiers(entry.soldiers),
+              value: participantSoldiersLabel(worldState, battlefield, entry, playerForceId),
             },
-            { label: '士气', value: `${Math.max(0, Math.min(100, entry.morale))}%` },
-            { label: '金钱', value: formatMoney(entry.money ?? 0) },
-            { label: '粮草', value: formatFoodGo(entry.food ?? 0) },
+            {
+              label: '士气',
+              value: battlefieldParticipantMoraleLabel(worldState, entry.forceId, entry.morale),
+            },
+            {
+              label: '金钱',
+              value: battlefieldParticipantMoneyLabel(worldState, entry.forceId, entry.money ?? 0),
+            },
+            {
+              label: '粮草',
+              value: battlefieldParticipantFoodLabel(worldState, entry.forceId, entry.food ?? 0),
+            },
           ]"
         />
       </div>

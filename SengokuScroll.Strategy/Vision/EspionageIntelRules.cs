@@ -1,4 +1,6 @@
 using SengokuScroll.Domain;
+using SengokuScroll.Domain.Entities;
+using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
 
 namespace SengokuScroll.Strategy.Vision;
@@ -12,17 +14,51 @@ public static class EspionageIntelRules
     private const string UnknownDisplay = "未知";
 
     /// <summary>是否须谍报 masking（自势力圈内的据点/部队对玩家完全可见）。</summary>
-    public static bool RequiresEspionageMask(int forceId, int playerForceId, GameData gameData)
-        => !StrategyFogDtoRules.IsOwnRealmForce(forceId, playerForceId, gameData);
+    public static bool RequiresEspionageMask(
+        int forceId,
+        int playerForceId,
+        GameData gameData,
+        GameStartOptions? options = null)
+    {
+        if (StrategyFogDtoRules.IsOwnRealmForce(forceId, playerForceId, gameData))
+            return false;
+
+        if (options?.ShowAllyIntel == true && IsAllyIntelVisible(forceId, playerForceId, gameData))
+            return false;
+
+        return true;
+    }
+
+    /// <summary>开启显示同盟情报时：同盟 Realm 可见；外藩始终遮蔽。</summary>
+    public static bool IsAllyIntelVisible(int forceId, int playerForceId, GameData gameData)
+    {
+        if (!gameData.Forces.TryGetValue(forceId, out var targetForce))
+            return false;
+
+        if (targetForce.Status == Force.ForceStatus.OuterVassal)
+            return false;
+
+        if (!gameData.Forces.TryGetValue(playerForceId, out var playerForce))
+            return false;
+
+        var targetRootId = TributeRoutingHelper.ResolveRealmRootForceId(forceId, gameData);
+        if (targetRootId == TributeRoutingHelper.ResolveRealmRootForceId(playerForceId, gameData))
+            return false;
+
+        return playerForce.Diplomacies.Any(d =>
+            d.TargetForceId == targetRootId
+            && d.Relation == Diplomacy.DiplomacyRelation.Allied);
+    }
 
     /// <summary>对地图可见的敌方单位应用谍报遮蔽（ForceIntel 模式且非 Full 时调用）。</summary>
     public static StrategyUnitStateDto ApplyUnitMask(
         StrategyUnitStateDto unit,
         int playerForceId,
         GameData gameData,
-        StrategyEspionageIntelLedger? ledger)
+        StrategyEspionageIntelLedger? ledger,
+        GameStartOptions? options = null)
     {
-        if (!RequiresEspionageMask(unit.ForceId, playerForceId, gameData))
+        if (!RequiresEspionageMask(unit.ForceId, playerForceId, gameData, options))
             return unit;
 
         var record = ledger?.TryGet(EspionageIntelTargetKind.Unit, unit.Id);
@@ -86,9 +122,10 @@ public static class EspionageIntelRules
         StrategyStrongholdStateDto dto,
         int playerForceId,
         GameData gameData,
-        StrategyEspionageIntelLedger? ledger)
+        StrategyEspionageIntelLedger? ledger,
+        GameStartOptions? options = null)
     {
-        if (!RequiresEspionageMask(dto.ForceId, playerForceId, gameData))
+        if (!RequiresEspionageMask(dto.ForceId, playerForceId, gameData, options))
             return dto;
 
         var record = ledger?.TryGet(EspionageIntelTargetKind.Stronghold, dto.Id);

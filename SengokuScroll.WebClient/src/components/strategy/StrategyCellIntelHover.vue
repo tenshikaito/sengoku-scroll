@@ -200,6 +200,7 @@ const stackClass = computed(() => {
       ariaLabel="围城战场情报"
     >
       <StrategyBattlefieldIntelSummary
+        :world-state="worldState"
         :battlefield="siegeBattlefield"
         :player-force-id="worldState.playerForceId"
       />
@@ -211,6 +212,7 @@ const stackClass = computed(() => {
       ariaLabel="野战战场情报"
     >
       <StrategyBattlefieldIntelSummary
+        :world-state="worldState"
         :battlefield="fieldBattlefield"
         :player-force-id="worldState.playerForceId"
       />

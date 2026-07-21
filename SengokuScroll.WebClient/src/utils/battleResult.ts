@@ -5,6 +5,7 @@ import type {
   StrategyBattleResult,
   StrategyWorldState,
 } from "@/api/strategyTypes";
+import { t } from "@/i18n/textLocalizer";
 
 function safeInt(value: unknown, fallback = 0): number {
   const n = Number(value);
@@ -96,7 +97,7 @@ export function deriveBattleResult(
     attackerWon = preview.attackerWinRatePercent >= 50;
   }
 
-  const attackerName = attackerBefore?.name ?? "攻方";
+  const attackerName = attackerBefore?.name ?? t("battle.side.attacker");
   const defenderName = defenderBefore?.name ?? preview.defenderName;
 
   const result: StrategyBattleResult = {
@@ -218,12 +219,12 @@ export function battleOutcomeHeadline(
   if (result.isSurrendered) {
     return {
       won,
-      text: won ? "🏳 敌军降伏" : "🏳 我军降伏",
+      text: won ? t("battle.outcome.headline.enemySurrender") : t("battle.outcome.headline.ourSurrender"),
     };
   }
   return {
     won,
-    text: won ? "⚔ 战斗胜利" : "✖ 战斗失利",
+    text: won ? t("battle.outcome.headline.win") : t("battle.outcome.headline.lose"),
   };
 }
 
@@ -233,6 +234,8 @@ export function battleOutcomeBrief(
   worldState?: StrategyWorldState
 ): string {
   const won = playerWonBattle(result, playerForceId, worldState);
-  if (result.isSurrendered) return won ? "降伏" : "投降";
-  return won ? "胜利" : "失利";
+  if (result.isSurrendered) {
+    return won ? t("battle.outcome.brief.surrender") : t("battle.outcome.brief.ourSurrender");
+  }
+  return won ? t("battle.outcome.brief.win") : t("battle.outcome.brief.lose");
 }

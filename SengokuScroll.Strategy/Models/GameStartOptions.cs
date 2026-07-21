@@ -45,6 +45,9 @@ public sealed record GameStartOptions
     /// <summary>同盟共享视野（势力模式有效）。</summary>
     public required bool AllySharedVision { get; init; }
 
+    /// <summary>显示同盟情报：同盟势力及内藩可见具体数值；外藩仍须谍报（ForceIntel 有效）。</summary>
+    public required bool ShowAllyIntel { get; init; }
+
     /// <summary>
     /// 即时事件摘要：当日在消息区显示摘要；信使/Message 权威通道照常。
     /// </summary>
@@ -60,7 +63,7 @@ public static class GameStartOptionsPresets
     public static GameStartOptions Resolve(StrategyDifficulty difficulty, GameStartOptions? customOverride)
     {
         if (difficulty == StrategyDifficulty.Custom && customOverride is not null)
-            return customOverride;
+            return Sanitize(customOverride);
 
         return difficulty switch
         {
@@ -70,6 +73,7 @@ public static class GameStartOptionsPresets
                 IntelMode = StrategyIntelMode.Full,
                 ControlMode = StrategyControlMode.FullDirect,
                 AllySharedVision = true,
+                ShowAllyIntel = false,
                 InstantEventMessages = true
             },
             StrategyDifficulty.Normal => new GameStartOptions
@@ -78,6 +82,7 @@ public static class GameStartOptionsPresets
                 IntelMode = StrategyIntelMode.ForceIntel,
                 ControlMode = StrategyControlMode.DirectiveOnly,
                 AllySharedVision = false,
+                ShowAllyIntel = false,
                 InstantEventMessages = false
             },
             StrategyDifficulty.Hard => new GameStartOptions
@@ -86,10 +91,20 @@ public static class GameStartOptionsPresets
                 IntelMode = StrategyIntelMode.ForceIntel,
                 ControlMode = StrategyControlMode.DirectiveOnly,
                 AllySharedVision = false,
+                ShowAllyIntel = false,
                 InstantEventMessages = false
             },
-            StrategyDifficulty.Custom => customOverride ?? Resolve(StrategyDifficulty.Normal, null),
+            StrategyDifficulty.Custom => Sanitize(customOverride ?? Resolve(StrategyDifficulty.Normal, null)),
             _ => Resolve(StrategyDifficulty.Normal, null)
         };
     }
+
+    private static GameStartOptions Sanitize(GameStartOptions options)
+        => options.FogMode == StrategyFogMode.Character
+            ? options with { AllySharedVision = false }
+            : options;
+
+    /// <summary>角色视野下强制关闭同盟共享视野。</summary>
+    public static GameStartOptions SanitizeCharacterFogOptions(GameStartOptions options)
+        => Sanitize(options);
 }

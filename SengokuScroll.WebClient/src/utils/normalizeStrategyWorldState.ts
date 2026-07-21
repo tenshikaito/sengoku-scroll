@@ -256,6 +256,7 @@ function normalizeVisibility(raw: unknown): StrategyVisibilityState | undefined 
     controlMode: requiredString(pick(v, "controlMode", "ControlMode"), "DirectiveOnly"),
     instantEventMessages: pick(v, "instantEventMessages", "InstantEventMessages") === true,
     allySharedVision: pick(v, "allySharedVision", "AllySharedVision") === true,
+    showAllyIntel: pick(v, "showAllyIntel", "ShowAllyIntel") === true,
     mapWidth: safeInt(pick(v, "mapWidth", "MapWidth"), 0),
     mapHeight: safeInt(pick(v, "mapHeight", "MapHeight"), 0),
     exploredBits: Array.isArray(bitsRaw) ? bitsRaw.map((b) => safeInt(b)) : [],
@@ -272,6 +273,7 @@ function normalizeStartOptions(raw: unknown): GameStartOptionsState | undefined 
     intelMode: requiredString(pick(o, "intelMode", "IntelMode"), "ForceIntel"),
     controlMode: requiredString(pick(o, "controlMode", "ControlMode"), "DirectiveOnly"),
     allySharedVision: pick(o, "allySharedVision", "AllySharedVision") === true,
+    showAllyIntel: pick(o, "showAllyIntel", "ShowAllyIntel") === true,
     instantEventMessages: pick(o, "instantEventMessages", "InstantEventMessages") === true,
   };
 }

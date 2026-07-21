@@ -21,6 +21,7 @@ export {
   mergeUnits,
   splitUnit,
   deployFromStronghold,
+  recordEspionageIntel,
   moveUnit,
   previewUnitPath,
   previewBattle,

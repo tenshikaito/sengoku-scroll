@@ -20,10 +20,10 @@ import {
 import {
   formatStatBand,
   isCharacterFogMode,
-  isKnownStrongholdIntelMasked,
   isRestrictedIntelMode,
   resolveStrongholdTypeLabel,
   resolveStrongholdScaleLabel,
+  shouldObscureStrongholdPersonnel,
   strongholdHoverFieldValue,
   UNKNOWN_INTEL,
 } from "@/utils/strategyIntelDisplay";
@@ -37,8 +37,9 @@ import { matchesIntelRealmFilter } from "@/utils/intelRealmFilter";
 import { isIntelDevFieldsVisible } from "@/utils/strategyIntelDev";
 import type { MasterDataListPreset } from "@/utils/strategyIntelSystemColumns";
 import {
-  PERSONALITY_FIELD_LABELS,
+  hobbyCategoryLabel,
   hobbyCategoryValues,
+  personalityFieldLabel,
 } from "@/utils/strategyCharacterPersonality";
 
 export interface IntelForceRow {
@@ -1022,7 +1023,7 @@ export function strongholdIntelRows(
     .map((sh) => {
       const garrison = strongholdCityGarrison(sh);
       const siegeThreat = sh.siegeThreat ?? null;
-      const masked = isKnownStrongholdIntelMasked(sh, playerForceId);
+      const masked = shouldObscureStrongholdPersonnel(worldState, sh);
       const obscurePersonnel = masked;
       return {
         id: sh.id,
@@ -1030,48 +1031,53 @@ export function strongholdIntelRows(
         forceName: forceName(worldState, sh.forceId),
         position: `(${sh.x}, ${sh.y})`,
         category: strongholdTypeLabel(sh, worldState),
-        scale: strongholdHoverFieldValue(sh, "规模", resolveStrongholdScaleLabel(sh.population)),
+        scale: strongholdHoverFieldValue(worldState, sh, "规模", resolveStrongholdScaleLabel(sh.population)),
         lordName: obscurePersonnel ? UNKNOWN_INTEL : (sh.lordName?.trim() || "—"),
         mayorName: obscurePersonnel ? UNKNOWN_INTEL : (sh.mayorName?.trim() || "—"),
-        population: strongholdHoverFieldValue(sh, "人口", safePopulation(sh.population)),
-        stability: strongholdHoverFieldValue(sh, "治安", statPercent(sh.stability)),
-        popularFeelings: strongholdHoverFieldValue(sh, "民心", statPercent(sh.popularFeelings)),
+        population: strongholdHoverFieldValue(worldState, sh, "人口", safePopulation(sh.population)),
+        stability: strongholdHoverFieldValue(worldState, sh, "治安", statPercent(sh.stability)),
+        popularFeelings: strongholdHoverFieldValue(worldState, sh, "民心", statPercent(sh.popularFeelings)),
         maintenance: strongholdHoverFieldValue(
+          worldState,
           sh,
           "维护费",
           strongholdMaintenanceMoney(sh.population)
         ),
         cityGenerals: strongholdHoverFieldValue(
+          worldState,
           sh,
           "城内将",
           formatCityGenerals(worldState, sh.id)
         ),
-        wounded: strongholdHoverFieldValue(sh, "负伤", formatSoldiers(sh.garrisonWounded ?? 0)),
-        morale: strongholdHoverFieldValue(sh, "士气", statPercent(sh.morale)),
-        training: strongholdHoverFieldValue(sh, "训练度", statPercent(sh.training)),
-        cultureName: strongholdHoverFieldValue(sh, "文化", sh.cultureName?.trim() || "—"),
-        religionName: strongholdHoverFieldValue(sh, "信仰", sh.religionName?.trim() || "—"),
-        defense: strongholdHoverFieldValue(sh, "城防", formatDefense(sh.defense)),
-        garrisonTotal: strongholdHoverFieldValue(sh, "兵力", formatSoldiers(garrison)),
-        money: strongholdHoverFieldValue(sh, "金钱", formatMoney(sh.money)),
-        food: strongholdHoverFieldValue(sh, "粮食", formatFoodGo(sh.food)),
-        pollTaxRate: strongholdHoverFieldValue(sh, "人头税", `${statPercent(sh.pollTaxRate)}%`),
+        wounded: strongholdHoverFieldValue(worldState, sh, "负伤", formatSoldiers(sh.garrisonWounded ?? 0)),
+        morale: strongholdHoverFieldValue(worldState, sh, "士气", statPercent(sh.morale)),
+        training: strongholdHoverFieldValue(worldState, sh, "训练度", statPercent(sh.training)),
+        cultureName: strongholdHoverFieldValue(worldState, sh, "文化", sh.cultureName?.trim() || "—"),
+        religionName: strongholdHoverFieldValue(worldState, sh, "信仰", sh.religionName?.trim() || "—"),
+        defense: strongholdHoverFieldValue(worldState, sh, "城防", formatDefense(sh.defense)),
+        garrisonTotal: strongholdHoverFieldValue(worldState, sh, "兵力", formatSoldiers(garrison)),
+        money: strongholdHoverFieldValue(worldState, sh, "金钱", formatMoney(sh.money)),
+        food: strongholdHoverFieldValue(worldState, sh, "粮食", formatFoodGo(sh.food)),
+        pollTaxRate: strongholdHoverFieldValue(worldState, sh, "人头税", `${statPercent(sh.pollTaxRate)}%`),
         agricultureTaxRate: strongholdHoverFieldValue(
+          worldState,
           sh,
           "农业税",
           `${statPercent(sh.agricultureTaxRate)}%`
         ),
         commerceTaxRate: strongholdHoverFieldValue(
+          worldState,
           sh,
           "商业税",
           `${statPercent(sh.commerceTaxRate)}%`
         ),
-        tariffTaxRate: strongholdHoverFieldValue(sh, "关税", `${statPercent(sh.tariffTaxRate)}%`),
+        tariffTaxRate: strongholdHoverFieldValue(worldState, sh, "关税", `${statPercent(sh.tariffTaxRate)}%`),
         isLordResidence: oxMark(sh.isLordResidence),
         isFictional: oxMark(!sh.isHistorical),
         isAssault: oxMark(siegeThreat === "Assault"),
         isEncircle: oxMark(siegeThreat === "Encircle"),
         facilities: strongholdHoverFieldValue(
+          worldState,
           sh,
           "设施",
           strongholdFacilitiesSummary(sh)
@@ -1354,20 +1360,20 @@ export function personStatDetailRows(
   if (!isIntelDevFieldsVisible()) return rows;
 
   rows.push(
-    { label: PERSONALITY_FIELD_LABELS.temper, value: row.temper, dev: true },
-    { label: PERSONALITY_FIELD_LABELS.courage, value: row.courage, dev: true },
-    { label: PERSONALITY_FIELD_LABELS.principle, value: row.principle, dev: true },
-    { label: PERSONALITY_FIELD_LABELS.action, value: row.action, dev: true },
-    { label: PERSONALITY_FIELD_LABELS.friendship, value: row.friendship, dev: true },
-    { label: PERSONALITY_FIELD_LABELS.ambition, value: row.ambition, dev: true },
-    { label: "武具", value: row.hobbyWeapon, dev: true },
-    { label: "书籍", value: row.hobbyBook, dev: true },
-    { label: "艺术品", value: row.hobbyArt, dev: true },
-    { label: "舶来品", value: row.hobbyImport, dev: true },
-    { label: "财宝", value: row.hobbyTreasure, dev: true },
-    { label: PERSONALITY_FIELD_LABELS.desire, value: row.desire, dev: true },
-    { label: PERSONALITY_FIELD_LABELS.drinking, value: row.drinking, dev: true },
-    { label: PERSONALITY_FIELD_LABELS.fortune, value: row.fortune, dev: true }
+    { label: personalityFieldLabel("temper"), value: row.temper, dev: true },
+    { label: personalityFieldLabel("courage"), value: row.courage, dev: true },
+    { label: personalityFieldLabel("principle"), value: row.principle, dev: true },
+    { label: personalityFieldLabel("action"), value: row.action, dev: true },
+    { label: personalityFieldLabel("friendship"), value: row.friendship, dev: true },
+    { label: personalityFieldLabel("ambition"), value: row.ambition, dev: true },
+    { label: hobbyCategoryLabel("hobbyWeapon"), value: row.hobbyWeapon, dev: true },
+    { label: hobbyCategoryLabel("hobbyBook"), value: row.hobbyBook, dev: true },
+    { label: hobbyCategoryLabel("hobbyArt"), value: row.hobbyArt, dev: true },
+    { label: hobbyCategoryLabel("hobbyImport"), value: row.hobbyImport, dev: true },
+    { label: hobbyCategoryLabel("hobbyTreasure"), value: row.hobbyTreasure, dev: true },
+    { label: personalityFieldLabel("desire"), value: row.desire, dev: true },
+    { label: personalityFieldLabel("drinking"), value: row.drinking, dev: true },
+    { label: personalityFieldLabel("fortune"), value: row.fortune, dev: true }
   );
   return rows;
 }

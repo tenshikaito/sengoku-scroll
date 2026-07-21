@@ -165,6 +165,20 @@ public sealed class StrategyScenarioDefinition
     public List<StrategyCharacterDefinition> Characters { get; init; } = [];
 
     public required List<StrategyUnitDefinition> Units { get; init; }
+
+    /// <summary>开局显式外交关系（双向写入；省略则仅应用默认规则）。</summary>
+    public List<StrategyDiplomacyDefinition> Diplomacies { get; init; } = [];
+}
+
+/// <summary>剧本开局外交配置。</summary>
+public sealed class StrategyDiplomacyDefinition
+{
+    public required int ForceId { get; init; }
+
+    public required int TargetForceId { get; init; }
+
+    /// <summary>Neutral | Allied | Enemy。</summary>
+    public required string Relation { get; init; }
 }
 
 /// <summary>当主开局位置：领兵时在部队，否则在据点。</summary>
@@ -206,6 +220,9 @@ public sealed class StrategyForceDefinition
 
     /// <summary>宗主势力 Id；内藩/外藩时有效。</summary>
     public int? SuzerainForceId { get; init; }
+
+    /// <summary>为 true 时不参与开局默认互设敌对外交（与其他势力无外交条目）。</summary>
+    public bool ExcludeFromDefaultDiplomacy { get; init; }
 }
 
 /// <summary>据点开局配置。</summary>

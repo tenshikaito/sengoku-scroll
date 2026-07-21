@@ -1,6 +1,6 @@
 import type { StrategyStrongholdState, StrategyUnitState, StrategyWorldState } from "@/api/strategy";
-import { isPlayerRealmForce } from "@/utils/mapEntityColors";
-import { formatSoldiers } from "@/utils/strategyDisplayUnits";
+import { isPlayerRealmForce, resolveRealmRootId } from "@/utils/mapEntityColors";
+import { formatFoodGo, formatMoney, formatSoldiers } from "@/utils/strategyDisplayUnits";
 
 const UNKNOWN_INTEL = "未知";
 
@@ -73,6 +73,29 @@ export function isRestrictedIntelMode(worldState: StrategyWorldState): boolean {
   return resolveIntelMode(worldState) !== "Full";
 }
 
+function resolveShowAllyIntel(worldState: StrategyWorldState): boolean {
+  return (
+    worldState.startOptions?.showAllyIntel ??
+    worldState.visibility?.showAllyIntel ??
+    false
+  );
+}
+
+/** 开启显示同盟情报时：与同盟 Realm 共享具体数值；外藩除外。 */
+export function isAllyIntelVisible(worldState: StrategyWorldState, forceId: number): boolean {
+  if (!resolveShowAllyIntel(worldState)) return false;
+
+  const force = worldState.forces.find((f) => f.id === forceId);
+  if (!force || force.status === "OuterVassal") return false;
+
+  const playerRoot = resolveRealmRootId(worldState.playerForceId, worldState.forces);
+  const targetRoot = resolveRealmRootId(forceId, worldState.forces);
+  if (playerRoot === targetRoot) return false;
+
+  const diplomacy = worldState.diplomacies.find((d) => d.targetForceId === targetRoot);
+  return diplomacy?.relation === "Allied";
+}
+
 /** 困难模式（角色迷雾或 Hard 难度）：人物能力以高/中/低显示。 */
 export function isCharacterFogMode(worldState: StrategyWorldState): boolean {
   const fogMode =
@@ -104,13 +127,15 @@ export function resolveIntelBandTone(value: string | undefined | null): IntelBan
   }
 }
 
-/** 非自势力（含内藩）是否须隐藏具体数值（须谍报后才展示）。 */
+/** 非自势力是否须隐藏具体数值（须谍报后才展示；同盟/内藩在开启选项时可见）。 */
 export function isForeignIntelRestricted(
   worldState: StrategyWorldState,
   forceId: number,
 ): boolean {
   if (!isRestrictedIntelMode(worldState)) return false;
-  return !isPlayerRealmForce(forceId, worldState.playerForceId, worldState.forces);
+  if (isPlayerRealmForce(forceId, worldState.playerForceId, worldState.forces)) return false;
+  if (isAllyIntelVisible(worldState, forceId)) return false;
+  return true;
 }
 
 /** 敌方单位是否处于模糊情报（后端写入 soldiersDisplay 等）。 */
@@ -164,6 +189,43 @@ export function hoverTrainingLabel(
   return UNKNOWN_INTEL;
 }
 
+function hasUnitDomesticEspionage(worldState: StrategyWorldState, unitId: number): boolean {
+  return (
+    worldState.espionageIntel?.some(
+      (entry) =>
+        entry.targetKind === "Unit" &&
+        entry.targetId === unitId &&
+        (entry.scope === "Domestic" || entry.scope === "Both"),
+    ) ?? false
+  );
+}
+
+export function hoverMoneyLabel(
+  worldState: StrategyWorldState,
+  unit: StrategyUnitState,
+): string {
+  if (!isForeignIntelRestricted(worldState, unit.forceId)) {
+    return formatMoney(unit.money);
+  }
+  if (hasUnitDomesticEspionage(worldState, unit.id)) {
+    return formatMoney(unit.money);
+  }
+  return UNKNOWN_INTEL;
+}
+
+export function hoverFoodLabel(
+  worldState: StrategyWorldState,
+  unit: StrategyUnitState,
+): string {
+  if (!isForeignIntelRestricted(worldState, unit.forceId)) {
+    return formatFoodGo(unit.food);
+  }
+  if (hasUnitDomesticEspionage(worldState, unit.id)) {
+    return formatFoodGo(unit.food);
+  }
+  return UNKNOWN_INTEL;
+}
+
 function resolveStrongholdEspionageBand(
   stronghold: StrategyStrongholdState,
   label: string,
@@ -201,13 +263,48 @@ function hasEspionageUnknownMask(stronghold: StrategyStrongholdState): boolean {
   return stronghold.espionageSoldiersBand === "未知";
 }
 
+function hasStrongholdMilitaryEspionageIntel(stronghold: StrategyStrongholdState): boolean {
+  const band = stronghold.espionageSoldiersBand?.trim();
+  return Boolean(band && band !== "未知");
+}
+
+function hasStrongholdDomesticEspionageIntel(stronghold: StrategyStrongholdState): boolean {
+  const bands = [
+    stronghold.espionagePopulationBand,
+    stronghold.espionageFoodBand,
+    stronghold.espionageMoneyBand,
+  ];
+  return bands.some((band) => {
+    const trimmed = band?.trim();
+    return Boolean(trimmed && trimmed !== "未知");
+  });
+}
+
+export function shouldObscureStrongholdPersonnel(
+  worldState: StrategyWorldState,
+  stronghold: StrategyStrongholdState,
+): boolean {
+  if (stronghold.forceId === worldState.playerForceId) return false;
+  if (isKnownStrongholdIntelMasked(stronghold, worldState.playerForceId)) return true;
+  return isForeignIntelRestricted(worldState, stronghold.forceId);
+}
+
 export function strongholdHoverFieldValue(
+  worldState: StrategyWorldState | null | undefined,
   stronghold: StrategyStrongholdState,
   label: string,
   value: string,
 ): string {
   const espionageBand = strongholdEspionageBandOrUnknown(stronghold, label);
   if (espionageBand !== null) return espionageBand;
+
+  if (
+    worldState &&
+    isForeignIntelRestricted(worldState, stronghold.forceId) &&
+    KNOWN_STRONGHOLD_HIDDEN_LABELS.has(label)
+  ) {
+    return UNKNOWN_INTEL;
+  }
 
   if (
     hasEspionageUnknownMask(stronghold) &&
@@ -230,4 +327,31 @@ export function isKnownStrongholdIntelMasked(
   return stronghold.visibilityTier === "Known" && stronghold.forceId !== playerForceId;
 }
 
-export { UNKNOWN_INTEL };
+export function battlefieldParticipantMoraleLabel(
+  worldState: StrategyWorldState,
+  forceId: number,
+  morale: number,
+): string {
+  if (isForeignIntelRestricted(worldState, forceId)) return UNKNOWN_INTEL;
+  return `${Math.max(0, Math.min(100, morale))}%`;
+}
+
+export function battlefieldParticipantMoneyLabel(
+  worldState: StrategyWorldState,
+  forceId: number,
+  money: number,
+): string {
+  if (isForeignIntelRestricted(worldState, forceId)) return UNKNOWN_INTEL;
+  return formatMoney(money);
+}
+
+export function battlefieldParticipantFoodLabel(
+  worldState: StrategyWorldState,
+  forceId: number,
+  food: number,
+): string {
+  if (isForeignIntelRestricted(worldState, forceId)) return UNKNOWN_INTEL;
+  return formatFoodGo(food);
+}
+
+export { hasStrongholdMilitaryEspionageIntel, hasStrongholdDomesticEspionageIntel, UNKNOWN_INTEL };

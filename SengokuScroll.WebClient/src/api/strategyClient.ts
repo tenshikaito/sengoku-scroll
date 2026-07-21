@@ -21,6 +21,7 @@ import {
   STRATEGY_API_PREFIX,
   type StrategyApiMode,
 } from "./strategyDiagnostics";
+import { getAcceptLanguageHeader } from "@/i18n/localePreference";
 import {
   mockAdvanceDay,
   mockExecuteInstantBattle,
@@ -43,7 +44,10 @@ async function fetchLive<T>(
   const path = `${STRATEGY_API_PREFIX}${pathSuffix}`;
   const fullUrl = resolveRequestUrl(path);
 
-  const headers: HeadersInit = { "Content-Type": "application/json" };
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    "Accept-Language": getAcceptLanguageHeader(),
+  };
   const token = localStorage.getItem("token");
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -344,6 +348,27 @@ export const deployFromStronghold = (
       ),
     () => {
       throw new Error("Mock 模式不支持 deploy");
+    }
+  );
+
+export const recordEspionageIntel = (payload: {
+  targetKind: "Stronghold" | "Unit";
+  targetId: number;
+  scope?: "Military" | "Domestic" | "Both";
+  precision?: "Fuzzy" | "Exact";
+}) =>
+  request(
+    "POST",
+    "/espionage-intel",
+    () =>
+      fetchLive<unknown>("POST", "/espionage-intel", {
+        targetKind: payload.targetKind,
+        targetId: payload.targetId,
+        scope: payload.scope ?? "Both",
+        precision: payload.precision ?? "Fuzzy",
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持谍报");
     }
   );
 

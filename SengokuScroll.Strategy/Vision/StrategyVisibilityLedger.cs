@@ -109,6 +109,7 @@ public sealed class StrategyVisibilityLedger
             ControlMode = options.ControlMode.ToString(),
             InstantEventMessages = options.InstantEventMessages,
             AllySharedVision = options.AllySharedVision,
+            ShowAllyIntel = options.ShowAllyIntel,
             MapWidth = tileMap.Width,
             MapHeight = tileMap.Height,
             ExploredBits = state.PackExploredBits(),

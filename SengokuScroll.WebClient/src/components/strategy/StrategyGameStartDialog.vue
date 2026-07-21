@@ -1,363 +1,351 @@
 <script setup lang="ts">
-
 import { computed, reactive, ref, watch } from "vue";
-
 import {
-
   cloneGameStartOptions,
-
   enforceCharacterFogControl,
-
   GAME_START_PRESETS,
-
   resolveDifficultyFromOptions,
-
   type GameStartSettings,
-
   type PresetDifficultyId,
-
   type StrategyDifficultyId,
-
 } from "@/utils/strategyGameStartSettings";
-
-
+import {
+  FOG_MODE_HINTS,
+  INTEL_MODE_HINTS,
+  PRESET_SUMMARIES,
+  resolveGameStartOptionUiRules,
+} from "@/utils/strategyGameStartOptionRules";
 
 export type { GameStartSettings, StrategyDifficultyId };
 
-
-
 const props = defineProps<{
-
   visible: boolean;
-
   loading?: boolean;
-
   scenarioId?: string;
-
   allowCancel?: boolean;
-
 }>();
-
-
 
 const emit = defineEmits<{
-
   confirm: [settings: GameStartSettings];
-
   cancel: [];
-
 }>();
 
-
-
 const form = reactive<GameStartSettings>({
-
   scenarioId: props.scenarioId ?? "mini_kanto",
-
   difficulty: "Normal",
-
   customStartOptions: cloneGameStartOptions(GAME_START_PRESETS.Normal),
-
 });
 
-
-
 const applyingPreset = ref(false);
-
-
+const advancedExpanded = ref<string[]>([]);
 
 watch(
-
   () => props.scenarioId,
-
   (id) => {
-
     if (id) form.scenarioId = id;
-
   },
-
 );
 
-
-
 watch(
-
   () => form.difficulty,
-
   (difficulty) => {
-
-    if (difficulty === "Custom") return;
-
+    if (difficulty === "Custom") {
+      advancedExpanded.value = ["advanced"];
+      return;
+    }
     applyingPreset.value = true;
-
     Object.assign(form.customStartOptions, GAME_START_PRESETS[difficulty as PresetDifficultyId]);
-
     applyingPreset.value = false;
-
   },
-
 );
 
-
-
 watch(
-
   () => ({ ...form.customStartOptions }),
-
   () => {
-
     if (applyingPreset.value) return;
-
-
-
     if (enforceCharacterFogControl(form.customStartOptions)) return;
 
-
-
     const resolved = resolveDifficultyFromOptions(form.customStartOptions);
-
     if (form.difficulty !== resolved) {
-
       form.difficulty = resolved;
-
+      if (resolved === "Custom") advancedExpanded.value = ["advanced"];
     }
-
   },
-
   { deep: true },
-
 );
 
+const uiRules = computed(() => resolveGameStartOptionUiRules(form.customStartOptions));
 
+const presetSummary = computed(() => {
+  if (form.difficulty === "Custom") return null;
+  return PRESET_SUMMARIES[form.difficulty as PresetDifficultyId];
+});
 
-const controlLockedByCharacterFog = computed(
-
-  () => form.customStartOptions.fogMode === "Character",
-
+const fogModeHint = computed(
+  () => FOG_MODE_HINTS[form.customStartOptions.fogMode] ?? "",
 );
 
-
+const intelModeHint = computed(
+  () => INTEL_MODE_HINTS[form.customStartOptions.intelMode] ?? "",
+);
 
 const fogModeOptions = [
-
   { label: "无迷雾", value: "None" },
-
   { label: "势力迷雾", value: "Force" },
-
   { label: "角色视野", value: "Character" },
-
 ];
-
-
 
 const intelModeOptions = [
-
   { label: "显示所有情报", value: "Full" },
-
   { label: "仅显示已知情报", value: "ForceIntel" },
-
 ];
-
-
 
 const controlModeOptions = [
-
   { label: "全势力单位", value: "FullDirect" },
-
   { label: "仅角色", value: "DirectiveOnly" },
-
 ];
-
-
 
 const difficultyOptions = [
-
   { label: "简易", value: "Easy" },
-
   { label: "标准", value: "Normal" },
-
   { label: "困难", value: "Hard" },
-
   { label: "自定义", value: "Custom" },
-
 ];
 
-
-
 function onConfirm() {
-
   const options = cloneGameStartOptions(form.customStartOptions);
-
   enforceCharacterFogControl(options);
-
   const difficulty = resolveDifficultyFromOptions(options);
 
-
-
   emit("confirm", {
-
     scenarioId: form.scenarioId,
-
     difficulty,
-
     customStartOptions: options,
-
   });
-
 }
-
-
 
 function onClose() {
-
   if (props.allowCancel) emit("cancel");
-
 }
-
 </script>
 
-
-
 <template>
-
   <el-dialog
-
     :model-value="visible"
-
     title="开局设置"
-
-    width="520px"
-
+    width="560px"
     :close-on-click-modal="allowCancel"
-
     :close-on-press-escape="allowCancel"
-
     :show-close="allowCancel"
-
     @close="onClose"
-
   >
-
-    <el-form label-width="120px" label-position="left">
-
-      <el-form-item label="剧本">
-
+    <el-form label-width="96px" label-position="left" class="start-form">
+      <el-form-item label="剧本" class="compact-item">
         <el-input v-model="form.scenarioId" disabled />
-
       </el-form-item>
 
-      <el-form-item label="难度">
-
-        <el-select v-model="form.difficulty" style="width: 100%">
-
-          <el-option
-
-            v-for="opt in difficultyOptions"
-
-            :key="opt.value"
-
-            :label="opt.label"
-
-            :value="opt.value"
-
-          />
-
-        </el-select>
-
+      <el-form-item label="快速开始" class="compact-item">
+        <div class="control-stack">
+          <el-radio-group v-model="form.difficulty" class="option-radios">
+            <el-radio
+              v-for="opt in difficultyOptions"
+              :key="opt.value"
+              :value="opt.value"
+            >
+              {{ opt.label }}
+            </el-radio>
+          </el-radio-group>
+          <p v-if="presetSummary" class="field-hint">{{ presetSummary }}</p>
+          <p v-else class="field-hint">当前选项与预设不完全一致。</p>
+        </div>
       </el-form-item>
 
+      <el-collapse v-model="advancedExpanded" class="advanced-collapse">
+        <el-collapse-item name="advanced" title="高级设置">
+          <el-form-item label="地图视野" class="compact-item nested-item">
+            <div class="control-stack">
+              <el-radio-group v-model="form.customStartOptions.fogMode" class="option-radios">
+                <el-radio v-for="o in fogModeOptions" :key="o.value" :value="o.value">
+                  {{ o.label }}
+                </el-radio>
+              </el-radio-group>
+              <p class="field-hint">{{ fogModeHint }}</p>
+              <div v-if="uiRules.showAllySharedVision" class="sub-option">
+                <div class="sub-option-row">
+                  <span class="sub-option-label">同盟共享视野</span>
+                  <el-switch v-model="form.customStartOptions.allySharedVision" />
+                </div>
+              </div>
+              <p v-else-if="uiRules.controlModeLockedHint" class="field-hint muted">
+                {{ uiRules.controlModeLockedHint }}
+              </p>
+            </div>
+          </el-form-item>
 
+          <el-form-item label="情报谍报" class="compact-item nested-item">
+            <div class="control-stack">
+              <el-radio-group v-model="form.customStartOptions.intelMode" class="option-radios">
+                <el-radio v-for="o in intelModeOptions" :key="o.value" :value="o.value">
+                  {{ o.label }}
+                </el-radio>
+              </el-radio-group>
+              <p class="field-hint">{{ intelModeHint }}</p>
+              <div v-if="uiRules.showAllyIntel" class="sub-option">
+                <div class="sub-option-row">
+                  <span class="sub-option-label">显示同盟情报</span>
+                  <el-switch v-model="form.customStartOptions.showAllyIntel" />
+                </div>
+              </div>
+            </div>
+          </el-form-item>
 
-      <el-form-item label="迷雾视野">
-
-        <el-select v-model="form.customStartOptions.fogMode" style="width: 100%">
-
-          <el-option v-for="o in fogModeOptions" :key="o.value" :label="o.label" :value="o.value" />
-
-        </el-select>
-
-      </el-form-item>
-
-      <el-form-item label="情报模式">
-
-        <el-select v-model="form.customStartOptions.intelMode" style="width: 100%">
-
-          <el-option v-for="o in intelModeOptions" :key="o.value" :label="o.label" :value="o.value" />
-
-        </el-select>
-
-      </el-form-item>
-
-      <el-form-item label="控制模式">
-
-        <el-select
-
-          v-model="form.customStartOptions.controlMode"
-
-          style="width: 100%"
-
-          :disabled="controlLockedByCharacterFog"
-
-        >
-
-          <el-option v-for="o in controlModeOptions" :key="o.value" :label="o.label" :value="o.value" />
-
-        </el-select>
-
-      </el-form-item>
-
-      <el-form-item label="同盟共享视野">
-
-        <el-switch v-model="form.customStartOptions.allySharedVision" />
-
-      </el-form-item>
-
-      <el-form-item label="即时事件摘要">
-
-        <el-switch v-model="form.customStartOptions.instantEventMessages" />
-
-      </el-form-item>
-
-
+          <el-form-item label="指挥消息" class="compact-item nested-item">
+            <div class="control-stack">
+              <el-radio-group
+                v-if="uiRules.showControlMode"
+                v-model="form.customStartOptions.controlMode"
+                class="option-radios"
+              >
+                <el-radio v-for="o in controlModeOptions" :key="o.value" :value="o.value">
+                  {{ o.label }}
+                </el-radio>
+              </el-radio-group>
+              <p v-else class="field-hint muted">{{ uiRules.controlModeLockedHint }}</p>
+              <div class="sub-option">
+                <div class="sub-option-row">
+                  <span class="sub-option-label">即时事件摘要</span>
+                  <el-switch v-model="form.customStartOptions.instantEventMessages" />
+                </div>
+              </div>
+            </div>
+          </el-form-item>
+        </el-collapse-item>
+      </el-collapse>
 
       <p class="preset-hint">
-
-        选项与某一预设完全一致时难度会自动匹配；否则视为「自定义」。角色视野下控制模式固定为「仅角色」。难度仅影响迷雾与消息获取方式，不影响战斗成功率。
-
+        修改任一高级选项后，若与简易/标准/困难不完全一致，难度会自动标记为「自定义」。
       </p>
-
     </el-form>
 
-
-
     <template #footer>
-
       <el-button v-if="allowCancel" @click="emit('cancel')">取消</el-button>
-
       <el-button type="primary" :loading="loading" @click="onConfirm">开始游戏</el-button>
-
     </template>
-
   </el-dialog>
-
 </template>
 
-
-
 <style scoped>
-
-.preset-hint {
-
-  margin: 0;
-
-  font-size: 13px;
-
-  color: var(--el-text-color-secondary);
-
-  line-height: 1.5;
-
+.start-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
+.compact-item {
+  margin-bottom: 8px;
+}
+
+.compact-item :deep(.el-form-item__label) {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  line-height: 32px;
+  padding-right: 8px;
+}
+
+.compact-item :deep(.el-form-item__content) {
+  line-height: 1.4;
+  justify-content: flex-start;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.control-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+}
+
+.nested-item:first-of-type {
+  margin-top: 4px;
+}
+
+.option-radios {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+
+.option-radios :deep(.el-radio) {
+  margin-right: 0;
+  height: auto;
+}
+
+.sub-option {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--el-fill-color-light);
+  text-align: left;
+}
+
+.sub-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sub-option-label {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+.field-hint {
+  margin: 0;
+  width: 100%;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--el-text-color-secondary);
+}
+
+.field-hint.muted {
+  color: var(--el-text-color-placeholder);
+}
+
+.preset-hint {
+  margin: 8px 0 0;
+  width: 100%;
+  font-size: 12px;
+  text-align: left;
+  color: var(--el-text-color-secondary);
+  line-height: 1.4;
+}
+
+.advanced-collapse {
+  border: none;
+  margin-top: 4px;
+}
+
+.advanced-collapse :deep(.el-collapse-item__header) {
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: none;
+  height: 32px;
+  line-height: 32px;
+  padding-left: 0;
+}
+
+.advanced-collapse :deep(.el-collapse-item__wrap) {
+  border-bottom: none;
+}
+
+.advanced-collapse :deep(.el-collapse-item__content) {
+  padding: 0 0 4px;
+}
 </style>
-
-

@@ -22,12 +22,16 @@ import { formatInTransitSupplies, supplyStatusLabel } from "@/utils/strategySupp
 import { unitStanceLabel, unitStatusLabel } from "@/utils/strategyUnitLabels";
 import { directiveLabel, pendingPolicyText, siegeModeLabel, unitTargetSummary } from "@/utils/unitDirective";
 import {
+  hasStrongholdMilitaryEspionageIntel,
+  hoverFoodLabel,
+  hoverMoneyLabel,
   hoverMoraleLabel,
   hoverSoldiersLabel,
   hoverTrainingLabel,
   isForeignIntelRestricted,
   resolveStrongholdTypeLabel,
   resolveStrongholdScaleLabel,
+  shouldObscureStrongholdPersonnel,
   strongholdHoverFieldValue,
   UNKNOWN_INTEL,
 } from "@/utils/strategyIntelDisplay";
@@ -195,23 +199,14 @@ export function unitHoverIntelRows(
     { label: "攻城", value: siegeModeLabel(unit.siegeMode) },
     { label: "文化", value: textOrDash(unit.cultureName) },
     { label: "信仰", value: textOrDash(unit.religionName) },
+    { label: "金钱", value: hoverMoneyLabel(worldState, unit) },
+    { label: "粮草", value: hoverFoodLabel(worldState, unit) },
     {
-      label: "金钱",
+      label: "补给",
       value: isForeignIntelRestricted(worldState, unit.forceId)
-        ? unit.money > 0
-          ? formatMoney(unit.money)
-          : UNKNOWN_INTEL
-        : formatMoney(unit.money),
+        ? UNKNOWN_INTEL
+        : supplyStatusLabel(unit.supplyStatus),
     },
-    {
-      label: "粮草",
-      value: isForeignIntelRestricted(worldState, unit.forceId)
-        ? unit.food > 0
-          ? formatFoodGo(unit.food)
-          : UNKNOWN_INTEL
-        : formatFoodGo(unit.food),
-    },
-    { label: "补给", value: supplyStatusLabel(unit.supplyStatus) }
   );
 
   return rows;
@@ -281,6 +276,12 @@ function strongholdGarrisonSoldiers(
   const city = Number.isFinite(Number(stronghold.garrisonSoldiers))
     ? Math.max(0, Math.trunc(Number(stronghold.garrisonSoldiers)))
     : 0;
+  if (
+    isForeignIntelRestricted(worldState, stronghold.forceId) &&
+    !hasStrongholdMilitaryEspionageIntel(stronghold)
+  ) {
+    return city;
+  }
   const field = worldState.units
     .filter(
       (u) =>
@@ -300,8 +301,7 @@ function strongholdCoreIntelRows(
   worldState: StrategyWorldState,
   stronghold: StrategyStrongholdState
 ): IntelFieldRow[] {
-  const obscurePersonnel =
-    stronghold.visibilityTier === "Known" && stronghold.forceId !== worldState.playerForceId;
+  const obscurePersonnel = shouldObscureStrongholdPersonnel(worldState, stronghold);
 
   const rows: IntelFieldRow[] = [
     { label: "名称", value: stronghold.name },
@@ -318,6 +318,7 @@ function strongholdCoreIntelRows(
     {
       label: "规模",
       value: strongholdHoverFieldValue(
+        worldState,
         stronghold,
         "规模",
         resolveStrongholdScaleLabel(stronghold.population),
@@ -326,19 +327,20 @@ function strongholdCoreIntelRows(
   ];
 
   rows.push(
-    { label: "人口", value: strongholdHoverFieldValue(stronghold, "人口", safePopulation(stronghold.population)) },
-    { label: "金钱", value: strongholdHoverFieldValue(stronghold, "金钱", formatMoney(stronghold.money)) },
-    { label: "粮食", value: strongholdHoverFieldValue(stronghold, "粮食", formatFoodGo(stronghold.food)) },
+    { label: "人口", value: strongholdHoverFieldValue(worldState, stronghold, "人口", safePopulation(stronghold.population)) },
+    { label: "金钱", value: strongholdHoverFieldValue(worldState, stronghold, "金钱", formatMoney(stronghold.money)) },
+    { label: "粮食", value: strongholdHoverFieldValue(worldState, stronghold, "粮食", formatFoodGo(stronghold.food)) },
     {
       label: "兵力",
       value: strongholdHoverFieldValue(
+        worldState,
         stronghold,
         "兵力",
         formatSoldiers(strongholdGarrisonSoldiers(worldState, stronghold)),
       ),
     },
-    { label: "士气", value: strongholdHoverFieldValue(stronghold, "士气", statPercent(stronghold.morale)) },
-    { label: "训练度", value: strongholdHoverFieldValue(stronghold, "训练度", statPercent(stronghold.training)) },
+    { label: "士气", value: strongholdHoverFieldValue(worldState, stronghold, "士气", statPercent(stronghold.morale)) },
+    { label: "训练度", value: strongholdHoverFieldValue(worldState, stronghold, "训练度", statPercent(stronghold.training)) },
   );
 
   if (stronghold.siegeThreat) {
@@ -356,20 +358,24 @@ export function strongholdHoverIntelRows(
   const rows = strongholdCoreIntelRows(worldState, stronghold);
   rows.push({
     label: "城防",
-    value: strongholdHoverFieldValue(stronghold, "城防", formatDefense(stronghold.defense)),
+    value: strongholdHoverFieldValue(worldState, stronghold, "城防", formatDefense(stronghold.defense)),
   });
   return rows;
 }
 
-function strongholdTaxIntelRows(stronghold: StrategyStrongholdState): IntelFieldRow[] {
+function strongholdTaxIntelRows(
+  worldState: StrategyWorldState,
+  stronghold: StrategyStrongholdState,
+): IntelFieldRow[] {
   return [
     {
       label: "人头税",
-      value: strongholdHoverFieldValue(stronghold, "人头税", `${statPercent(stronghold.pollTaxRate)}%`),
+      value: strongholdHoverFieldValue(worldState, stronghold, "人头税", `${statPercent(stronghold.pollTaxRate)}%`),
     },
     {
       label: "农业税",
       value: strongholdHoverFieldValue(
+        worldState,
         stronghold,
         "农业税",
         `${statPercent(stronghold.agricultureTaxRate)}%`
@@ -378,6 +384,7 @@ function strongholdTaxIntelRows(stronghold: StrategyStrongholdState): IntelField
     {
       label: "商业税",
       value: strongholdHoverFieldValue(
+        worldState,
         stronghold,
         "商业税",
         `${statPercent(stronghold.commerceTaxRate)}%`
@@ -386,6 +393,7 @@ function strongholdTaxIntelRows(stronghold: StrategyStrongholdState): IntelField
     {
       label: "关税",
       value: strongholdHoverFieldValue(
+        worldState,
         stronghold,
         "关税",
         `${statPercent(stronghold.tariffTaxRate)}%`
@@ -407,7 +415,7 @@ export function strongholdDetailIntelRows(
 
   const rows: IntelFieldRow[] = [
     ...strongholdCoreIntelRows(worldState, stronghold).filter((row) => row.label !== "兵力"),
-    ...strongholdTaxIntelRows(stronghold),
+    ...strongholdTaxIntelRows(worldState, stronghold),
     { label: "虚构", value: stronghold.isHistorical ? "×" : "○" },
   ];
 
@@ -441,12 +449,12 @@ export function strongholdDetailIntelRows(
   } else if (cityGarrison > 0) {
     rows.push({
       label: "兵力",
-      value: strongholdHoverFieldValue(stronghold, "兵力", formatSoldiers(cityGarrison)),
+      value: strongholdHoverFieldValue(worldState, stronghold, "兵力", formatSoldiers(cityGarrison)),
     });
   } else {
     rows.push({
       label: "兵力",
-      value: strongholdHoverFieldValue(stronghold, "兵力", "无"),
+      value: strongholdHoverFieldValue(worldState, stronghold, "兵力", "无"),
     });
   }
 

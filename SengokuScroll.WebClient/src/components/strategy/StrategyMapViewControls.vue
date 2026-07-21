@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import type { StrategyMapMasterState, StrategyWorldState } from "@/api/strategy";
+import type { MapViewportWorldRect, MinimapNavigatePayload } from "./strategyMinimapTypes";
+import StrategyMinimap from "./StrategyMinimap.vue";
 import type { StrategyMapColorMode } from "@/utils/mapEntityColors";
 
 const props = defineProps<{
   modelValue: StrategyMapColorMode;
+  worldState?: StrategyWorldState | null;
+  mapMaster?: StrategyMapMasterState | null;
+  viewport?: MapViewportWorldRect | null;
 }>();
 
 const emit = defineEmits<{
   "update:modelValue": [StrategyMapColorMode];
+  navigate: [MinimapNavigatePayload];
 }>();
 
 const mode = computed({
@@ -24,6 +31,14 @@ const mode = computed({
       <el-radio-button label="Force">封地</el-radio-button>
       <el-radio-button label="Diplomacy">外交</el-radio-button>
     </el-radio-group>
+    <StrategyMinimap
+      v-if="worldState && mapMaster"
+      :world-state="worldState"
+      :map-master="mapMaster"
+      :map-color-mode="mode"
+      :viewport="viewport ?? null"
+      @navigate="emit('navigate', $event)"
+    />
   </div>
 </template>
 
@@ -40,6 +55,7 @@ const mode = computed({
   backdrop-filter: blur(6px);
   pointer-events: auto;
   flex-shrink: 0;
+  max-width: min(220px, 42vw);
 }
 
 .map-view-label {
