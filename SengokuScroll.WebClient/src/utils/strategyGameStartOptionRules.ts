@@ -1,36 +1,16 @@
-import type { GameStartOptionsState } from "@/api/strategyTypes";
-import type { PresetDifficultyId } from "@/utils/strategyGameStartSettings";
+/** @deprecated Import from `@/gameStartOptions/GameStartOptionsProfile` instead. */
+export {
+  enforceCharacterFogControl,
+  resolveGameStartOptionUiRules,
+} from "@/gameStartOptions/GameStartOptionsProfile";
 
-/** 开局选项 UI 可见性与说明（与 enforceCharacterFogControl 对齐）。 */
-export interface GameStartOptionUiRules {
-  showAllySharedVision: boolean;
-  showCharacterSharedVision: boolean;
-  showAllyIntel: boolean;
-  showControlMode: boolean;
-  controlModeLockedHint: string | null;
-}
+export type { GameStartOptionUiRules } from "@/gameStartOptions/types";
 
-export function resolveGameStartOptionUiRules(
-  options: GameStartOptionsState,
-): GameStartOptionUiRules {
-  const isCharacterFog = options.fogMode === "Character";
-  const isForceFog = options.fogMode === "Force";
-  const isForceIntel = options.intelMode === "ForceIntel";
-
-  return {
-    showAllySharedVision: isForceFog,
-    showCharacterSharedVision: isForceFog,
-    showAllyIntel: isForceIntel,
-    showControlMode: !isCharacterFog,
-    controlModeLockedHint: isCharacterFog ? "角色视野下固定为「仅角色」。" : null,
-  };
-}
-
-export const PRESET_SUMMARIES: Record<PresetDifficultyId, string> = {
+export const PRESET_SUMMARIES = {
   Easy: "无迷雾 · 全情报 · 全控 · 即时消息",
   Normal: "势力迷雾 · 已知情报 · 仅角色指挥",
   Hard: "角色视野 · 已知情报 · 仅角色指挥",
-};
+} as const;
 
 export const FOG_MODE_HINTS: Record<string, string> = {
   None: "全图可见，适合熟悉地图。",

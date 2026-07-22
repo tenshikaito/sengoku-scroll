@@ -79,7 +79,7 @@ import router from "./router";
 import { login } from "@/api";
 
 const route = useRoute();
-const isImmersiveRoute = computed(() => route.name === "strategy");
+const isImmersiveRoute = computed(() => route.name === "Home");
 
 const isLoggedIn = ref(false);
 const userName = ref("");

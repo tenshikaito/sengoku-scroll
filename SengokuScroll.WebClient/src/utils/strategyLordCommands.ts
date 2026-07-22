@@ -1,9 +1,11 @@
-import type { StrategyStrongholdState, StrategyWorldState } from "@/api/strategy";
+import type { StrategyWorldState } from "@/api/strategy";
+import { isCharacterAtLordResidence } from "@/intelDisplay/PersonLocationBehavior";
+import { resolvePlayerLordCharacterId } from "@/utils/strategyPlayerCharacter";
 
 /** 解析玩家当主居城据点。 */
 export function resolveLordResidenceStronghold(
   worldState: StrategyWorldState,
-): StrategyStrongholdState | null {
+) {
   const playerForceId = worldState.playerForceId;
   const force = worldState.forces.find((f) => f.id === playerForceId);
   if (force?.lordResidenceStrongholdId) {
@@ -21,27 +23,13 @@ export function isLordAtResidence(worldState: StrategyWorldState): boolean {
   const residence = resolveLordResidenceStronghold(worldState);
   if (!residence) return false;
 
-  const characterId = worldState.lord.characterId;
+  const characterId = resolvePlayerLordCharacterId(worldState);
   const character = characterId
     ? worldState.characters?.find((c) => c.id === characterId)
     : null;
 
-  if (character) {
-    if (character.locationType === "Stronghold") {
-      return character.strongholdId === residence.id;
-    }
-
-    if (character.locationType === "Unit") {
-      const unitId = worldState.lord.unitId;
-      const unit = unitId != null ? worldState.units.find((u) => u.id === unitId) : null;
-      if (unit) {
-        return unit.x === residence.x && unit.y === residence.y;
-      }
-    }
-
-    if (character.locationType === "Map") {
-      return worldState.lord.x === residence.x && worldState.lord.y === residence.y;
-    }
+  if (character && isCharacterAtLordResidence(worldState, character, residence)) {
+    return true;
   }
 
   return worldState.lord.x === residence.x && worldState.lord.y === residence.y;

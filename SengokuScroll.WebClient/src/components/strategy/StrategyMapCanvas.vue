@@ -10,8 +10,14 @@ import { logStrategyMapCoords } from "@/utils/strategyMapDebug";
 import { terrainFillColor, terrainStrokeColor } from "@/utils/terrainColors";
 import { maskSoldiersFirstDigit } from "@/utils/strategyDisplayUnits";
 import { mapTileIndex } from "@/utils/mapTileLookup";
-import { resolveRoadCellStyle } from "@/utils/strategyFogCell";
+import { isTileExplored, isTileVisible, resolveRoadCellStyle } from "@/utils/strategyFogCell";
 import { collectMapCellEntityOptions } from "@/utils/mapCellEntityPicker";
+import { resolveMapEdgeScrollVelocity } from "@/mapInteraction/MapEdgeScrollBehavior";
+import { emitMapCellEntityToCanvas } from "@/mapCellEntity/MapCellEntityKindBehavior";
+import {
+  battlefieldAggressorSoldierDisplayTotal,
+  battlefieldMapMarkerLabel,
+} from "@/intelDisplay/BattlefieldKindPresentationBehavior";
 
 const TILE_SIZE = 48;
 const ROAD_LINE_COLOR_BRIGHT = 0xfacc15;
@@ -191,22 +197,18 @@ function edgeScrollVelocity(clientX: number, clientY: number): { dx: number; dy:
   if (!hostRef.value) return { dx: 0, dy: 0 };
 
   const rect = hostRef.value.getBoundingClientRect();
-  let dx = 0;
-  let dy = 0;
-
-  if (clientX < rect.left || clientX - rect.left < EDGE_ZONE_PX) {
-    dx = EDGE_SCROLL_BASE_SPEED;
-  } else if (clientX > rect.right || clientX - rect.left >= rect.width - EDGE_ZONE_PX) {
-    dx = -EDGE_SCROLL_BASE_SPEED;
-  }
-
-  if (clientY < rect.top || clientY - rect.top < EDGE_ZONE_PX) {
-    dy = EDGE_SCROLL_BASE_SPEED;
-  } else if (clientY > rect.bottom || clientY - rect.top >= rect.height - EDGE_ZONE_PX) {
-    dy = -EDGE_SCROLL_BASE_SPEED;
-  }
-
-  return { dx, dy };
+  return resolveMapEdgeScrollVelocity({
+    clientX,
+    clientY,
+    rectLeft: rect.left,
+    rectTop: rect.top,
+    rectRight: rect.right,
+    rectBottom: rect.bottom,
+    rectWidth: rect.width,
+    rectHeight: rect.height,
+    edgeZonePx: EDGE_ZONE_PX,
+    baseSpeed: EDGE_SCROLL_BASE_SPEED,
+  });
 }
 
 function edgeScrollStep() {
@@ -269,26 +271,14 @@ function isInsideMap(x: number, y: number): boolean {
   return x >= 0 && y >= 0 && x < map.width && y < map.height;
 }
 
-function fogDisabled(): boolean {
-  const mode = props.worldState?.visibility?.fogMode;
-  return !mode || mode === "None";
+function isLocalTileExplored(x: number, y: number): boolean {
+  if (!props.worldState) return true;
+  return isTileExplored(props.worldState, x, y);
 }
 
-function isTileExplored(x: number, y: number): boolean {
-  if (fogDisabled()) return true;
-  const vis = props.worldState?.visibility;
-  if (!vis) return true;
-  const idx = y * vis.mapWidth + x;
-  const word = Math.floor(idx / 32);
-  const bit = idx % 32;
-  return (((vis.exploredBits[word] ?? 0) >>> bit) & 1) === 1;
-}
-
-function isTileVisible(x: number, y: number): boolean {
-  if (fogDisabled()) return true;
-  const vis = props.worldState?.visibility;
-  if (!vis) return true;
-  return vis.visibleCells.some((c) => c.x === x && c.y === y);
+function isLocalTileVisible(x: number, y: number): boolean {
+  if (!props.worldState) return true;
+  return isTileVisible(props.worldState, x, y);
 }
 
 function getCoreVisibleCellBounds(): CellBounds | null {
@@ -526,8 +516,8 @@ function drawMap() {
 
   for (let y = yStart; y <= yEnd; y++) {
     for (let x = xStart; x <= xEnd; x++) {
-      const explored = isTileExplored(x, y);
-      const visible = isTileVisible(x, y);
+      const explored = isLocalTileExplored(x, y);
+      const visible = isLocalTileVisible(x, y);
 
       if (!explored) {
         const black = new Graphics();
@@ -626,7 +616,7 @@ function drawMap() {
   for (const landmark of master.landmarks ?? []) {
     if (!isInsideMap(landmark.x, landmark.y)) continue;
     if (!isCellInViewport(landmark.x, landmark.y, bounds)) continue;
-    if (!isTileVisible(landmark.x, landmark.y)) continue;
+    if (!isLocalTileVisible(landmark.x, landmark.y)) continue;
 
     const cx = landmark.x * TILE_SIZE + TILE_SIZE / 2;
     const cy = landmark.y * TILE_SIZE + TILE_SIZE * 0.22;
@@ -807,7 +797,7 @@ function drawEntities() {
     entityLayer.addChild(marker);
 
     const label = new Text({
-      text: battlefield.kind === "Siege" ? "围" : "战",
+      text: battlefieldMapMarkerLabel(battlefield.kind),
       style: {
         fontSize: 14,
         fill: 0xdc2626,
@@ -820,8 +810,7 @@ function drawEntities() {
     entityLayer.addChild(label);
 
     // 业务：围城格仅显示攻方兵力；野战格不显示数字
-    const siegeCount =
-      battlefield.kind === "Siege" ? battlefield.aggressorSoldierTotal : 0;
+    const siegeCount = battlefieldAggressorSoldierDisplayTotal(battlefield);
     if (siegeCount > 0) {
       const playerForceId = props.worldState?.playerForceId ?? 0;
       const defender = props.worldState?.strongholds.find(
@@ -843,7 +832,7 @@ function drawEntities() {
 
   for (const convoy of props.worldState.supplyConvoys) {
     if (!isCellInViewport(convoy.x, convoy.y, bounds)) continue;
-    if (!isTileVisible(convoy.x, convoy.y)) continue;
+    if (!isLocalTileVisible(convoy.x, convoy.y)) continue;
     const color = entityMapColor(convoy.forceId);
     const cx = convoy.x * TILE_SIZE + TILE_SIZE * 0.72;
     const cy = convoy.y * TILE_SIZE + TILE_SIZE * 0.28;
@@ -881,7 +870,7 @@ function drawEntities() {
 
   for (const carrier of props.worldState.messageCarriers) {
     if (!isCellInViewport(carrier.x, carrier.y, bounds)) continue;
-    if (!isTileVisible(carrier.x, carrier.y)) continue;
+    if (!isLocalTileVisible(carrier.x, carrier.y)) continue;
     const color = entityMapColor(carrier.forceId);
     const cx = carrier.x * TILE_SIZE + TILE_SIZE * 0.28;
     const cy = carrier.y * TILE_SIZE + TILE_SIZE * 0.72;
@@ -1137,20 +1126,16 @@ function dispatchCellSelection(cell: { x: number; y: number }, screenX: number, 
 
   if (entities.length === 1) {
     const entity = entities[0]!;
-    switch (entity.kind) {
-      case "unit":
-        emit("selectUnit", { unitId: entity.id, screenX, screenY });
-        break;
-      case "character":
-        emit("selectCharacter", { characterId: entity.id, screenX, screenY });
-        break;
-      case "stronghold":
-        emit("selectStronghold", { strongholdId: entity.id, screenX, screenY });
-        break;
-      case "convoy":
-        emit("selectConvoy", { convoyId: entity.id, screenX, screenY });
-        break;
-    }
+    emitMapCellEntityToCanvas(
+      entity.kind,
+      {
+        selectUnit: (payload) => emit("selectUnit", payload),
+        selectCharacter: (payload) => emit("selectCharacter", payload),
+        selectStronghold: (payload) => emit("selectStronghold", payload),
+        selectConvoy: (payload) => emit("selectConvoy", payload),
+      },
+      { id: entity.id, screenX, screenY },
+    );
     return;
   }
 

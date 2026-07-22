@@ -5,6 +5,7 @@ import {
   PERSONALITY_FIELD_KEYS,
 } from "@/utils/strategyCharacterPersonality";
 import { resolveIntelTabLabel } from "@/i18n/intelColumns";
+import { listPresetTabsForMainTab as listPresetTabsFromBehaviors } from "@/intelDisplay/IntelDisplayBehaviors";
 
 export interface IntelTableColumnDef {
   prop: string;
@@ -334,30 +335,9 @@ export const DIPLOMACY_BRIEF_COLUMNS: IntelTableColumnDef[] = [
 export type EntityListPreset = ForceListPreset | StrongholdListPreset | PersonListPreset;
 
 export function listPresetTabsForMainTab(
-  mainTab: "force" | "stronghold" | "person"
+  mainTab: "force" | "stronghold" | "person",
 ): { name: string; label: string }[] {
-  switch (mainTab) {
-    case "force":
-      return [
-        { name: "status", label: resolveIntelTabLabel("force", "status", "状态") },
-        { name: "military", label: resolveIntelTabLabel("force", "military", "军备") },
-      ];
-    case "stronghold":
-      return [
-        { name: "status", label: resolveIntelTabLabel("stronghold", "status", "状态") },
-        { name: "supplies", label: resolveIntelTabLabel("stronghold", "supplies", "内政") },
-        { name: "military", label: resolveIntelTabLabel("stronghold", "military", "军备") },
-      ];
-    case "person":
-      return [
-        { name: "status", label: resolveIntelTabLabel("person", "status", "状态") },
-        { name: "office", label: resolveIntelTabLabel("person", "office", "仕官") },
-        { name: "order", label: resolveIntelTabLabel("person", "order", "命令") },
-        { name: "personal", label: resolveIntelTabLabel("person", "personal", "个人") },
-        { name: "ability1", label: resolveIntelTabLabel("person", "ability1", "能力1") },
-        { name: "ability2", label: resolveIntelTabLabel("person", "ability2", "能力2") },
-      ];
-  }
+  return listPresetTabsFromBehaviors(mainTab);
 }
 
 export function masterDataPresetTabs(): { name: MasterDataListPreset; label: string }[] {

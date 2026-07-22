@@ -13,6 +13,7 @@ using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Policies.FieldBattle;
 using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Unit;
 
@@ -36,7 +37,7 @@ public sealed class StrategyBattleResolutionSystem(
     BattleAftermathHelper aftermathHelper,
     IStrategyDayDebugLog dayDebugLog,
     ITextLocalizer localizer,
-    GameRuleConfig rules) : IStrategyBattleResolutionSystem
+    GameRuleConfig rules) : IStrategyBattleResolutionSystem, IFieldBattleDayHost
 {
     /// <summary>接敌战斗在移动/接敌扫描之后、信使投递当日战报之前结算。</summary>
     public int Order { get; } = 26;
@@ -107,42 +108,58 @@ public sealed class StrategyBattleResolutionSystem(
                 isPursuitEngagement,
                 bothOrdered);
 
-            if (dayResult.Kind == FieldBattleAutoResolver.FieldBattleDayKind.Standoff)
-            {
-                // 业务：对峙日仅维持战场状态，特定日数推送对峙战报
-                engagementRegistry.SetStandoffDays(
-                    roleAttacker.Id,
-                    roleDefender.Id,
-                    dayResult.StandoffDays);
-
-                SyncBattlefieldStandoffDays(roleAttacker, roleDefender, dayResult.StandoffDays, gameData);
-
-                BattlefieldEngagementRules.MaintainStandoff(roleAttacker, roleDefender.Id);
-                BattlefieldEngagementRules.MaintainStandoff(roleDefender, roleAttacker.Id);
-
-                if (BattleConstants.IsStandoffReportDay(dayResult.StandoffDays))
-                    DispatchStandoffReports(roleAttacker, roleDefender, dayResult.StandoffDays, gameData);
-
-                dayDebugLog.LogLocalized(
-                    "Battle",
-                    LocalizationKeys.Debug.BattleStandoff,
-                    roleAttacker.Name,
-                    roleDefender.Name,
-                    dayResult.StandoffDays);
-
+            if (FieldBattleDayHandlerRegistry.Handle(new FieldBattleDayContext
+                {
+                    DayResult = dayResult,
+                    BothOrdered = bothOrdered,
+                    Host = this
+                }))
                 continue;
-            }
 
-            // 业务：决战/劝降后清除攻击命令并应用战果
-            engagementRegistry.ClearStandoff(roleAttacker.Id, roleDefender.Id);
             ClearAttackOrder(challenger);
             ClearAttackOrder(defender);
-
-            if (dayResult.Kind == FieldBattleAutoResolver.FieldBattleDayKind.Surrender)
-                ApplySurrenderBattle(dayResult, gameData);
-            else
-                ApplyDecisiveBattle(dayResult, bothOrdered, gameData);
         }
+    }
+
+    void IFieldBattleDayHost.HandleStandoff(FieldBattleAutoResolver.FieldBattleDayResult dayResult)
+    {
+        var gameData = context.GameWorldContext.GameWorld.GameData;
+        var roleAttacker = dayResult.CommittedAggressor;
+        var roleDefender = dayResult.CommittedDefender;
+
+        engagementRegistry.SetStandoffDays(
+            roleAttacker.Id,
+            roleDefender.Id,
+            dayResult.StandoffDays);
+
+        SyncBattlefieldStandoffDays(roleAttacker, roleDefender, dayResult.StandoffDays, gameData);
+
+        BattlefieldEngagementRules.MaintainStandoff(roleAttacker, roleDefender.Id);
+        BattlefieldEngagementRules.MaintainStandoff(roleDefender, roleAttacker.Id);
+
+        if (BattleConstants.IsStandoffReportDay(dayResult.StandoffDays))
+            DispatchStandoffReports(roleAttacker, roleDefender, dayResult.StandoffDays, gameData);
+
+        dayDebugLog.LogLocalized(
+            "Battle",
+            LocalizationKeys.Debug.BattleStandoff,
+            roleAttacker.Name,
+            roleDefender.Name,
+            dayResult.StandoffDays);
+    }
+
+    void IFieldBattleDayHost.HandleSurrender(FieldBattleAutoResolver.FieldBattleDayResult dayResult)
+    {
+        engagementRegistry.ClearStandoff(dayResult.CommittedAggressor.Id, dayResult.CommittedDefender.Id);
+        ApplySurrenderBattle(dayResult, context.GameWorldContext.GameWorld.GameData);
+    }
+
+    void IFieldBattleDayHost.HandleDecisive(
+        FieldBattleAutoResolver.FieldBattleDayResult dayResult,
+        bool bothOrdered)
+    {
+        engagementRegistry.ClearStandoff(dayResult.CommittedAggressor.Id, dayResult.CommittedDefender.Id);
+        ApplyDecisiveBattle(dayResult, bothOrdered, context.GameWorldContext.GameWorld.GameData);
     }
 
     private void ApplySurrenderBattle(

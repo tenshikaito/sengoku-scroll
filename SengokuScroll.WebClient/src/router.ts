@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from "vue-router";
 import Layout from "@/Layout.vue";
 import Home from "@/views/Home.vue";
 import Game from "@/views/Game.vue";
-import Strategy from "@/views/Strategy.vue";
 import Unauthorized from "@/views/401.vue";
 import NotFound from "@/views/404.vue";
 
@@ -26,8 +25,7 @@ const routes = [
       },
       {
         path: "/strategy",
-        name: "strategy",
-        component: Strategy,
+        redirect: { name: "Home" },
       },
     ],
   },

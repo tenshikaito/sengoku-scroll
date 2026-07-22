@@ -9,6 +9,7 @@ import type {
   MapPoint,
 } from "./strategyTypes";
 import { buildManhattanPath, concatPathSegments } from "@/utils/strategyPathUtils";
+import { GameStartOptionsProfile } from "@/gameStartOptions/GameStartOptionsProfile";
 
 function enrichMockStrongholds(
   items: (Partial<StrategyStrongholdState> &
@@ -555,9 +556,7 @@ export function mockOrderUnitAttack(unitId: number, x: number, y: number): Strat
 
 export function mockAdvanceDay(): StrategyAdvanceDayResponse {
   const events: StrategyEvent[] = [];
-  const instantEnabled =
-    mockState.startOptions?.instantEventMessages === true
-    || mockState.visibility?.instantEventMessages === true;
+  const instantEnabled = GameStartOptionsProfile.fromWorldState(mockState).shouldShowInstantEventSummary();
 
   for (const [unitId, target] of [...pendingAttacks.entries()]) {
     pendingAttacks.delete(unitId);

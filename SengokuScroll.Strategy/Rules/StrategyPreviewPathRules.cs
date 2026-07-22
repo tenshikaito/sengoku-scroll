@@ -4,6 +4,7 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Rules;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Policies.GameStart;
 using SengokuScroll.Strategy.Vision;
 
 namespace SengokuScroll.Strategy.Rules;
@@ -18,7 +19,8 @@ public static class StrategyPreviewPathRules
         StrategyScenarioMeta meta,
         ForceVisibilityState? visibility)
     {
-        if (visibility is null || meta.StartOptions.FogMode == Models.StrategyFogMode.None)
+        if (visibility is null
+            || GameStartOptionsProfile.Create(meta.StartOptions, meta.Difficulty).Fog.FogDisabled)
             return null;
 
         return location =>

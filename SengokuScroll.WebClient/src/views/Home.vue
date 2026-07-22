@@ -1,60 +1,51 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { nextTick, ref } from "vue";
+import StrategyPanel from "@/views/Strategy.vue";
 import StrategyGameStartDialog from "@/components/strategy/StrategyGameStartDialog.vue";
 import type { GameStartSettings } from "@/utils/strategyGameStartSettings";
-import { writeGameStartSettings, buildGameStartNavigationState } from "@/utils/strategyGameStartSettings";
+import { writeGameStartSettings } from "@/utils/strategyGameStartSettings";
 
-const router = useRouter();
-const route = useRoute();
 const dialogVisible = ref(false);
+const gameActive = ref(false);
+const strategyRef = ref<InstanceType<typeof StrategyPanel> | null>(null);
 
-function openDialog() {
+function openGameStartDialog() {
   dialogVisible.value = true;
 }
 
-function closeDialog() {
+function closeGameStartDialog() {
   dialogVisible.value = false;
-  if (route.query.configure) {
-    void router.replace({ name: "Home" });
-  }
 }
 
-function onConfirm(settings: GameStartSettings) {
+async function onConfirm(settings: GameStartSettings) {
   writeGameStartSettings(settings);
   dialogVisible.value = false;
-  void router.push({
-    name: "strategy",
-    state: buildGameStartNavigationState(settings),
-  });
+  gameActive.value = true;
+  await nextTick();
+  await strategyRef.value?.startGameWithSettings(settings);
 }
-
-onMounted(() => {
-  if (route.query.configure === "1") {
-    openDialog();
-  }
-});
-
-watch(
-  () => route.query.configure,
-  (value) => {
-    if (value === "1") openDialog();
-  }
-);
 </script>
 
 <template>
   <div class="home">
-    <h1>战国绘卷 · SengokuScroll</h1>
-    <p>策略模式 M2-b 纵切：PixiJS 主地图 + 单位移动。</p>
-    <el-button type="primary" size="large" @click="openDialog">进入策略模式</el-button>
+    <section v-if="!gameActive" class="home-landing">
+      <h1>战国绘卷 · SengokuScroll</h1>
+      <p>策略模式 M2-b 纵切：PixiJS 主地图 + 单位移动。</p>
+      <el-button type="primary" size="large" @click="openGameStartDialog">启动游戏</el-button>
+    </section>
+
+    <StrategyPanel
+      v-else
+      ref="strategyRef"
+      @request-game-start="openGameStartDialog"
+    />
 
     <StrategyGameStartDialog
       :visible="dialogVisible"
       allow-cancel
       scenario-id="mini_kanto"
       @confirm="onConfirm"
-      @cancel="closeDialog"
+      @cancel="closeGameStartDialog"
     />
   </div>
 </template>
@@ -63,7 +54,19 @@ watch(
 .home {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.home-landing {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 16px;
   padding: 48px 24px;
   text-align: center;

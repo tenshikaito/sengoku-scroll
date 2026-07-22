@@ -208,6 +208,13 @@ public sealed class StrategySimulationHost : IDisposable
             if (!simulation.World.GameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
 
+            var control = PlayerUnitControlRules.ValidateDirectUnitCommand(
+                unit,
+                simulation.ScenarioMeta,
+                simulation.World.GameData);
+            if (!control.IsSuccess)
+                return control.Error!;
+
             if (SiegeOrderRules.IsSiegeMovementLocked(unit))
                 return GameError.MovementError.CannotMoveToTile;
 
@@ -294,6 +301,13 @@ public sealed class StrategySimulationHost : IDisposable
             if (!simulation.World.GameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
 
+            var control = PlayerUnitControlRules.ValidateDirectUnitCommand(
+                unit,
+                simulation.ScenarioMeta,
+                simulation.World.GameData);
+            if (!control.IsSuccess)
+                return control.Error!;
+
             UnitBattleActions.QueueAttack(unit, preview.Value!.DefenderUnitId);
 
             simulation.MovementTrace.Log(
@@ -318,6 +332,13 @@ public sealed class StrategySimulationHost : IDisposable
 
             if (!simulation.World.GameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
+
+            var control = PlayerUnitControlRules.ValidateDirectUnitCommand(
+                unit,
+                simulation.ScenarioMeta,
+                simulation.World.GameData);
+            if (!control.IsSuccess)
+                return control.Error!;
 
             if (!simulation.World.GameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
                 return GameError.DataNotFound;

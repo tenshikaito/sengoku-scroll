@@ -62,10 +62,11 @@ public sealed class GameError(string code, params object[] data)
         /// </summary>
         public static GameError UnitNotFound { get; } = new(nameof(UnitNotFound));
 
-        /// <summary>
-        /// 没有找到攻击目标
-        /// </summary>
+        /// <summary>没有找到攻击目标</summary>
         public static GameError AttackTargetNotFound { get; } = new(nameof(AttackTargetNotFound));
+
+        /// <summary>指令模式下仅当主所在格部队可直接操作。</summary>
+        public static GameError UnitNotDirectlyControllable { get; } = new(nameof(UnitNotDirectlyControllable));
     }
 
     public static class MovementError

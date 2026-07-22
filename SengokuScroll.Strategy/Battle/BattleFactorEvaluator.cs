@@ -286,68 +286,13 @@ public static class BattleFactorEvaluator
 
     /// <summary>姿态修正：攻方进攻 +5% 战力，守方坚守 +12% 战力/+4% 胜率等。</summary>
     private static void ApplyStance(Unit unit, bool isAttacker, BattleFactorBreakdown b)
-    {
-        switch (unit.Stance)
-        {
-            case UnitStance.Attacking when isAttacker:
-                b.AttackerPowerScale *= 1.05;
-                break;
-            case UnitStance.Hold when !isAttacker:
-                b.DefenderPowerScale *= 1.12;
-                b.DefenderWinRateDelta += 4;
-                break;
-            case UnitStance.Alert when !isAttacker:
-                b.DefenderWinRateDelta += 2;
-                break;
-            case UnitStance.Maneuver when isAttacker:
-                b.AttackerWinRateDelta += 2;
-                break;
-            case UnitStance.Surrounding when isAttacker:
-                b.DefenderWinRateDelta -= 6;
-                b.DefenderCasualtyScale *= 1.1;
-                break;
-        }
-    }
+        => Policies.Battle.UnitStanceBattleEffectRegistry.Apply(unit, isAttacker, b);
 
-    /// <summary>单位状态修正：振奋/恐惧/混乱/伏击/被围等。</summary>
     private static void ApplyStatus(Unit unit, bool isAttacker, BattleFactorBreakdown b)
-    {
-        switch (unit.Status)
-        {
-            case UnitStatus.Inspiring:
-                if (isAttacker) b.AttackerWinRateDelta += 8;
-                else b.DefenderWinRateDelta += 8;
-                break;
-            case UnitStatus.Fearful:
-                if (isAttacker) b.AttackerWinRateDelta -= 12;
-                else b.DefenderWinRateDelta -= 12;
-                break;
-            case UnitStatus.Chaos:
-                // 业务：混乱战力 ×0.35 且禁止强袭
-                if (isAttacker) b.AttackerPowerScale *= 0.35;
-                else b.DefenderPowerScale *= 0.35;
-                b.BlockCommit = true;
-                break;
-            case UnitStatus.Ambushing when isAttacker:
-                b.AttackerWinRateDelta += 18;
-                b.AttackerCasualtyScale *= 0.85;
-                break;
-            case UnitStatus.BeingSurround when !isAttacker:
-                b.DefenderWinRateDelta -= 10;
-                b.DefenderCasualtyScale *= 1.15;
-                break;
-        }
-    }
+        => Policies.Battle.UnitStatusBattleEffectRegistry.Apply(unit, isAttacker, b);
 
-    /// <summary>方针门禁：撤退禁止强袭，袭扰攻方伤亡 +8%。</summary>
     private static void ApplyDirective(Unit unit, bool isAttacker, BattleFactorBreakdown b)
-    {
-        if (unit.Directive == UnitDirective.Retreat)
-            b.BlockCommit = true;
-
-        if (unit.Directive == UnitDirective.Raid && isAttacker)
-            b.AttackerCasualtyScale *= 1.08;
-    }
+        => Policies.Battle.UnitDirectiveBattleEffectRegistry.Apply(unit, isAttacker, b);
 
     /// <summary>敌方补给断绝/紧张与携粮天数对己方胜率的加成。</summary>
     private static void ApplySupplyFactors(BattleEvaluationContext ctx, BattleFactorBreakdown b)

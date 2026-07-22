@@ -67,57 +67,5 @@ public static class BattleDirectiveRules
         BattleCombatDirective directive,
         bool isAttacker,
         BattleFactorBreakdown b)
-    {
-        switch (directive)
-        {
-            // 业务：死守——守方战力 +20%、胜率 +5%，双方伤亡均略增
-            case BattleCombatDirective.FightToDeath when !isAttacker:
-                b.DefenderPowerScale *= 1.20;
-                b.DefenderCasualtyScale *= 1.12;
-                b.AttackerCasualtyScale *= 1.05;
-                b.DefenderWinRateDelta += 5;
-                b.Add("directive.fight_to_death", "死守", 0, 5, "守方");
-                break;
-
-            // 业务：坚守——守方战力 +8%、胜率 +2%
-            case BattleCombatDirective.HoldLine when !isAttacker:
-                b.DefenderPowerScale *= 1.08;
-                b.DefenderWinRateDelta += 2;
-                b.Add("directive.hold_line", "坚守", 0, 2, "守方");
-                break;
-
-            // 业务：迎击——主动方战力 +8%、胜率 +3%
-            case BattleCombatDirective.CounterAttack when isAttacker:
-                b.AttackerPowerScale *= 1.08;
-                b.AttackerWinRateDelta += 3;
-                b.Add("directive.counter_attack", "迎击", 3, detail: "攻方");
-                break;
-
-            case BattleCombatDirective.CounterAttack when !isAttacker:
-                b.DefenderPowerScale *= 1.08;
-                b.DefenderWinRateDelta += 3;
-                b.Add("directive.counter_attack", "迎击", 0, 3, "守方");
-                break;
-
-            // 业务：撤退——胜率 -15%、伤亡 -25%，Commit 阶段禁止强袭
-            case BattleCombatDirective.AttemptRetreat:
-                if (isAttacker)
-                {
-                    b.AttackerWinRateDelta -= 15;
-                    if (ctx.Phase == BattleEvaluationPhase.Commit)
-                        b.BlockCommit = true;
-                    b.AttackerCasualtyScale *= 0.75;
-                }
-                else
-                {
-                    b.DefenderWinRateDelta -= 15;
-                    if (ctx.Phase == BattleEvaluationPhase.Commit)
-                        b.BlockCommit = true;
-                    b.DefenderCasualtyScale *= 0.75;
-                }
-
-                b.Add("directive.retreat", "撤退", isAttacker ? -15 : 0, isAttacker ? 0 : -15);
-                break;
-        }
-    }
+        => Policies.Battle.BattleCombatDirectiveEffectRegistry.Apply(ctx, directive, isAttacker, b);
 }

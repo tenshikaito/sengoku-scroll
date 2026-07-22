@@ -1,3 +1,5 @@
+using SengokuScroll.Strategy.Policies.GameStart;
+
 namespace SengokuScroll.Strategy.Models;
 
 /// <summary>加载剧本时的开局覆盖（UI 确认后传入）。</summary>
@@ -48,6 +50,6 @@ public static class GameStartOptionsMapper
             InstantEventMessages = dto.InstantEventMessages
         };
 
-        return GameStartOptionsPresets.SanitizeCharacterFogOptions(options);
+        return GameStartOptionsProfile.ApplyAllConstraints(options);
     }
 }

@@ -1,4 +1,5 @@
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Policies.Battle;
 
 namespace SengokuScroll.Strategy.Battle;
 
@@ -96,25 +97,13 @@ public static class BattleTargetScoring
         if (BattleFormationSlotRules.IsRanged(actorTypeId) && enemySlot == BattleFormationSlot.Front)
             score += 14;
 
-        // 业务：将领意图修正目标偏好
-        switch (commanderAction)
-        {
-            case BattleCommanderActionKind.Flank:
-                if (BattleFormationSlotRules.IsFlank(enemySlot) || enemySlot == BattleFormationSlot.Rear)
-                    score += 20;
-                break;
-            case BattleCommanderActionKind.Assault:
-                if (enemySlot == BattleFormationSlot.Front || enemyIsCommanderParent)
-                    score += 16;
-                break;
-            case BattleCommanderActionKind.Hold:
-                if (enemySlot == BattleFormationSlot.Front && dist <= 1)
-                    score += 8;
-                break;
-            case BattleCommanderActionKind.Withdraw:
-                score -= 10; // 业务：脱离意图不愿深入敌阵
-                break;
-        }
+        score = CommanderActionScoringRegistry.Apply(
+            commanderAction,
+            score,
+            enemySlot,
+            enemyIsCommanderParent,
+            actorSlot,
+            dist);
 
         if (enemyIsCommanderParent)
             score += 12; // 业务：主队将领所在子队额外加分

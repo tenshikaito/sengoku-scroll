@@ -18,6 +18,21 @@ import {
   countRealmStrongholds,
 } from "@/utils/strategyRealmStats";
 import {
+  birthTypeLabel,
+  diplomacyStatusLabel,
+  diplomacyToneFromRelation,
+  forcePoliticalStatusLabel,
+  personLocationTypeLabel,
+  personStatusLabel,
+  sexLabel,
+} from "@/intelDisplay/IntelDisplayBehaviors";
+import { enrichCultureReligionGroupRows as enrichCultureReligionGroupRowsFromBehaviors } from "@/intelDisplay/IntelCultureReligionRowBehavior";
+import { personLocationLabel } from "@/intelDisplay/PersonLocationBehavior";
+import {
+  personCommandTarget,
+  personRoleLabel,
+} from "@/intelDisplay/PersonForceStatusBehaviors";
+import {
   formatStatBand,
   isCharacterFogMode,
   isRestrictedIntelMode,
@@ -222,34 +237,6 @@ function oxMark(value: boolean): string {
   return value ? "○" : "×";
 }
 
-function sexLabel(value: string | undefined | null): string {
-  switch (value) {
-    case "Male":
-      return "男";
-    case "Female":
-      return "女";
-    default:
-      return value?.trim() ? value : "—";
-  }
-}
-
-function birthTypeLabel(value: string | undefined | null): string {
-  switch (value) {
-    case "RoyalFamily":
-      return "皇族";
-    case "Noble":
-      return "贵族";
-    case "Landlord":
-      return "勋贵";
-    case "Normal":
-      return "平民";
-    case "Slave":
-      return "奴隶";
-    default:
-      return value?.trim() ? value : "—";
-  }
-}
-
 function healthStatusLabel(isSick: boolean | undefined | null): string {
   return isSick ? "生病" : "健康";
 }
@@ -336,40 +323,11 @@ export function entityEffectsIntelRows(): IntelFieldRow[] {
   return [{ label: "状态", value: "暂无增减益（系统后续实装）" }];
 }
 
-function resolveCultureGroupName(
-  worldState: StrategyWorldState,
-  cultureName: string | undefined | null
-): string {
-  return lookupMasterCulture(worldState, cultureName)?.group?.trim() || "—";
-}
-
-function resolveReligionGroupName(
-  worldState: StrategyWorldState,
-  religionName: string | undefined | null
-): string {
-  return lookupMasterReligion(worldState, religionName)?.group?.trim() || "—";
-}
-
 function enrichCultureReligionGroupRows(
   worldState: StrategyWorldState,
-  rows: IntelFieldRow[]
+  rows: IntelFieldRow[],
 ): IntelFieldRow[] {
-  const result: IntelFieldRow[] = [];
-  for (const row of rows) {
-    result.push(row);
-    if (row.label === "文化") {
-      result.push({
-        label: "文化圈",
-        value: resolveCultureGroupName(worldState, row.value),
-      });
-    } else if (row.label === "信仰") {
-      result.push({
-        label: "宗教",
-        value: resolveReligionGroupName(worldState, row.value),
-      });
-    }
-  }
-  return result;
+  return enrichCultureReligionGroupRowsFromBehaviors(worldState, rows);
 }
 
 export function cultureDetailIntelRows(
@@ -454,32 +412,6 @@ function diplomacyRelationScore(value: number | undefined | null): string {
   return String(Math.trunc(Number(value)));
 }
 
-function diplomacyStatusLabel(relation: string | undefined | null): string {
-  switch (relation) {
-    case "Allied":
-      return "同盟";
-    case "Enemy":
-      return "战争";
-    case "Neutral":
-      return "中立";
-    default:
-      return "—";
-  }
-}
-
-function diplomacyToneFromRelation(relation: string | undefined | null): string {
-  switch (relation) {
-    case "Allied":
-      return "allied";
-    case "Enemy":
-      return "enemy";
-    case "Neutral":
-      return "neutral";
-    default:
-      return "neutral";
-  }
-}
-
 function strongholdMaintenanceMoney(population: unknown): string {
   const n = Number(population);
   const value = Number.isFinite(n) ? Math.max(800, Math.trunc(n) / 5) : 800;
@@ -539,47 +471,6 @@ function lookupPlayerDiplomacy(
   targetRootId: number
 ) {
   return worldState.diplomacies.find((d) => d.targetForceId === targetRootId);
-}
-
-function forcePoliticalStatusLabel(status: string | undefined | null): string {
-  switch (status) {
-    case "Independence":
-      return "独立";
-    case "InnerVassal":
-      return "内藩";
-    case "OuterVassal":
-      return "外藩";
-    default:
-      return status?.trim() ? status : "—";
-  }
-}
-
-function personStatusLabel(status: string | undefined | null): string {
-  switch (status) {
-    case "Idle":
-      return "空闲";
-    case "UnitAction":
-      return "出阵";
-    case "Task":
-      return "任务中";
-    case "Prisoner":
-      return "俘虏";
-    default:
-      return status?.trim() ? status : "—";
-  }
-}
-
-function personLocationTypeLabel(value: string | undefined | null): string {
-  switch (value) {
-    case "Stronghold":
-      return "据点";
-    case "Unit":
-      return "部队";
-    case "Map":
-      return "地图";
-    default:
-      return value?.trim() ? value : "—";
-  }
 }
 
 function playerRelationLabel(
@@ -763,73 +654,6 @@ function strongholdFacilitiesSummary(stronghold: StrategyStrongholdState): strin
         `${defenseFacilityCategoryLabel(f.category)}·${f.name} Lv.${f.level}(+${f.defense})`
     )
     .join("；");
-}
-
-function personLocationLabel(
-  worldState: StrategyWorldState,
-  character: StrategyCharacterSummaryState
-): string {
-  switch (character.locationType) {
-    case "Stronghold": {
-      const strongholdId = character.strongholdId ?? 0;
-      if (strongholdId <= 0) return "—";
-      const sh = worldState.strongholds.find((s) => s.id === strongholdId);
-      return sh?.name?.trim() || "—";
-    }
-    case "Unit": {
-      const unit = worldState.units.find(
-        (u) =>
-          u.commanderId === character.id ||
-          u.composition?.some((sub) => sub.commanderId === character.id)
-      );
-      return unit?.name?.trim() || "—";
-    }
-    case "Map":
-      return "地图";
-    default:
-      return character.locationType?.trim() ? character.locationType : "—";
-  }
-}
-
-function personCommandTarget(
-  worldState: StrategyWorldState,
-  character: StrategyCharacterSummaryState
-): string {
-  if (character.forceStatus === "Task") return "任务中";
-  if (character.forceStatus === "UnitAction") {
-    return personLocationLabel(worldState, character);
-  }
-  if (character.forceStatus === "Prisoner") return "—";
-  return "—";
-}
-
-function personRoleLabel(
-  worldState: StrategyWorldState,
-  character: StrategyCharacterSummaryState
-): string {
-  const name = character.name?.trim();
-  if (!name) return "—";
-
-  if (
-    character.forceId === worldState.playerForceId &&
-    name === worldState.lord.name?.trim()
-  ) {
-    return "当主";
-  }
-
-  const strongholdId = character.strongholdId ?? 0;
-  const stronghold = worldState.strongholds.find((s) => s.id === strongholdId);
-  if (stronghold) {
-    if (stronghold.lordId === character.id || stronghold.lordName?.trim() === name) {
-      return stronghold.isLordResidence ? "当主" : "领主";
-    }
-    if (stronghold.mayorName?.trim() === name) return "代官";
-  }
-
-  if (character.locationType === "Unit") return "将";
-  if (character.forceStatus === "Prisoner") return "俘虏";
-  if (character.forceStatus === "Task") return "奉行";
-  return "—";
 }
 
 function resolveForceLordDisplayName(worldState: StrategyWorldState, forceId: number): string {

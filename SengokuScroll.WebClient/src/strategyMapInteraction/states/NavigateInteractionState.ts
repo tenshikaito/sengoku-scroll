@@ -13,6 +13,7 @@ import { StrategyMapInteractionState } from "../StrategyMapInteractionState";
 import { CellEntityPickerInteractionState } from "./CellEntityPickerInteractionState";
 import { CharacterCommandInteractionState } from "./CharacterCommandInteractionState";
 import { ConvoyCommandInteractionState } from "./ConvoyCommandInteractionState";
+import { openMapCellEntityInNavigate } from "@/mapCellEntity/MapCellEntityNavigate";
 import { ForeignStrongholdCommandInteractionState } from "./ForeignStrongholdCommandInteractionState";
 import { ForeignUnitCommandInteractionState } from "./ForeignUnitCommandInteractionState";
 import { StrongholdCommandInteractionState } from "./StrongholdCommandInteractionState";
@@ -158,41 +159,7 @@ export class NavigateInteractionState extends StrategyMapInteractionState {
   }
 
   static openCellEntity(ctx: StrategyMapInteractionContext, entity: MapCellEntityOption): void {
-    const anchor = ctx.getMenuAnchor();
-    if (!anchor) return;
-
-    switch (entity.kind) {
-      case "unit":
-        NavigateInteractionState.openUnit(ctx, {
-          unitId: entity.id,
-          screenX: anchor.screenX,
-          screenY: anchor.screenY,
-          panelAnchorRect: anchor.panelAnchorRect,
-          anchorSide: anchor.anchorSide,
-        });
-        break;
-      case "character":
-        NavigateInteractionState.openCharacter(ctx, {
-          characterId: entity.id,
-          screenX: anchor.screenX,
-          screenY: anchor.screenY,
-        });
-        break;
-      case "stronghold":
-        NavigateInteractionState.openStronghold(ctx, {
-          strongholdId: entity.id,
-          screenX: anchor.screenX,
-          screenY: anchor.screenY,
-        });
-        break;
-      case "convoy":
-        NavigateInteractionState.openConvoy(ctx, {
-          convoyId: entity.id,
-          screenX: anchor.screenX,
-          screenY: anchor.screenY,
-        });
-        break;
-    }
+    openMapCellEntityInNavigate(ctx, entity);
   }
 
   override onSelectUnit(ctx: StrategyMapInteractionContext, payload: MapSelectUnitPayload): void {

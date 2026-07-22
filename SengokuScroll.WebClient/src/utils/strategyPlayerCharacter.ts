@@ -1,4 +1,5 @@
 import type { StrategyStrongholdState, StrategyUnitState, StrategyWorldState } from "@/api/strategy";
+import { GameStartOptionsProfile } from "@/gameStartOptions/GameStartOptionsProfile";
 import { isPlayerRealmForce } from "@/utils/mapEntityColors";
 import { isLordAtResidence } from "@/utils/strategyLordCommands";
 
@@ -141,11 +142,7 @@ export function isPlayerRealmUnit(
 
 /** 当主可直接移动/攻城的兵队（本家直属，不含内藩等间接统属）。 */
 export function resolvePlayerControlMode(worldState: StrategyWorldState): string {
-  return (
-    worldState.startOptions?.controlMode
-    ?? worldState.visibility?.controlMode
-    ?? "DirectiveOnly"
-  );
+  return GameStartOptionsProfile.fromWorldState(worldState).control.mode;
 }
 
 /** 当主是否领兵或与部队同格（仅角色控制模式下可直控）。 */
@@ -173,8 +170,22 @@ export function isLordDirectlyControlledUnit(
 ): boolean {
   if (!unit) return false;
   if (unit.forceId !== worldState.playerForceId) return false;
-  if (resolvePlayerControlMode(worldState) === "FullDirect") return true;
-  return isLordLeadingOrWithUnit(worldState, unit);
+
+  const characterId = resolvePlayerLordCharacterId(worldState);
+  const character = characterId
+    ? worldState.characters?.find((c) => c.id === characterId)
+    : null;
+
+  return GameStartOptionsProfile.fromWorldState(worldState).allowsDirectUnitControl(
+    unit,
+    worldState.playerForceId,
+    {
+      lordUnitId: worldState.lord.unitId,
+      lordX: worldState.lord.x,
+      lordY: worldState.lord.y,
+      lordCharacterLocationType: character?.locationType,
+    },
+  );
 }
 
 /** 外政据点是否显示「方针」按钮：有城主领地或内藩当主居城。 */

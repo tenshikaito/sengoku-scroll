@@ -1,4 +1,5 @@
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Policies.GameStart;
 
 namespace SengokuScroll.Strategy.Rules;
 
@@ -33,12 +34,9 @@ public static class StrategyDifficultyRules
     /// Easy 预设强制开启；其它读 <see cref="GameStartOptions"/>。
     /// </summary>
     public static bool InstantEventMessages(StrategyDifficulty difficulty, GameStartOptions? options = null)
-    {
-        if (difficulty == StrategyDifficulty.Easy)
-            return true;
-
-        return options?.InstantEventMessages ?? false;
-    }
+        => GameStartOptionsProfile.Create(
+            options ?? GameStartOptions.ForDifficulty(difficulty),
+            difficulty).InstantEvents.ShouldPushInstantSummary();
 
     /// <summary>兼容旧测试名。</summary>
     [Obsolete("Use InstantEventMessages with GameStartOptions.")]

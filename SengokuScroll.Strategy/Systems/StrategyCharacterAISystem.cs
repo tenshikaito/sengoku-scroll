@@ -6,6 +6,7 @@ using SengokuScroll.Domain.Services.Pathfinding;
 using SengokuScroll.Domain.Systems;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
+using SengokuScroll.Strategy.Policies.CharacterAi;
 using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Character;
 
@@ -69,54 +70,15 @@ public class StrategyCharacterAISystem(
             if (evaluation.Kind == CharacterAiActionKind.None)
                 continue;
 
-            ExecuteEvaluation(worldContext, character, evaluation, gameData);
-        }
-    }
-
-    private void ExecuteEvaluation(
-        IGameWorldContext worldContext,
-        Character character,
-        CharacterAiEvaluation evaluation,
-        GameData gameData)
-    {
-        switch (evaluation.Kind)
-        {
-            case CharacterAiActionKind.Rest:
-                if (CharacterAiMovementHelper.TryBeginRest(character))
-                {
-                    logger.LogDebug(
-                        "[CharacterAI] {Name}#{Id} Rest score={Score} reason={Reason}",
-                        character.Name, character.Id, evaluation.Score, evaluation.Reason);
-                }
-
-                return;
-
-            case CharacterAiActionKind.TaskRun:
-            case CharacterAiActionKind.Visit:
-                if (evaluation.TargetStrongholdId <= 0
-                    || !gameData.Strongholds.TryGetValue(evaluation.TargetStrongholdId, out var target))
-                {
-                    return;
-                }
-
-                if (CharacterAiMovementHelper.TryRouteToStronghold(
-                        worldContext,
-                        character,
-                        target,
-                        scenarioMeta,
-                        pathfinding))
-                {
-                    logger.LogDebug(
-                        "[CharacterAI] {Name}#{Id} {Kind}→{Target} score={Score} reason={Reason}",
-                        character.Name,
-                        character.Id,
-                        evaluation.Kind,
-                        target.Name,
-                        evaluation.Score,
-                        evaluation.Reason);
-                }
-
-                return;
+            CharacterAiActionHandlerRegistry.Execute(
+                evaluation.Kind,
+                worldContext,
+                character,
+                evaluation,
+                gameData,
+                scenarioMeta,
+                pathfinding,
+                logger);
         }
     }
 

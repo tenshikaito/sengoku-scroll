@@ -3,6 +3,7 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Extensions;
 using SengokuScroll.Localization;
 using SengokuScroll.Localization.Abstractions;
+using SengokuScroll.Strategy.Policies.Battle;
 using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Unit;
 
@@ -49,23 +50,7 @@ public static class BattleEngagementClassifier
         Unit? defender = null,
         GameData? gameData = null)
     {
-        switch (kind)
-        {
-            case BattleEngagementKind.Ambush:
-                // 业务：伏击战攻方胜率 +6%
-                b.Add("engagement.ambush", "伏击战", 6, detail: "接敌类型");
-                break;
-            case BattleEngagementKind.Siege:
-                // 业务：攻城战守方战力 ×1.12、胜率 +6%，再叠加城寨防御
-                b.DefenderPowerScale *= 1.12;
-                b.DefenderWinRateDelta += 6;
-                b.Add("engagement.siege", "攻城战", 0, 6, "守方依托城寨");
-
-                if (defender is not null && gameData is not null
-                    && SiegeBattleRules.ResolveDefenderStronghold(defender, gameData) is { } stronghold)
-                    SiegeBattleRules.ApplySiegeStrongholdFactors(stronghold, b);
-                break;
-        }
+        EngagementKindEffectRegistry.Apply(kind, b, defender, gameData);
     }
 
     /// <summary>接敌类型的显示标签（默认中文硬编码，兼容旧调用）。</summary>

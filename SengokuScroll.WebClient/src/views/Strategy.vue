@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   advanceDay,
@@ -70,6 +69,10 @@ import StrategyMessageDialog from "@/components/strategy/StrategyMessageDialog.v
 import {
   filterEventsByMessageScope,
 } from "@/utils/strategyMessageScope";
+import {
+  handlePendingNotificationOpen,
+  shouldSkipPendingNotification,
+} from "@/eventNotifications/PendingNotificationBehaviors";
 import StrategyEconomySettlementDialog from "@/components/strategy/StrategyEconomySettlementDialog.vue";
 import StrategyIntelSystemDialog from "@/components/strategy/StrategyIntelSystemDialog.vue";
 import StrategyOperableUnitList from "@/components/strategy/StrategyOperableUnitList.vue";
@@ -95,6 +98,14 @@ import {
   DEFAULT_ROUTE_VISIBILITY_POLICY,
   filterUnitsForRouteDisplay,
 } from "@/strategyMapInteraction/routeVisibilityPolicy";
+import {
+  resolveCornerHintMode,
+  resolveIntelMainTabForMenuPopup,
+  resolveMenuPopupMode,
+  resolvePrimaryPopupEntityName,
+  popupUsesCorner as isCornerPopupMode,
+} from "@/strategyMapInteraction/PopupModeBehavior";
+import { resolveStrategyApiSourceInfo } from "@/api/StrategyApiSourceInfoBehavior";
 import { resolveAnchoredPanelPlacement, resolveAnchoredPanelPlacementForSide, type AnchorSide, type AnchorVerticalAlign } from "@/utils/mapCellAnchor";
 import { parseEconomySettlementFromEvent } from "@/utils/normalizeStrategyEvent";
 import {
@@ -111,7 +122,12 @@ import type { UnitDirectiveValue } from "@/utils/unitDirective";
 import { landmarkAtCell, mapTileInfo, roadAtCell } from "@/utils/mapTileLookup";
 import { mapMasterMatchesScenario } from "@/utils/strategyMapDefaults";
 import { logStrategyMapCoords, logHoverIntelLayoutDebug, rectToScreenDebug } from "@/utils/strategyMapDebug";
-import { attackApBlockReason, parseApiErrorCode, siegeApBlockReason } from "@/utils/strategyActionRules";
+import { attackApBlockReason, siegeApBlockReason } from "@/utils/strategyActionRules";
+import {
+  applyStrategyApiErrorResolution,
+  resolveStrategyApiError,
+  type ApiErrorResolveContext,
+} from "@/apiErrors/ApiErrorMessageBehaviors";
 import { isForeignIntelRestricted } from "@/utils/strategyIntelDisplay";
 import {
   isLordAtResidence,
@@ -153,12 +169,21 @@ import { collectMapCellEntityOptions } from "@/utils/mapCellEntityPicker";
 import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
 import {
   resolveDifficultyFromOptions,
-  takeGameStartSettingsFromNavigation,
   writeGameStartSettings,
   type GameStartSettings,
 } from "@/utils/strategyGameStartSettings";
 
-const router = useRouter();
+const emit = defineEmits<{
+  "request-game-start": [];
+}>();
+
+const props = withDefaults(
+  defineProps<{
+    /** 挂载时自动恢复后端当前局（Home 页由用户确认后再启动，应为 false）。 */
+    autoResume?: boolean;
+  }>(),
+  { autoResume: false },
+);
 const HOVER_INTEL_W = 280;
 const HOVER_INTEL_H = 360;
 const HOVER_INTEL_DUAL_GAP = 8;
@@ -385,14 +410,14 @@ const characterPopupProps = computed(() => {
   };
 });
 
-const primaryPopupEntityName = computed(() => {
-  const mode = menuPopupMode.value;
-  if (mode === "characterCommand") return state.value?.lord.name ?? "当主";
-  if (mode === "strongholdCommand" || mode === "foreignStrongholdCommand") {
-    return activeStrongholdForCommands.value?.name ?? popupStronghold.value?.name;
-  }
-  return popupEntityName.value;
-});
+const primaryPopupEntityName = computed(() =>
+  resolvePrimaryPopupEntityName(menuPopupMode.value, {
+    lordName: state.value?.lord.name,
+    strongholdName:
+      activeStrongholdForCommands.value?.name ?? popupStronghold.value?.name,
+    fallbackName: popupEntityName.value,
+  }),
+);
 
 /** 据点指令（任命/征兵/税率等）的作用对象：地图据点菜单以弹窗格为准，避免情报面板选中它势力据点时误判。 */
 const activeStrongholdForCommands = computed(() => {
@@ -952,35 +977,11 @@ const intelBarStronghold = computed(() =>
     : null
 );
 
-const popupUsesCorner = computed(
-  () =>
-    popupMode.value === "moveSelect" ||
-    popupMode.value === "attackSelect" ||
-    popupMode.value === "mergeSelect" ||
-    popupMode.value === "splitSelect"
-);
+const popupUsesCorner = computed(() => isCornerPopupMode(popupMode.value));
 
-const cornerHintMode = computed((): "moveSelect" | "attackSelect" | "mergeSelect" | "splitSelect" => {
-  if (popupMode.value === "attackSelect") return "attackSelect";
-  if (popupMode.value === "mergeSelect") return "mergeSelect";
-  if (popupMode.value === "splitSelect") return "splitSelect";
-  return "moveSelect";
-});
+const cornerHintMode = computed(() => resolveCornerHintMode(popupMode.value));
 
-const menuPopupMode = computed(() => {
-  const mode = popupMode.value;
-  if (
-    mode === "none" ||
-    mode === "entityPicker" ||
-    mode === "moveSelect" ||
-    mode === "attackSelect" ||
-    mode === "mergeSelect" ||
-    mode === "splitSelect"
-  ) {
-    return null;
-  }
-  return mode;
-});
+const menuPopupMode = computed(() => resolveMenuPopupMode(popupMode.value));
 
 const menuPopupBesieged = computed(() => {
   if (menuPopupMode.value === "characterCommand") {
@@ -1213,11 +1214,7 @@ async function handleDirectiveConfirm(payload: { directive: UnitDirectiveValue }
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : "方针设定失败";
-    if (message.includes("DataNotFound")) {
-      error.value = "服务端未加载剧本（可能 WebApi 已重启），请刷新页面或点击「重新加载」";
-    } else {
-      error.value = message;
-    }
+    await handleStrategyApiError(message, message);
   } finally {
     loading.value = false;
   }
@@ -1494,6 +1491,31 @@ async function notifyActionBlocked(title: string, reason: string) {
   });
 }
 
+async function handleStrategyApiError(
+  message: string,
+  fallbackMessage: string,
+  options: Partial<ApiErrorResolveContext> = {},
+): Promise<void> {
+  const resolution = resolveStrategyApiError(message, {
+    fallbackMessage,
+    lordAtResidenceTip: LORD_AT_RESIDENCE_REQUIRED_TIP,
+    lordCommandStrongholdTip: LORD_COMMAND_STRONGHOLD_TIP,
+    characterGateApCost: CHARACTER_GATE_AP_COST,
+    dataNotFoundHint:
+      "服务端未加载剧本（可能 WebApi 已重启），请刷新页面或点击「重新加载」",
+    dataNotFoundReloadHint: "服务端未加载剧本，已尝试自动重载；若仍失败请刷新页面",
+    ...options,
+  });
+  await applyStrategyApiErrorResolution(
+    resolution,
+    (value) => {
+      error.value = value;
+    },
+    notifyActionBlocked,
+    fallbackMessage,
+  );
+}
+
 function handleBeginAttack() {
   const reason = attackApBlockReason(selectedUnit.value);
   if (reason) {
@@ -1588,13 +1610,9 @@ async function handleTaxRateConfirm(payload: {
     onCancel();
   } catch (e) {
     const message = e instanceof Error ? e.message : "税率调整失败";
-    if (message.includes("LordNotAtResidence")) {
-      error.value = LORD_AT_RESIDENCE_REQUIRED_TIP;
-    } else if (message.includes("NotSelfForce")) {
-      error.value = "仅可调整本家非内藩据点税率";
-    } else {
-      error.value = message;
-    }
+    await handleStrategyApiError(message, message, {
+      lordNotAtResidenceMessage: LORD_AT_RESIDENCE_REQUIRED_TIP,
+    });
   } finally {
     loading.value = false;
   }
@@ -1662,19 +1680,9 @@ async function handleAppointLordConfirm(payload: {
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : "任命失败";
-    if (message.includes("LordNotAtResidence")) {
-      error.value = LORD_COMMAND_STRONGHOLD_TIP;
-    } else if (message.includes("CannotAppointLordToResidence")) {
-      error.value = "当主居城须保持直辖";
-    } else if (message.includes("CharacterNotAtResidence")) {
-      error.value = "将领须在当主居城方可任命";
-    } else if (message.includes("CharacterIsStrongholdLord")) {
-      error.value = "该将领已担任据点领主，不能兼任代官";
-    } else if (message.includes("CharacterIsForceLord")) {
-      error.value = "当主不能担任据点代官";
-    } else {
-      error.value = message;
-    }
+    await handleStrategyApiError(message, message, {
+      lordNotAtResidenceMessage: LORD_COMMAND_STRONGHOLD_TIP,
+    });
   } finally {
     loading.value = false;
   }
@@ -1860,13 +1868,7 @@ async function handleBeginLeaveStronghold() {
     selectedCharacterId.value = characterId;
   } catch (e) {
     const message = e instanceof Error ? e.message : "出城失败";
-    if (message.includes("ApNotEnough")) {
-      error.value = `行动力不足（出入城需 ${CHARACTER_GATE_AP_COST} AP）`;
-    } else if (message.includes("StrongholdBlockaded")) {
-      error.value = "据点被围，需确认强行出城";
-    } else {
-      error.value = message;
-    }
+    await handleStrategyApiError(message, message);
   } finally {
     loading.value = false;
   }
@@ -1912,13 +1914,7 @@ async function handleBeginEnterStronghold() {
     selectedCharacterId.value = characterId;
   } catch (e) {
     const message = e instanceof Error ? e.message : "入城失败";
-    if (message.includes("ApNotEnough")) {
-      error.value = `行动力不足（出入城需 ${CHARACTER_GATE_AP_COST} AP）`;
-    } else if (message.includes("StrongholdBlockaded")) {
-      error.value = "据点被围，需确认强行入城";
-    } else {
-      error.value = message;
-    }
+    await handleStrategyApiError(message, message);
   } finally {
     loading.value = false;
   }
@@ -1987,16 +1983,11 @@ async function loadBattlePreview(target: StrategyMoveTarget) {
     battlePreview.value = await previewBattle(selectedUnitId.value, target.x, target.y);
   } catch (e) {
     const message = e instanceof Error ? e.message : "战前预览失败";
-    const code = parseApiErrorCode(message);
-    if (message.includes("DataNotFound")) {
-      error.value = "服务端未加载剧本，已尝试自动重载；若仍失败请刷新页面";
-    } else if (code === "ApNotEnough") {
-      const reason =
-        attackApBlockReason(selectedUnit.value) ?? "AP 不足，无法发起攻击";
-      await notifyActionBlocked("无法攻击", reason);
-    } else {
-      error.value = message;
-    }
+    await handleStrategyApiError(message, message, {
+      attackApBlockReason:
+        attackApBlockReason(selectedUnit.value) ?? "AP 不足，无法发起攻击",
+      dataNotFoundReloadHint: "服务端未加载剧本，已尝试自动重载；若仍失败请刷新页面",
+    });
     battlePreview.value = null;
     onCancel();
   } finally {
@@ -2006,9 +1997,9 @@ async function loadBattlePreview(target: StrategyMoveTarget) {
 
 function openMapIntel() {
   clearMapHoverState();
-  const mode = menuPopupMode.value;
+  const mainTab = resolveIntelMainTabForMenuPopup(menuPopupMode.value);
 
-  if (mode === "characterCommand") {
+  if (mainTab === "person") {
     const id =
       selectedCharacterId.value ?? resolvePlayerLordCharacterId(state.value!);
     if (id && state.value) {
@@ -2021,7 +2012,7 @@ function openMapIntel() {
     }
   }
 
-  if (mode === "strongholdCommand" || mode === "foreignStrongholdCommand") {
+  if (mainTab === "stronghold") {
     const sh =
       selectedStronghold.value
       ?? popupStronghold.value
@@ -2080,14 +2071,10 @@ async function executeBattle(target: StrategyMoveTarget) {
     info.value = "攻击命令已下达，推进日期后由系统结算战斗";
   } catch (e) {
     const message = e instanceof Error ? e.message : "攻击命令失败";
-    const code = parseApiErrorCode(message);
-    if (code === "ApNotEnough") {
-      const reason =
-        attackApBlockReason(selectedUnit.value) ?? "AP 不足，无法下达攻击命令";
-      await notifyActionBlocked("无法攻击", reason);
-    } else {
-      error.value = message;
-    }
+    await handleStrategyApiError(message, message, {
+      attackApBlockReason:
+        attackApBlockReason(selectedUnit.value) ?? "AP 不足，无法下达攻击命令",
+    });
     onBattleFailed(target);
     if (battlePreview.value) battleConfirmVisible.value = true;
   } finally {
@@ -2101,15 +2088,8 @@ function showResolvedBattle(result: StrategyBattleResult) {
 }
 
 function pushNotification(notification: StrategyPendingNotification) {
-  if (notification.kind === "battle" && notification.battleResult) {
-    const key = `${notification.battleResult.resolutionSeed}:${notification.battleResult.attackerUnitId}:${notification.battleResult.defenderUnitId}`;
-    const exists = pendingNotifications.value.some(
-      (item) =>
-        item.kind === "battle" &&
-        item.battleResult &&
-        `${item.battleResult.resolutionSeed}:${item.battleResult.attackerUnitId}:${item.battleResult.defenderUnitId}` === key
-    );
-    if (exists) return;
+  if (shouldSkipPendingNotification(notification, pendingNotifications.value)) {
+    return;
   }
 
   pendingNotifications.value = [...pendingNotifications.value, notification];
@@ -2142,34 +2122,11 @@ function handleNotificationOpen(notification: StrategyPendingNotification) {
     (item) => item.id !== notification.id
   );
 
-  if (notification.kind === "battle" && notification.battleResult) {
-    const br = notification.battleResult;
-    if (
-      (br.engagementKind === "SiegeEncircle" || br.engagementKind === "SiegeAssault")
-      && br.attackerCasualties === 0
-      && br.defenderCasualties === 0
-      && br.logEntries?.length === 1
-    ) {
-      openEventDetailDialog({
-        category: "StrategicReportArrived",
-        message: br.logEntries[0]?.message ?? `${br.attackerName} 对 ${br.defenderName} 发动攻城。`,
-        brief: notification.brief,
-        detailCategory: br.engagementKind,
-      } as StrategyEvent);
-      return;
-    }
-    showResolvedBattle(notification.battleResult);
-    return;
-  }
-
-  if (notification.kind === "economy" && notification.event) {
-    openSettlementDialog(notification.event);
-    return;
-  }
-
-  if (notification.event) {
-    openEventDetailDialog(notification.event);
-  }
+  handlePendingNotificationOpen(notification, {
+    showResolvedBattle,
+    openEventDetailDialog,
+    openSettlementDialog,
+  });
 }
 
 function handlePopupCancel() {
@@ -2403,11 +2360,7 @@ async function startGameWithSettings(settings: GameStartSettings) {
         settings.difficulty === "Custom" ? settings.customStartOptions : undefined,
     });
     resetMapSessionUi();
-    if (usingMockFallback.value) {
-      info.value = "Live API 不可达，已自动使用 Mock 数据（见下方诊断面板）。";
-    } else if (lastRequest.value?.source === "mock") {
-      info.value = "当前为 Mock 模式。";
-    }
+    applyApiSourceInfoMessage();
     initialLoading.value = false;
     await refreshMovementTrace();
   } catch (e) {
@@ -2433,11 +2386,7 @@ async function resumeExistingGame() {
     state.value = next;
     syncLastGameStartSettingsFromWorldState(next);
     resetMapSessionUi();
-    if (usingMockFallback.value) {
-      info.value = "Live API 不可达，已自动使用 Mock 数据（见下方诊断面板）。";
-    } else if (lastRequest.value?.source === "mock") {
-      info.value = "当前为 Mock 模式。";
-    }
+    applyApiSourceInfoMessage();
     initialLoading.value = false;
     await refreshMovementTrace();
   } catch (e) {
@@ -2448,8 +2397,16 @@ async function resumeExistingGame() {
   }
 }
 
+function applyApiSourceInfoMessage() {
+  const message = resolveStrategyApiSourceInfo(
+    usingMockFallback.value,
+    lastRequest.value?.source,
+  );
+  if (message) info.value = message;
+}
+
 function goToGameStartSettings() {
-  void router.push({ name: "Home", query: { configure: "1" } });
+  emit("request-game-start");
 }
 
 async function bootstrapGame() {
@@ -2481,11 +2438,7 @@ async function fetchGameState() {
     settlementDetail.value = null;
     mapInteraction.reset();
     resetMovePath();
-    if (usingMockFallback.value) {
-      info.value = "Live API 不可达，已自动使用 Mock 数据（见下方诊断面板）。";
-    } else if (lastRequest.value?.source === "mock") {
-      info.value = "当前为 Mock 模式。";
-    }
+    applyApiSourceInfoMessage();
   } catch (e) {
     error.value = e instanceof Error ? e.message : "读取世界状态失败";
   } finally {
@@ -2630,13 +2583,13 @@ onMounted(() => {
   window.addEventListener("resize", updateHoverIntelPosition);
   window.addEventListener("resize", updateMapTopOverlayHeight);
 
-  const pendingSettings = takeGameStartSettingsFromNavigation();
-  if (pendingSettings) {
-    void startGameWithSettings(pendingSettings);
-    return;
+  if (props.autoResume) {
+    void resumeExistingGame();
   }
+});
 
-  void resumeExistingGame();
+defineExpose({
+  startGameWithSettings,
 });
 
 onBeforeUnmount(() => {

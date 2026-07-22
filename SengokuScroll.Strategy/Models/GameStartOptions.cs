@@ -1,3 +1,5 @@
+using SengokuScroll.Strategy.Policies.GameStart;
+
 namespace SengokuScroll.Strategy.Models;
 
 /// <summary>开局战争迷雾模式。</summary>
@@ -67,63 +69,10 @@ public sealed record GameStartOptions
 public static class GameStartOptionsPresets
 {
     public static GameStartOptions Resolve(StrategyDifficulty difficulty, GameStartOptions? customOverride)
-    {
-        if (difficulty == StrategyDifficulty.Custom && customOverride is not null)
-            return Sanitize(customOverride);
-
-        return difficulty switch
-        {
-            StrategyDifficulty.Easy => new GameStartOptions
-            {
-                FogMode = StrategyFogMode.None,
-                IntelMode = StrategyIntelMode.Full,
-                ControlMode = StrategyControlMode.FullDirect,
-                AllySharedVision = true,
-                CharacterSharedVision = true,
-                ShowAllyIntel = false,
-                InstantEventMessages = true
-            },
-            StrategyDifficulty.Normal => new GameStartOptions
-            {
-                FogMode = StrategyFogMode.Force,
-                IntelMode = StrategyIntelMode.ForceIntel,
-                ControlMode = StrategyControlMode.DirectiveOnly,
-                AllySharedVision = false,
-                CharacterSharedVision = false,
-                ShowAllyIntel = false,
-                InstantEventMessages = false
-            },
-            StrategyDifficulty.Hard => new GameStartOptions
-            {
-                FogMode = StrategyFogMode.Character,
-                IntelMode = StrategyIntelMode.ForceIntel,
-                ControlMode = StrategyControlMode.DirectiveOnly,
-                AllySharedVision = false,
-                CharacterSharedVision = false,
-                ShowAllyIntel = false,
-                InstantEventMessages = false
-            },
-            StrategyDifficulty.Custom => Sanitize(customOverride ?? Resolve(StrategyDifficulty.Normal, null)),
-            _ => Resolve(StrategyDifficulty.Normal, null)
-        };
-    }
+        => Policies.GameStart.DifficultyPresetRegistry.Resolve(difficulty, customOverride);
 
     private static GameStartOptions Sanitize(GameStartOptions options)
-    {
-        if (options.FogMode == StrategyFogMode.Character)
-        {
-            return options with
-            {
-                AllySharedVision = false,
-                CharacterSharedVision = false
-            };
-        }
-
-        if (options.FogMode == StrategyFogMode.None)
-            return options;
-
-        return options;
-    }
+        => GameStartOptionsProfile.ApplyAllConstraints(options);
 
     /// <summary>角色视野下强制关闭同盟共享视野与角色共享视野。</summary>
     public static GameStartOptions SanitizeCharacterFogOptions(GameStartOptions options)

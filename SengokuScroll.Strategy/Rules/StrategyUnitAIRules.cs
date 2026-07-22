@@ -11,6 +11,7 @@ using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
+using SengokuScroll.Strategy.Policies.UnitAi;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Rules;
@@ -35,24 +36,11 @@ public static class StrategyUnitAIRules
 
     /// <summary>非军事、无兵、已在战斗或特殊状态下跳过每日 AI 决策。</summary>
     public static bool ShouldSkipDailyAi(Unit unit)
-        => !unit.IsMilitary
-           || unit.Soldier <= 0
-           || unit.Stance == UnitStance.Attacking
-           || unit.Status is UnitStatus.Chaos or UnitStatus.BeingSurround or UnitStatus.Standoff
-           || SiegeOrderRules.IsSiegeMovementLocked(unit);
+        => UnitAiSkipBehaviorRegistry.ShouldSkipDailyAi(unit);
 
     /// <summary>返回跳过 AI 的人类可读原因（供调试/日志）。</summary>
     public static string? DescribeSkipReason(Unit unit)
-    {
-        if (!unit.IsMilitary) return "非军事单位";
-        if (unit.Soldier <= 0) return "兵力为 0";
-        if (unit.Stance == UnitStance.Attacking) return "已在攻击姿态，本日由战斗系统处理";
-        if (unit.Status == UnitStatus.Chaos) return "混乱中无法行动";
-        if (unit.Status == UnitStatus.BeingSurround) return "被包围中无法行动";
-        if (unit.Status == UnitStatus.Standoff) return "战场对峙中无法行动";
-        if (SiegeOrderRules.IsSiegeMovementLocked(unit)) return "攻城令期间不可另行移动";
-        return null;
-    }
+        => UnitAiSkipBehaviorRegistry.DescribeSkipReason(unit);
 
     /// <summary>
     /// 对峙中 AI 脱困：对手离场则清除；长期同格对峙且胜率偏低则改撤退。

@@ -18,6 +18,7 @@ import {
   forceIntroText,
   forceReligionDetailRows,
 } from "@/utils/strategyIntelSystemData";
+import { diplomacyRowClassName as diplomacyToneRowClassName } from "@/intelDisplay/IntelDisplayBehaviors";
 
 const props = defineProps<{
   worldState: StrategyWorldState;
@@ -123,16 +124,7 @@ watch(
 );
 
 function diplomacyRowClassName(row: Record<string, unknown>): string {
-  switch (String(row.diplomacyTone ?? "")) {
-    case "allied":
-      return "dip-allied";
-    case "enemy":
-      return "dip-enemy";
-    case "neutral":
-      return "dip-neutral";
-    default:
-      return "";
-  }
+  return diplomacyToneRowClassName(String(row.diplomacyTone ?? ""));
 }
 
 function onSelectRow(row: Record<string, unknown> | null) {

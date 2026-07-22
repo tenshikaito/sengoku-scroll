@@ -1,4 +1,5 @@
 import type { GameStartOptionsState } from "@/api/strategyTypes";
+import { enforceCharacterFogControl as applyFogConstraints } from "@/gameStartOptions/GameStartOptionsProfile";
 
 export type StrategyDifficultyId = "Easy" | "Normal" | "Hard" | "Custom";
 
@@ -73,22 +74,7 @@ export function resolveDifficultyFromOptions(
 
 /** 角色视野下控制模式固定为「仅角色」，同盟共享视野强制关闭。 */
 export function enforceCharacterFogControl(options: GameStartOptionsState): boolean {
-  if (options.fogMode !== "Character") return false;
-
-  let changed = false;
-  if (options.controlMode !== "DirectiveOnly") {
-    options.controlMode = "DirectiveOnly";
-    changed = true;
-  }
-  if (options.allySharedVision) {
-    options.allySharedVision = false;
-    changed = true;
-  }
-  if (options.characterSharedVision) {
-    options.characterSharedVision = false;
-    changed = true;
-  }
-  return changed;
+  return applyFogConstraints(options);
 }
 
 const STORAGE_KEY = "sengoku.strategy.gameStartSettings";
@@ -105,24 +91,4 @@ export function readGameStartSettings(): GameStartSettings | null {
 
 export function writeGameStartSettings(settings: GameStartSettings): void {
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-}
-
-/** 路由 state 键：仅「开局设置」确认后携带，刷新页面不会保留。 */
-export const GAME_START_NAV_STATE_KEY = "gameStartSettings";
-
-export function buildGameStartNavigationState(
-  settings: GameStartSettings,
-): Record<string, GameStartSettings> {
-  return { [GAME_START_NAV_STATE_KEY]: settings };
-}
-
-/** 读取并消费导航传入的开局设置（刷新后为空，不会自动开局）。 */
-export function takeGameStartSettingsFromNavigation(): GameStartSettings | null {
-  const state = history.state as Record<string, unknown> | null | undefined;
-  const raw = state?.[GAME_START_NAV_STATE_KEY];
-  if (!raw || typeof raw !== "object") return null;
-
-  const settings = raw as GameStartSettings;
-  if (!settings.scenarioId || !settings.difficulty || !settings.customStartOptions) return null;
-  return settings;
 }

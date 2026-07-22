@@ -8,6 +8,7 @@ import {
   isForeignIntelRestricted,
   UNKNOWN_INTEL,
 } from "@/utils/strategyIntelDisplay";
+import { buildBattlefieldStatusRows, resolveBattlefieldPresentation } from "@/intelDisplay/BattlefieldKindPresentationBehavior";
 import { formatSiegeSoldiers, formatSoldiers } from "@/utils/strategyDisplayUnits";
 
 defineProps<{
@@ -16,39 +17,8 @@ defineProps<{
   playerForceId: number;
 }>();
 
-function siegeThreatLabel(value: string | undefined | null): string {
-  switch (value) {
-    case "Assault":
-      return "强攻";
-    case "Encircle":
-      return "围城";
-    default:
-      return "—";
-  }
-}
-
 function battlefieldStatusRows(battlefield: StrategyBattlefieldState) {
-  const rows: { label: string; value: string }[] = [];
-
-  if (battlefield.kind === "Siege") {
-    rows.push({
-      label: "攻城",
-      value: siegeThreatLabel(battlefield.siegeThreat),
-    });
-    if (battlefield.standoffDays > 0) {
-      rows.push({
-        label: "持续",
-        value: `${battlefield.standoffDays} 日`,
-      });
-    }
-  } else {
-    rows.push({
-      label: "对峙",
-      value: battlefield.standoffDays > 0 ? `${battlefield.standoffDays} 日` : "当日",
-    });
-  }
-
-  return rows;
+  return buildBattlefieldStatusRows(battlefield);
 }
 
 function participantSoldiersLabel(
@@ -58,7 +28,7 @@ function participantSoldiersLabel(
   playerForceId: number,
 ): string {
   if (isForeignIntelRestricted(worldState, entry.forceId)) {
-    if (battlefield.kind === "Siege") {
+    if (resolveBattlefieldPresentation(battlefield.kind).kind === "Siege") {
       return formatSiegeSoldiers(entry.soldiers, entry.forceId, playerForceId);
     }
     return UNKNOWN_INTEL;

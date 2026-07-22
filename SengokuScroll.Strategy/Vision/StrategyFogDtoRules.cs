@@ -3,6 +3,7 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Policies.GameStart;
 
 namespace SengokuScroll.Strategy.Vision;
 
@@ -28,24 +29,7 @@ public static class StrategyFogDtoRules
         StrategyScenarioMeta meta,
         GameData gameData,
         ForceVisibilityState visibility)
-    {
-        var options = meta.StartOptions;
-        if (options.FogMode == StrategyFogMode.None)
-            return unit.IsMilitary && unit.Soldier > 0 ? UnitFogPlacement.Map : UnitFogPlacement.Exclude;
-
-        if (!unit.IsMilitary || unit.Soldier <= 0)
-            return UnitFogPlacement.Exclude;
-
-        var visible = visibility.VisibleCells.Contains((unit.Location.X, unit.Location.Y));
-        if (IsDirectPlayerForce(unit.ForceId, meta.PlayerForceId))
-            // 业务：自势力单位在迷雾外仍出现在 roster，进 visible 格才上地图
-            return visible ? UnitFogPlacement.Map : UnitFogPlacement.Roster;
-
-        if (!visible)
-            return UnitFogPlacement.Exclude;
-
-        return UnitFogPlacement.Map;
-    }
+        => ResolveFog(meta).ClassifyUnit(unit, meta, gameData, visibility);
 
     public static bool ShouldIncludeUnit(
         Unit unit,
@@ -65,60 +49,14 @@ public static class StrategyFogDtoRules
         GameData gameData,
         ForceVisibilityState visibility,
         int mapWidth)
-    {
-        var options = meta.StartOptions;
-        if (options.FogMode == StrategyFogMode.None)
-            return dto with { VisibilityTier = "Visible" };
-
-        // 直接本家与内藩等封地：完整数值情报（与 EspionageIntelRules 自势力圈一致）。
-        if (IsDirectPlayerForce(dto.ForceId, meta.PlayerForceId))
-            return dto with { VisibilityTier = "Visible" };
-
-        if (gameData is not null
-            && IsOwnRealmForce(dto.ForceId, meta.PlayerForceId, gameData))
-            return dto with { VisibilityTier = "Visible" };
-
-        if (visibility.VisibleCells.Contains((dto.X, dto.Y)))
-            return dto with { VisibilityTier = "Visible" };
-
-        if (visibility.KnownStrongholdIds.Contains(dto.Id))
-            return MaskAsKnownStronghold(dto);
-
-        // 已探索但未在当前视野内：地图上保留据点与名称，具体数值情报隐藏。
-        if (visibility.IsExplored(dto.X, dto.Y, mapWidth))
-            return MaskAsKnownStronghold(dto);
-
-        return null;
-    }
-
-    private static StrategyStrongholdStateDto MaskAsKnownStronghold(StrategyStrongholdStateDto dto)
-        => dto with
-        {
-            VisibilityTier = "Known",
-            Food = 0,
-            Population = 0,
-            GarrisonSoldiers = 0,
-            GarrisonWounded = 0,
-            Money = 0,
-            Morale = 0,
-            Training = 0,
-            Defense = 0,
-            DefenseFacilities = [],
-            EconomyFacilities = [],
-            SiegeThreat = null
-        };
+        => ResolveFog(meta).ApplyStrongholdFog(dto, meta, gameData, visibility, mapWidth);
 
     public static bool IsMapEntityVisible(
         int x,
         int y,
         StrategyScenarioMeta meta,
         ForceVisibilityState visibility)
-    {
-        if (meta.StartOptions.FogMode == StrategyFogMode.None)
-            return true;
-
-        return visibility.VisibleCells.Contains((x, y));
-    }
+        => ResolveFog(meta).IsMapEntityVisible(x, y, meta, visibility);
 
     /// <summary>运输队等地图实体：仅在当前视野格显示。</summary>
     public static bool IsMapMobileEntityVisible(
@@ -147,4 +85,7 @@ public static class StrategyFogDtoRules
 
     public static GameStartOptionsDto ToOptionsDto(GameStartOptions options)
         => GameStartOptionsMapper.ToDto(options);
+
+    private static IFogModeBehavior ResolveFog(StrategyScenarioMeta meta)
+        => GameStartOptionsProfile.Create(meta.StartOptions, meta.Difficulty).Fog;
 }

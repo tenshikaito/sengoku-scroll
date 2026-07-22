@@ -12,6 +12,7 @@ using SengokuScroll.Domain.Definitions;
 using SengokuScroll.Domain.Extensions;
 using SengokuScroll.Domain.Types;
 using SengokuScroll.Domain.World;
+using SengokuScroll.Strategy.Policies.BattlefieldDto;
 using SengokuScroll.Strategy.Vision;
 using static SengokuScroll.Domain.Entities.Unit;
 
@@ -1129,8 +1130,9 @@ public static class StrategyWorldStateMapper
         var tileMap = world.GameMapMasterData.TileMap;
         var date = world.GameData.GameDate;
         var options = meta.StartOptions;
+        var startProfile = Policies.GameStart.GameStartOptionsProfile.Create(options, meta.Difficulty);
         var visibilityState = visibilityLedger?.GetOrCreate(meta.PlayerForceId);
-        var intelPolicy = IntelPolicyFactory.Create(options.IntelMode);
+        var intelBehavior = startProfile.Intel;
         var visibleCells = visibilityState?.VisibleCells ?? [];
         var lordLocation = StrategyLordHelper.ResolveLocation(world.GameData, meta);
         var lordResidenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
@@ -1215,7 +1217,7 @@ public static class StrategyWorldStateMapper
                     .Cast<StrategyStrongholdStateDto>()
                     .Select(dto => ApplyStrongholdEspionageMask(dto, meta, world.GameData, espionageLedger))
                     .OrderBy(s => s.Id)],
-            Units = MapFoggedUnits(world, meta, visibilityState, intelPolicy, visibleCells, espionageLedger),
+            Units = MapFoggedUnits(world, meta, visibilityState, intelBehavior, visibleCells, espionageLedger),
             OwnUnitRoster = MapOwnUnitRoster(world, meta, visibilityState),
             Battlefields = [.. world.GameData.Battlefields.Values
                 .Where(b => !b.IsClosed)
@@ -1501,17 +1503,13 @@ public static class StrategyWorldStateMapper
         StrategyScenarioMeta meta,
         GameData gameData,
         StrategyEspionageIntelLedger? espionageLedger)
-    {
-        if (meta.StartOptions.IntelMode == StrategyIntelMode.Full)
-            return dto;
-
-        return EspionageIntelRules.ApplyStrongholdMask(
-            dto,
-            meta.PlayerForceId,
-            gameData,
-            espionageLedger,
-            meta.StartOptions);
-    }
+        => Policies.GameStart.GameStartOptionsProfile.Create(meta.StartOptions, meta.Difficulty)
+            .Intel.ApplyStrongholdDtoMask(
+                dto,
+                meta,
+                gameData,
+                espionageLedger,
+                meta.StartOptions);
 
     private static IReadOnlyList<StrategyEspionageIntelEntryDto> MapEspionageIntel(
         StrategyEspionageIntelLedger? espionageLedger)
@@ -1809,24 +1807,18 @@ public static class StrategyWorldStateMapper
             participantBuckets[u.ForceId] = bucket;
         }
 
-        if (b.Kind == BattlefieldKind.Siege
-            && b.StrongholdId > 0
-            && gameData.Strongholds.TryGetValue(b.StrongholdId, out var siegeTarget))
+        var enrichment = BattlefieldKindDtoEnrichmentRegistry.Resolve(b.Kind);
+        var bucketState = new BattlefieldParticipantBuckets
         {
-            var garrisonSoldiers = StrongholdGarrisonRules.GetCityGarrisonSoldiers(siegeTarget);
-            if (garrisonSoldiers > 0 || siegeTarget.ForceActor.Money > 0 || siegeTarget.ForceActor.Food > 0)
-            {
-                if (!participantBuckets.TryGetValue(siegeTarget.ForceId, out var defenderBucket))
-                    defenderBucket = (0, 0, 0, 0);
+            Soldiers = soldiers,
+            AggressorSoldiers = aggressorSoldiers,
+        };
+        foreach (var kv in participantBuckets)
+            bucketState.ForceBuckets[kv.Key] = kv.Value;
 
-                defenderBucket.Soldiers += garrisonSoldiers;
-                defenderBucket.MoraleWeighted += siegeTarget.ForceActor.Morale * Math.Max(1, garrisonSoldiers);
-                defenderBucket.Money += siegeTarget.ForceActor.Money;
-                defenderBucket.Food += siegeTarget.ForceActor.Food;
-                participantBuckets[siegeTarget.ForceId] = defenderBucket;
-                soldiers += garrisonSoldiers;
-            }
-        }
+        enrichment.EnrichParticipants(b, gameData, bucketState);
+        soldiers = bucketState.Soldiers;
+        participantBuckets = bucketState.ForceBuckets;
 
         var participants = participantBuckets
             .OrderByDescending(kv => kv.Value.Soldiers)
@@ -1848,13 +1840,7 @@ public static class StrategyWorldStateMapper
             })
             .ToList();
 
-        string? siegeThreat = null;
-        if (b.Kind == BattlefieldKind.Siege
-            && b.StrongholdId > 0
-            && gameData.Strongholds.TryGetValue(b.StrongholdId, out var stronghold))
-        {
-            siegeThreat = ResolveStrongholdSiegeThreat(stronghold, gameData);
-        }
+        var siegeThreat = enrichment.ResolveSiegeThreat(b, gameData);
 
         return new StrategyBattlefieldStateDto
         {
@@ -1875,7 +1861,7 @@ public static class StrategyWorldStateMapper
         GameWorld world,
         StrategyScenarioMeta meta,
         ForceVisibilityState? visibilityState,
-        IIntelPolicy intelPolicy,
+        Policies.GameStart.IIntelModeBehavior intelBehavior,
         HashSet<(int X, int Y)> visibleCells,
         StrategyEspionageIntelLedger? espionageLedger)
     {
@@ -1896,16 +1882,14 @@ public static class StrategyWorldStateMapper
                 continue;
 
             var dto = MapUnit(unit, meta, world.GameData) with { MapVisible = true };
-            dto = intelPolicy.ApplyUnitIntelMask(dto, world, meta, meta.PlayerForceId, visibleCells);
-            if (meta.StartOptions.IntelMode != StrategyIntelMode.Full)
-            {
-                dto = EspionageIntelRules.ApplyUnitMask(
-                    dto,
-                    meta.PlayerForceId,
-                    world.GameData,
-                    espionageLedger,
-                    meta.StartOptions);
-            }
+            dto = intelBehavior.ApplyUnitDtoMask(
+                dto,
+                world,
+                meta,
+                meta.PlayerForceId,
+                visibleCells,
+                espionageLedger,
+                meta.StartOptions);
 
             mapUnits.Add(dto);
         }
@@ -2185,54 +2169,12 @@ public static class StrategyWorldStateMapper
             DefenseFacilities = facilities,
             LuxuryGoods = s.ForceActor.LuxuryGoods,
             EconomyFacilities = MapEconomyFacilities(s),
-            SiegeThreat = ResolveStrongholdSiegeThreat(s, gameData)
+            SiegeThreat = StrategyWorldStateDtoSiegeThreatResolver.Resolve(s, gameData)
         };
     }
 
     private static string? ResolveStrongholdSiegeThreat(Stronghold stronghold, GameData gameData)
-    {
-        if (!gameData.Forces.TryGetValue(stronghold.ForceId, out var holderForce))
-            return null;
-
-        string? encircle = null;
-        foreach (var unit in gameData.Units.Values)
-        {
-            if (!unit.IsMilitary || unit.Soldier <= 0 || unit.SiegeMode == UnitSiegeMode.None)
-                continue;
-
-            if (!unit.Location.IsSameTile(stronghold.Location))
-                continue;
-
-            if (unit.ForceId == stronghold.ForceId)
-                continue;
-
-            if (!gameData.Forces.TryGetValue(unit.ForceId, out var unitForce))
-                continue;
-
-            if (!DiplomacyRules.IsEnemy(unitForce, holderForce).IsSuccess)
-                continue;
-
-            if (unit.SiegeMode == UnitSiegeMode.Assault)
-                return "Assault";
-
-            if (unit.SiegeMode == UnitSiegeMode.Encircle)
-                encircle = "Encircle";
-        }
-
-        foreach (var battlefield in gameData.Battlefields.Values)
-        {
-            if (battlefield.IsClosed || battlefield.Kind != BattlefieldKind.Siege)
-                continue;
-
-            if (battlefield.Location.X != stronghold.Location.X
-                || battlefield.Location.Y != stronghold.Location.Y)
-                continue;
-
-            return encircle ?? "Assault";
-        }
-
-        return encircle;
-    }
+        => StrategyWorldStateDtoSiegeThreatResolver.Resolve(stronghold, gameData);
 
     private static IReadOnlyList<StrategyEconomyFacilityStateDto> MapEconomyFacilities(Stronghold stronghold)
         => stronghold.EconomyFacilityIds.Count == 0

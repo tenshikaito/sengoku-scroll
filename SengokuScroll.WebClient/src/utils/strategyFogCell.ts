@@ -5,11 +5,15 @@ import type {
   StrategyUnitState,
   StrategyWorldState,
 } from "@/api/strategy";
+import { GameStartOptionsProfile } from "@/gameStartOptions/GameStartOptionsProfile";
 import { isPlayerRealmForce } from "@/utils/mapEntityColors";
 
+function profile(worldState: StrategyWorldState): GameStartOptionsProfile {
+  return GameStartOptionsProfile.fromWorldState(worldState);
+}
+
 export function fogDisabled(worldState: StrategyWorldState): boolean {
-  const mode = worldState.visibility?.fogMode;
-  return !mode || mode === "None";
+  return profile(worldState).fogDisabled();
 }
 
 export function isTileExplored(worldState: StrategyWorldState, x: number, y: number): boolean {

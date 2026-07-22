@@ -1,4 +1,4 @@
-import type { StrategyWorldState } from "@/api/strategy";
+import type { StrategySupplyConvoyState, StrategyWorldState } from "@/api/strategy";
 import { resolvePlayerLordCharacterId } from "@/utils/strategyPlayerCharacter";
 
 /** 移民队无所属势力、无指令菜单，不参与格点多选。 */
@@ -97,17 +97,4 @@ export function collectMapCellEntityOptions(
   return options;
 }
 
-export function mapCellEntityKindIcon(kind: MapCellEntityKind): string {
-  switch (kind) {
-    case "unit":
-      return "⚔";
-    case "character":
-      return "👤";
-    case "stronghold":
-      return "🏯";
-    case "convoy":
-      return "🌾";
-    default:
-      return "•";
-  }
-}
+export { mapCellEntityKindIcon } from "@/mapCellEntity/MapCellEntityKindBehavior";

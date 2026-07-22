@@ -2,6 +2,7 @@ using SengokuScroll.Domain;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Policies.GameStart;
 
 namespace SengokuScroll.Strategy.Vision;
 
@@ -59,12 +60,12 @@ public sealed class StrategyVisibilityLedger
         state.EnsureCapacity(tileMap.Width, tileMap.Height);
         state.VisibleCells.Clear();
 
-        var policy = VisionPolicyFactory.Create(options.FogMode);
-        var visible = policy.ComputeVisibleTiles(world, meta, playerForceId, options);
+        var profile = GameStartOptionsProfile.Create(options, meta.Difficulty);
+        var visible = profile.Fog.VisionPolicy.ComputeVisibleTiles(world, meta, playerForceId, options);
         foreach (var cell in visible)
             state.VisibleCells.Add(cell);
 
-        if (options.FogMode == StrategyFogMode.None)
+        if (profile.Fog.FogDisabled)
         {
             for (var y = 0; y < tileMap.Height; y++)
             {

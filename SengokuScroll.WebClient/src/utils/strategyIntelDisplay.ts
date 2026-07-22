@@ -1,6 +1,14 @@
 import type { StrategyForceState, StrategyStrongholdState, StrategyUnitState, StrategyWorldState } from "@/api/strategy";
-import { isPlayerRealmForce, resolveRealmRootId } from "@/utils/mapEntityColors";
+import { resolveIntelBandTone as resolveIntelBandToneFromBehaviors } from "@/intelDisplay/IntelDisplayBehaviors";
+import { resolveStrongholdEspionageBand } from "@/intelDisplay/StrongholdEspionageBandBehavior";
+import { GameStartOptionsProfile } from "@/gameStartOptions/GameStartOptionsProfile";
+import { isAllyIntelVisible as isAllyIntelVisibleFromProfile } from "@/gameStartOptions/IntelModeBehavior";
+import { isPlayerRealmForce } from "@/utils/mapEntityColors";
 import { formatFoodGo, formatMoney, formatSoldiers } from "@/utils/strategyDisplayUnits";
+
+function startProfile(worldState: StrategyWorldState): GameStartOptionsProfile {
+  return GameStartOptionsProfile.fromWorldState(worldState);
+}
 
 const UNKNOWN_INTEL = "未知";
 
@@ -62,45 +70,19 @@ const KNOWN_STRONGHOLD_HIDDEN_LABELS = new Set([
 ]);
 
 export function resolveIntelMode(worldState: StrategyWorldState): string {
-  return (
-    worldState.startOptions?.intelMode ??
-    worldState.visibility?.intelMode ??
-    "Full"
-  );
+  return startProfile(worldState).intel.mode;
 }
 
 export function isRestrictedIntelMode(worldState: StrategyWorldState): boolean {
-  return resolveIntelMode(worldState) !== "Full";
-}
-
-function resolveShowAllyIntel(worldState: StrategyWorldState): boolean {
-  return (
-    worldState.startOptions?.showAllyIntel ??
-    worldState.visibility?.showAllyIntel ??
-    false
-  );
+  return startProfile(worldState).isRestrictedIntelMode();
 }
 
 /** 开启显示同盟情报时：与同盟 Realm 共享具体数值；外藩除外。 */
-export function isAllyIntelVisible(worldState: StrategyWorldState, forceId: number): boolean {
-  if (!resolveShowAllyIntel(worldState)) return false;
-
-  const force = worldState.forces.find((f) => f.id === forceId);
-  if (!force || force.status === "OuterVassal") return false;
-
-  const playerRoot = resolveRealmRootId(worldState.playerForceId, worldState.forces);
-  const targetRoot = resolveRealmRootId(forceId, worldState.forces);
-  if (playerRoot === targetRoot) return false;
-
-  const diplomacy = worldState.diplomacies.find((d) => d.targetForceId === targetRoot);
-  return diplomacy?.relation === "Allied";
-}
+export const isAllyIntelVisible = isAllyIntelVisibleFromProfile;
 
 /** 困难模式（角色迷雾或 Hard 难度）：人物能力以高/中/低显示。 */
 export function isCharacterFogMode(worldState: StrategyWorldState): boolean {
-  const fogMode =
-    worldState.startOptions?.fogMode ?? worldState.visibility?.fogMode ?? "Force";
-  return fogMode === "Character" || worldState.difficulty === "Hard";
+  return startProfile(worldState).isCharacterFogMode();
 }
 
 /** 数值档位：≥70 高，≥40 中，否则低。 */
@@ -112,30 +94,14 @@ export function formatStatBand(value: unknown): string {
   return "低";
 }
 
-export type IntelBandTone = "high" | "mid" | "low";
-
-export function resolveIntelBandTone(value: string | undefined | null): IntelBandTone | null {
-  switch (value?.trim()) {
-    case "高":
-      return "high";
-    case "中":
-      return "mid";
-    case "低":
-      return "low";
-    default:
-      return null;
-  }
-}
+export const resolveIntelBandTone = resolveIntelBandToneFromBehaviors;
 
 /** 非自势力是否须隐藏具体数值（须谍报后才展示；同盟/内藩在开启选项时可见）。 */
 export function isForeignIntelRestricted(
   worldState: StrategyWorldState,
   forceId: number,
 ): boolean {
-  if (!isRestrictedIntelMode(worldState)) return false;
-  if (isPlayerRealmForce(forceId, worldState.playerForceId, worldState.forces)) return false;
-  if (isAllyIntelVisible(worldState, forceId)) return false;
-  return true;
+  return startProfile(worldState).isForeignIntelRestricted(worldState, forceId);
 }
 
 /** 敌方单位是否处于模糊情报（后端写入 soldiersDisplay 等）。 */
@@ -226,34 +192,18 @@ export function hoverFoodLabel(
   return UNKNOWN_INTEL;
 }
 
-function resolveStrongholdEspionageBand(
+function resolveStrongholdEspionageBandLocal(
   stronghold: StrategyStrongholdState,
   label: string,
 ): string | null | undefined {
-  switch (label) {
-    case "兵力":
-      return stronghold.espionageSoldiersBand;
-    case "士气":
-      return stronghold.espionageMoraleBand;
-    case "训练度":
-      return stronghold.espionageTrainingBand;
-    case "人口":
-    case "规模":
-      return stronghold.espionagePopulationBand;
-    case "粮食":
-      return stronghold.espionageFoodBand;
-    case "金钱":
-      return stronghold.espionageMoneyBand;
-    default:
-      return undefined;
-  }
+  return resolveStrongholdEspionageBand(stronghold, label);
 }
 
 function strongholdEspionageBandOrUnknown(
   stronghold: StrategyStrongholdState,
   label: string,
 ): string | null {
-  const band = resolveStrongholdEspionageBand(stronghold, label);
+  const band = resolveStrongholdEspionageBandLocal(stronghold, label);
   if (band === undefined) return null;
   if (band === "未知") return UNKNOWN_INTEL;
   return band;

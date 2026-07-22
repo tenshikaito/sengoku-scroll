@@ -1,3 +1,16 @@
+import { buildStrongholdGarrisonIntelRows } from "@/intelDisplay/StrongholdGarrisonIntelBehavior";
+import {
+  buildBattlefieldStatusRows,
+  formatBattlefieldParticipantSoldiers,
+} from "@/intelDisplay/BattlefieldKindPresentationBehavior";
+import {
+  battlefieldKindLabel as battlefieldKindLabelFromBehaviors,
+  siegeThreatLabel,
+} from "@/intelDisplay/IntelDisplayBehaviors";
+import {
+  compactCellEntityRows as compactCellEntityRowsFromBehaviors,
+  type CompactCellEntityEntry,
+} from "@/intelDisplay/CompactCellEntityBehaviors";
 import type {
   StrategyBattlefieldState,
   StrategyMessengerState,
@@ -16,7 +29,6 @@ import {
   formatFoodGo,
   formatMoney,
   formatSoldiers,
-  formatSiegeSoldiers,
 } from "@/utils/strategyDisplayUnits";
 import { formatInTransitSupplies, supplyStatusLabel } from "@/utils/strategySupplyLabels";
 import { unitStanceLabel, unitStatusLabel } from "@/utils/strategyUnitLabels";
@@ -44,15 +56,8 @@ export interface IntelFieldRow {
   dev?: boolean;
 }
 
-function siegeThreatLabel(value: string | undefined | null): string {
-  switch (value) {
-    case "Assault":
-      return "强攻";
-    case "Encircle":
-      return "围城";
-    default:
-      return "—";
-  }
+function battlefieldKindLabel(kind: string | undefined | null): string {
+  return battlefieldKindLabelFromBehaviors(kind, textOrDash);
 }
 
 function dash(value: string | null | undefined): string {
@@ -107,43 +112,25 @@ function findBattlefieldById(
   return worldState.battlefields?.find((b) => b.id === battlefieldId) ?? null;
 }
 
-function battlefieldKindLabel(kind: string | undefined | null): string {
-  switch (kind) {
-    case "Siege":
-      return "攻城战";
-    case "Field":
-      return "野战";
-    default:
-      return textOrDash(kind);
-  }
-}
-
 function battlefieldIntelRows(
   battlefield: StrategyBattlefieldState,
   playerForceId: number,
 ): IntelFieldRow[] {
   const rows: IntelFieldRow[] = [{ label: "战场", value: battlefieldKindLabel(battlefield.kind) }];
-
-  if (battlefield.kind === "Siege") {
-    rows.push({ label: "攻城", value: siegeThreatLabel(battlefield.siegeThreat) });
-    if (battlefield.standoffDays > 0) {
-      rows.push({ label: "持续", value: `${battlefield.standoffDays} 日` });
-    }
-  } else {
-    rows.push({
-      label: "对峙",
-      value: battlefield.standoffDays > 0 ? `${battlefield.standoffDays} 日` : "当日",
-    });
-  }
+  rows.push(...buildBattlefieldStatusRows(battlefield));
 
   if (battlefield.participants?.length) {
     rows.push({
       label: "参战",
       value: battlefield.participants
         .map((p) =>
-          battlefield.kind === "Siege"
-            ? `${p.forceName} ${formatSiegeSoldiers(p.soldiers, p.forceId, playerForceId)}`
-            : `${p.forceName} ${formatSoldiers(p.soldiers)}`
+          formatBattlefieldParticipantSoldiers(
+            battlefield,
+            p.forceName,
+            p.soldiers,
+            p.forceId,
+            playerForceId,
+          ),
         )
         .join(" / "),
     });
@@ -427,44 +414,19 @@ export function strongholdDetailIntelRows(
     { label: "虚构", value: stronghold.isHistorical ? "×" : "○" },
   ];
 
-  if (includeBattleIntel) {
-    const fieldGarrison = worldState.units.filter(
-      (u) => u.x === stronghold.x && u.y === stronghold.y && u.forceId === stronghold.forceId
-    );
-
-    if (cityGarrison > 0) {
-      rows.push({ label: "城内兵", value: formatSoldiers(cityGarrison) });
-    }
-
-    const garrisonParts: string[] = [];
-    if (fieldGarrison.length) {
-      garrisonParts.push(
-        ...fieldGarrison.map((u) => `${u.name}（${formatSoldiers(u.soldiers)}）`)
-      );
-    }
-    if (garrisonParts.length) {
-      rows.push({ label: "地图驻军", value: garrisonParts.join("、") });
-    } else if (cityGarrison <= 0) {
-      rows.push({ label: "兵力", value: "无" });
-    }
-
-    rows.push(...cellEnemyUnitRows(worldState, stronghold.x, stronghold.y, stronghold.forceId));
-
-    const battlefield = findBattlefieldAtCell(worldState, stronghold.x, stronghold.y);
-    if (battlefield) {
-      rows.push(...battlefieldIntelRows(battlefield, worldState.playerForceId));
-    }
-  } else if (cityGarrison > 0) {
-    rows.push({
-      label: "兵力",
-      value: strongholdHoverFieldValue(worldState, stronghold, "兵力", formatSoldiers(cityGarrison)),
-    });
-  } else {
-    rows.push({
-      label: "兵力",
-      value: strongholdHoverFieldValue(worldState, stronghold, "兵力", "无"),
-    });
-  }
+  rows.push(
+    ...buildStrongholdGarrisonIntelRows({
+      worldState,
+      stronghold,
+      cityGarrison,
+      includeBattleIntel,
+      formatSoldiers,
+      strongholdHoverFieldValue,
+      cellEnemyUnitRows,
+      battlefieldIntelRows,
+      findBattlefieldAtCell,
+    }),
+  );
 
   return rows;
 }
@@ -511,35 +473,10 @@ export function compactCellEntityRows(
   worldState: StrategyWorldState,
   entry: CompactCellEntityEntry
 ): IntelFieldRow[] {
-  switch (entry.kind) {
-    case "unit":
-      return [
-        { label: "名称", value: entry.unit.name },
-        { label: "势力", value: forceName(worldState, entry.unit.forceId) },
-        { label: "将领", value: dash(entry.unit.commanderName) },
-        { label: "兵数", value: hoverSoldiersLabel(worldState, entry.unit) },
-      ];
-    case "convoy":
-      return [
-        { label: "名称", value: entry.convoy.name },
-        { label: "势力", value: forceName(worldState, entry.convoy.forceId) },
-        { label: "将领", value: dash(entry.convoy.commanderName) },
-        { label: "兵数", value: formatSoldiers(entry.convoy.soldiers) },
-      ];
-    case "messenger":
-      return [
-        { label: "名称", value: entry.messenger.name },
-        { label: "势力", value: forceName(worldState, entry.messenger.forceId) },
-        { label: "将领", value: "—" },
-        { label: "兵数", value: formatSoldiers(entry.messenger.soldiers) },
-      ];
-  }
+  return compactCellEntityRowsFromBehaviors(worldState, entry);
 }
 
-export type CompactCellEntityEntry =
-  | { kind: "unit"; key: string; forceId: number; unit: StrategyUnitState }
-  | { kind: "convoy"; key: string; forceId: number; convoy: StrategySupplyConvoyState }
-  | { kind: "messenger"; key: string; forceId: number; messenger: StrategyMessengerState };
+export type { CompactCellEntityEntry };
 
 /** 悬浮框：运输队（精简字段）。 */
 export function convoyHoverIntelRows(
