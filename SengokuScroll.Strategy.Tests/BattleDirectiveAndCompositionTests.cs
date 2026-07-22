@@ -63,7 +63,7 @@ public class BattleDirectiveAndCompositionTests
         defender.Food = 100_000;
 
         var world = StrategyTestWorldBuilder.BuildAdjacentBattleWorld(attacker, defender);
-        world.GameData.Messengers[1] = new Messenger
+        world.GameData.MessageCarriers[1] = new MessageCarrier
         {
             Id = 1,
             Name = "假报",
@@ -71,12 +71,15 @@ public class BattleDirectiveAndCompositionTests
             LeaderId = 0,
             Location = defender.Location,
             SourceStrongholdId = 0,
-            TargetUnitId = defender.Id,
             CourierCount = 1,
             EscortSoldierCount = 0,
-            PayloadType = MessengerPayloadType.FalseIntelligence,
-            Status = MessengerStatus.Arrived,
-            RoutePoints = new Queue<Point3>()
+            Status = MessageCarrierStatus.Arrived,
+            RoutePoints = new Queue<Point3>(),
+            Payload = new MessagePayload
+            {
+                Type = MessagePayloadType.FalseIntelligence,
+                TargetUnitId = defender.Id
+            }
         };
 
         var commit = BattleCommitRules.ResolveCommitSide(

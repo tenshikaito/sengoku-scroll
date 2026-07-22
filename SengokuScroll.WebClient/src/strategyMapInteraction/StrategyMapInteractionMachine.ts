@@ -1,5 +1,7 @@
+import type { MapCellEntityOption } from "@/utils/mapCellEntityPicker";
 import type {
   MapHoverCellPayload,
+  MapSelectCellEntitiesPayload,
   MapSelectCellPayload,
   MapSelectUnitPayload,
   StrategyMapInteractionContext,
@@ -57,6 +59,27 @@ export class StrategyMapInteractionMachine {
 
   onSelectConvoy(payload: import("./types").MapSelectConvoyPayload): void {
     this.current.onSelectConvoy(this.ctx, payload);
+  }
+
+  onSelectCharacter(payload: import("./types").MapSelectCharacterPayload): void {
+    this.current.onSelectCharacter(this.ctx, payload);
+  }
+
+  onSelectCharacterAndStronghold(payload: import("./types").MapSelectCharacterStrongholdPayload): void {
+    this.current.onSelectCharacterAndStronghold(this.ctx, payload);
+  }
+
+  onSelectCellEntities(
+    payload: MapSelectCellEntitiesPayload,
+    entities: readonly MapCellEntityOption[],
+  ): void {
+    this.current.onSelectCellEntities(this.ctx, payload, entities);
+    this.emitSnapshot();
+  }
+
+  onPickCellEntity(entity: MapCellEntityOption): void {
+    this.current.onPickCellEntity(this.ctx, entity);
+    this.emitSnapshot();
   }
 
   /** @returns 非 null 时父组件应调用移动 API */

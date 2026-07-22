@@ -22,6 +22,8 @@ public static class ServiceCollectionExtensions
         services.AddSengokuLocalization();
         services.TryAddSingleton<IOptions<StrategyDayDebugOptions>>(
             _ => Options.Create(new StrategyDayDebugOptions()));
+        services.TryAddSingleton<IOptions<StrategyAiTraceOptions>>(
+            _ => Options.Create(new StrategyAiTraceOptions()));
         services.TryAddSingleton<IStrategyDayDebugLog, StrategyDayDebugLog>();
         services.AddSingleton<StrategySimulationHost>();
         return services;
@@ -39,7 +41,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IUnitSystem>(sp => sp.GetRequiredService<StrategyUnitSystem>());
 
         services.AddSingleton<SupplyConvoyDispatchHelper>();
-        services.AddSingleton<MessengerDispatchHelper>();
+        services.AddSingleton<MigrantDispatchHelper>();
+        services.AddSingleton<MessageCarrierDispatchHelper>();
         services.AddSingleton<StrategyPendingBattleReportStore>();
         services.AddSingleton<StrategyPendingEventStore>();
         services.AddSingleton<BattleReportDeliveryHelper>();
@@ -63,7 +66,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IEconomySystem>(sp => sp.GetRequiredService<StrategyEconomySystem>());
 
         services.AddSingleton<IStrategySupplySystem, StrategySupplySystem>();
-        services.AddSingleton<IStrategyMessengerSystem, StrategyMessengerSystem>();
+        services.AddSingleton<StrategyMigrantSystem>();
+        services.AddSingleton<IStrategyMigrantSystem>(sp => sp.GetRequiredService<StrategyMigrantSystem>());
+        services.AddSingleton<IStrategyMessageCarrierSystem, StrategyMessageCarrierSystem>();
 
         services.AddSingleton<StrategyVisibilityLedger>();
         services.AddSingleton<StrategyEspionageIntelLedger>();
@@ -88,6 +93,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IStrategyStrongholdOccupationSystem>(
             sp => sp.GetRequiredService<StrategyStrongholdOccupationSystem>());
 
+        services.AddSingleton<StrategyCharacterAISystem>();
+        services.AddSingleton<IStrategyCharacterAISystem>(sp => sp.GetRequiredService<StrategyCharacterAISystem>());
+
         services.AddSingleton<StrategyAISystem>();
         services.AddSingleton<IStrategyAISystem>(sp => sp.GetRequiredService<StrategyAISystem>());
         services.AddSingleton<IAISystem>(sp => sp.GetRequiredService<StrategyAISystem>());
@@ -111,14 +119,16 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IClimateSystem>(),
             sp.GetRequiredService<IStrategyMarketSystem>(),
             sp.GetRequiredService<IEconomySystem>(),
+            sp.GetRequiredService<IStrategyMigrantSystem>(),
             sp.GetRequiredService<IStrategySupplySystem>(),
+            sp.GetRequiredService<IStrategyCharacterAISystem>(),
             sp.GetRequiredService<IAISystem>(),
             sp.GetRequiredService<IUnitSystem>(),
             sp.GetRequiredService<IStrategyVisionSystem>(),
             sp.GetRequiredService<IStrategySiegeSystem>(),
             sp.GetRequiredService<IStrategyMoveEngagementSystem>(),
             sp.GetRequiredService<IStrategyStrongholdOccupationSystem>(),
-            sp.GetRequiredService<IStrategyMessengerSystem>(),
+            sp.GetRequiredService<IStrategyMessageCarrierSystem>(),
             sp.GetRequiredService<IStrategyBattleResolutionSystem>(),
             sp.GetRequiredService<ICharacterSystem>()
         ];

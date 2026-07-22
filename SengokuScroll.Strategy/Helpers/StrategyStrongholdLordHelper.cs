@@ -71,20 +71,17 @@ public static class StrategyStrongholdLordHelper
     /// <summary>是否当主直辖（LordId=0）。</summary>
     public static bool IsDirectRule(Stronghold stronghold) => stronghold.LordId == 0;
 
-    /// <summary>是否势力当主居城（当主角色 <see cref="Character.StrongholdId"/> 等于本据点）。</summary>
+    /// <summary>是否势力当主名义居城（剧本固定，不随出访改变）。</summary>
     public static bool IsForceLordResidence(
         Stronghold stronghold,
         StrategyScenarioMeta meta,
         GameData gameData)
     {
-        var lordCharacterId = ResolveForceLordCharacterId(stronghold.ForceId, meta, gameData);
-        if (lordCharacterId <= 0
-            || !gameData.Characters.TryGetValue(lordCharacterId, out var lord))
-        {
-            return false;
-        }
-
-        return lord.StrongholdId == stronghold.Id;
+        var residenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
+            stronghold.ForceId,
+            gameData,
+            meta);
+        return residenceId > 0 && stronghold.Id == residenceId;
     }
 
     /// <summary>
@@ -110,5 +107,6 @@ public static class StrategyStrongholdLordHelper
         lord.StrongholdId = stronghold.Id;
         lord.Location = stronghold.Location;
         lord.LocationType = CharacterLocationType.Stronghold;
+        lord.LocationStrongholdId = stronghold.Id;
     }
 }

@@ -1,4 +1,5 @@
 using SengokuScroll.Common.Types;
+using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Actions;
 using SengokuScroll.Strategy.Calculators;
@@ -65,22 +66,22 @@ public class SupplyConvoyActionsTests
     }
 }
 
-/// <summary>信使制度规则与假情报行为（<see cref="MessengerRules"/> / <see cref="MessengerActions"/>）的单元测试。</summary>
-public class MessengerRulesAndActionsTests
+/// <summary>信使制度规则与假情报行为（<see cref="MessageCarrierRules"/> / <see cref="MessageCarrierActions"/>）的单元测试。</summary>
+public class MessageCarrierRulesAndActionsTests
 {
     [Fact]
     public void RequiresMessenger_WhenSameTile_ReturnsFalse()
     {
         // 同格（含同在据点内）免信使
         var p = new Point3(3, 4);
-        Assert.False(MessengerRules.RequiresMessenger(p, p));
+        Assert.False(MessageCarrierRules.RequiresInTransitDelivery(p, p));
     }
 
     [Fact]
     public void RequiresMessenger_WhenDifferentTile_ReturnsTrue()
     {
         // 异格必须信使传递
-        Assert.True(MessengerRules.RequiresMessenger(new Point3(1, 1), new Point3(2, 2)));
+        Assert.True(MessageCarrierRules.RequiresInTransitDelivery(new Point3(1, 1), new Point3(2, 2)));
     }
 
     [Fact]
@@ -103,25 +104,28 @@ public class MessengerRulesAndActionsTests
         };
 
         // 敌方信使投递假情报，目标为该运输队
-        var messenger = new Domain.Entities.Messenger
+        var carrier = new Domain.Entities.MessageCarrier
         {
             Id = 1,
-            Name = "测试假情报信使",
+            Name = "测试假情报载体",
             ForceId = 2,
             Location = new Point3(5, 5),
             SourceStrongholdId = 9,
-            TargetUnitId = 0,
-            PayloadType = MessengerPayloadType.FalseIntelligence,
-            Status = MessengerStatus.Moving,
-            TargetConvoyId = 1
+            Status = MessageCarrierStatus.Moving,
+            RoutePoints = new Queue<Point3>(),
+            Payload = new MessagePayload
+            {
+                Type = MessagePayloadType.FalseIntelligence,
+                TargetConvoyId = 1
+            }
         };
 
-        MessengerActions.ApplyFalseIntelligence(convoy, messenger);
+        MessageCarrierActions.ApplyFalseIntelligence(convoy, carrier);
 
         Assert.True(convoy.IsDeceived);
         Assert.Equal(SupplyConvoyStatus.Deceived, convoy.Status);
         Assert.Equal(LogisticsConstants.FalseIntelligenceHoldDays, convoy.DeceivedHoldDaysRemaining);
         Assert.Empty(convoy.RoutePoints);
-        Assert.Equal(messenger.Location, convoy.DeceivedRedirect);
+        Assert.Equal(carrier.Location, convoy.DeceivedRedirect);
     }
 }

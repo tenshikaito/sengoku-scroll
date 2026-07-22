@@ -4,12 +4,14 @@
 
 ## 1. 难度档位（3 模板 + Custom）
 
-| 难度 | Fog | Intel | Control | Instant UI |
-|------|-----|-------|---------|------------|
-| Easy | None | Full | FullDirect | ON（强制） |
-| Normal | Force | ForceIntel | DirectiveOnly | OFF |
-| Hard | Character | ForceIntel | DirectiveOnly | OFF |
-| Custom | 可逐项配置 | | | |
+| 难度 | Fog | Intel | Control | Instant UI | AllyVision | CharVision |
+|------|-----|-------|---------|------------|------------|------------|
+| Easy | None | Full | FullDirect | ON（强制） | ON | ON |
+| Normal | Force | ForceIntel | DirectiveOnly | OFF | OFF | OFF |
+| Hard | Character | ForceIntel | DirectiveOnly | OFF | N/A | N/A |
+| Custom | 可逐项配置 | | | | 仅 Force 模式 | 仅 Force 模式 |
+
+**玩家当主角色**在任何迷雾模式下均提供视野（外出/随军时），不受 `CharacterSharedVision` 影响。
 
 **难度仅影响迷雾与消息/情报获取方式，不影响战斗伤亡下限、追击脱离率等战斗数值。**
 
@@ -20,6 +22,17 @@
 - 默认半径：**2 格**（单位、据点、角色均如此）。
 - 形状：轴对齐方形，格 `(x,y)` 可见当且仅当 `|x-x0| ≤ range` 且 `|y-y0| ≤ range`。
 - Known 据点（如剧本 `knownStrongholdIds` 中的挂川 Id=6）：单格 gray 标记，不提供 sight。
+
+### 2.1 文书载体（IMessageCarrier）
+
+「信使」不是独立地图种族，而是 **单位/角色携带文书的载体抽象**（当前过渡实现为 `MessageCarrier` + `MessagePayload` + `CarrierKind`）：
+
+| CarrierKind | 典型来源 | 势力迷雾视野 | 地图显示 |
+|-------------|----------|--------------|----------|
+| `UnitEscort` | 战报/前线情报（单位编制护送） | **贡献视野**（同军事单位） | 仅 **亮格** |
+| `Character` | 方针/税令/匿名信差 | **不贡献视野** | 仅 **亮格** |
+
+灰格/黑格上不显示任何在途文书载体位置；玩家通过消息区/列表获知文书状态。
 
 ## 3. 开局 UI
 

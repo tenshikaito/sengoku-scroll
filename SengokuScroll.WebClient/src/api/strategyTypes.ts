@@ -23,7 +23,7 @@ export interface StrategyWorldState {
   /** 进行中地图交战格（折叠显示用）。 */
   battlefields?: StrategyBattlefieldState[];
   supplyConvoys: StrategySupplyConvoyState[];
-  messengers: StrategyMessengerState[];
+  messageCarriers: StrategyMessageCarrierState[];
   /** 玩家势力视角外交（目标势力 Id + 关系）。 */
   diplomacies: StrategyDiplomacyState[];
   /** 将领摘要（id + 所属势力）；用于本势力将领数统计。 */
@@ -52,6 +52,7 @@ export interface StrategyVisibilityState {
   controlMode: string;
   instantEventMessages: boolean;
   allySharedVision: boolean;
+  characterSharedVision?: boolean;
   showAllyIntel: boolean;
   mapWidth: number;
   mapHeight: number;
@@ -65,6 +66,8 @@ export interface GameStartOptionsState {
   intelMode: string;
   controlMode: string;
   allySharedVision: boolean;
+  /** 势力迷雾下 AI 角色 avatar 是否共享视野；玩家当主恒提供视野。 */
+  characterSharedVision: boolean;
   showAllyIntel: boolean;
   instantEventMessages: boolean;
 }
@@ -102,9 +105,17 @@ export interface StrategyCharacterSummaryState {
   taskRemainingDays?: number | null;
   /** 忠诚度 0–100。 */
   loyalty?: number;
+  /** 人际关系（父母、配偶、师徒、仇敌等）。 */
+  relations?: StrategyCharacterRelationState[];
 }
 
-/** 地图上独立行动的将领。 */
+export interface StrategyCharacterRelationState {
+  relationType: string;
+  characterId: number;
+  characterName: string;
+}
+
+/** 地图上独立行动的将领（匿名模式下不暴露身份）。 */
 export interface StrategyMapCharacterState {
   id: number;
   name: string;
@@ -112,6 +123,10 @@ export interface StrategyMapCharacterState {
   x: number;
   y: number;
   mapVisible?: boolean;
+  isAnonymous?: boolean;
+  isPlayerControlled?: boolean;
+  route?: MapPoint[];
+  ap?: number;
 }
 
 export interface StrategyEspionageIntelEntry {
@@ -295,6 +310,8 @@ export interface StrategyStrongholdState {
   food: number;
   population: number;
   stability: number;
+  /** 行政效率 0–100（含距居城距离与腐败）。 */
+  administrativeEfficiency?: number;
   popularFeelings: number;
   isLordResidence: boolean;
   lordId: number;
@@ -565,7 +582,7 @@ export interface StrategySupplyConvoyState {
   isReturningToOrigin: boolean;
 }
 
-export interface StrategyMessengerState {
+export interface StrategyMessageCarrierState {
   id: number;
   name: string;
   forceId: number;
@@ -579,6 +596,8 @@ export interface StrategyMessengerState {
   movement: number;
   status: string;
   payloadType: string;
+  /** UnitEscort | Character */
+  carrierKind?: string;
   directive: string;
   route: MapPoint[];
   morale: number;
@@ -593,12 +612,18 @@ export interface StrategyMessengerState {
   pendingDirective?: string | null;
 }
 
+/** @deprecated Use StrategyMessageCarrierState */
+export type StrategyMessengerState = StrategyMessageCarrierState;
+
 export interface StrategyLordState {
   name: string;
   unitId?: number | null;
   x: number;
   y: number;
   residenceStrongholdName?: string | null;
+  characterId?: number | null;
+  locationType?: string | null;
+  ap?: number;
 }
 
 export interface StrategyAdvanceDayResponse {
@@ -652,6 +677,16 @@ export interface StrategyEvent {
 
 export interface StrategyPolicyChangeResponse {
   state: StrategyWorldState;
-  /** AppliedImmediately | MessengerDispatched */
+  /** AppliedImmediately | CarrierDispatched */
   outcome: string;
+}
+
+/** 存档位摘要（与后端 StrategySaveSlotSummaryDto 对齐）。 */
+export interface StrategySaveSlotSummary {
+  slot: number;
+  occupied: boolean;
+  savedAtUtc?: string | null;
+  scenarioId?: string | null;
+  lordName?: string | null;
+  dateLabel?: string | null;
 }

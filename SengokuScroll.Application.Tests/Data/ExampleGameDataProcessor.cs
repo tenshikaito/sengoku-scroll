@@ -1,4 +1,4 @@
-﻿using SengokuScroll.Application.Data;
+using SengokuScroll.Application.Data;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.World;
@@ -67,7 +67,7 @@ public class ExampleGameDataProcessor : IGameDataProcessor
                 Strongholds = [],
                 Units = [],
                 SupplyConvoys = [],
-                Messengers = [],
+                MessageCarriers = [],
                 SubUnits = [],
                 Characters = new()
                 {

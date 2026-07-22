@@ -45,6 +45,12 @@ public sealed record GameStartOptions
     /// <summary>同盟共享视野（势力模式有效）。</summary>
     public required bool AllySharedVision { get; init; }
 
+    /// <summary>
+    /// 势力迷雾下，非当主地图角色（AI avatar 等）是否作为视野源。
+    /// 玩家当主角色在任何迷雾模式下恒提供视野，不受此项影响。
+    /// </summary>
+    public required bool CharacterSharedVision { get; init; }
+
     /// <summary>显示同盟情报：同盟势力及内藩可见具体数值；外藩仍须谍报（ForceIntel 有效）。</summary>
     public required bool ShowAllyIntel { get; init; }
 
@@ -73,6 +79,7 @@ public static class GameStartOptionsPresets
                 IntelMode = StrategyIntelMode.Full,
                 ControlMode = StrategyControlMode.FullDirect,
                 AllySharedVision = true,
+                CharacterSharedVision = true,
                 ShowAllyIntel = false,
                 InstantEventMessages = true
             },
@@ -82,6 +89,7 @@ public static class GameStartOptionsPresets
                 IntelMode = StrategyIntelMode.ForceIntel,
                 ControlMode = StrategyControlMode.DirectiveOnly,
                 AllySharedVision = false,
+                CharacterSharedVision = false,
                 ShowAllyIntel = false,
                 InstantEventMessages = false
             },
@@ -91,6 +99,7 @@ public static class GameStartOptionsPresets
                 IntelMode = StrategyIntelMode.ForceIntel,
                 ControlMode = StrategyControlMode.DirectiveOnly,
                 AllySharedVision = false,
+                CharacterSharedVision = false,
                 ShowAllyIntel = false,
                 InstantEventMessages = false
             },
@@ -100,11 +109,23 @@ public static class GameStartOptionsPresets
     }
 
     private static GameStartOptions Sanitize(GameStartOptions options)
-        => options.FogMode == StrategyFogMode.Character
-            ? options with { AllySharedVision = false }
-            : options;
+    {
+        if (options.FogMode == StrategyFogMode.Character)
+        {
+            return options with
+            {
+                AllySharedVision = false,
+                CharacterSharedVision = false
+            };
+        }
 
-    /// <summary>角色视野下强制关闭同盟共享视野。</summary>
+        if (options.FogMode == StrategyFogMode.None)
+            return options;
+
+        return options;
+    }
+
+    /// <summary>角色视野下强制关闭同盟共享视野与角色共享视野。</summary>
     public static GameStartOptions SanitizeCharacterFogOptions(GameStartOptions options)
         => Sanitize(options);
 }

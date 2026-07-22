@@ -9,6 +9,7 @@ import StrategyIntelSystemTable from "../StrategyIntelSystemTable.vue";
 import {
   PERSON_LIST_COLUMN_PRESETS,
   PERSON_PERSONAL_DEV_ONLY_PROPS,
+  PERSON_RELATION_COLUMNS,
   type PersonListPreset,
 } from "@/utils/strategyIntelSystemColumns";
 import { isIntelDevFieldsVisible } from "@/utils/strategyIntelDev";
@@ -17,6 +18,7 @@ import {
   personDetailIntelRows,
   personIntelRows,
   personIntroText,
+  personRelationshipTableRows,
   personSkillDetailRows,
   personStatDetailRows,
 } from "@/utils/strategyIntelSystemData";
@@ -24,10 +26,14 @@ import {
 const props = defineProps<{
   worldState: StrategyWorldState;
   realmFilter?: IntelRealmFilterMode;
+  /** 打开对话框时预选人物 Id。 */
+  initialSelectedId?: number | null;
+  /** 仅显示详情二级 Tab（隐藏列表）。 */
+  detailOnly?: boolean;
 }>();
 
 const listPreset = ref<PersonListPreset>("status");
-const detailTab = ref<"basic" | "attributes" | "skills" | "effects" | "intro">("basic");
+const detailTab = ref<"basic" | "attributes" | "skills" | "relations" | "effects" | "intro">("basic");
 const selectedPersonId = ref<number | null>(null);
 
 const personRows = computed(() =>
@@ -65,6 +71,16 @@ const skillRows = computed(() =>
 
 const effectsRows = computed(() => entityEffectsIntelRows());
 
+const relationRows = computed(() =>
+  selectedPersonId.value != null
+    ? personRelationshipTableRows(props.worldState, selectedPersonId.value)
+    : [],
+);
+
+const relationListRows = computed(
+  () => relationRows.value as unknown as Array<Record<string, unknown>>,
+);
+
 const introText = computed(() =>
   selectedPersonId.value != null
     ? personIntroText(props.worldState, selectedPersonId.value)
@@ -82,7 +98,16 @@ function defaultPersonId(): number | null {
 }
 
 function syncDefaultSelection() {
+  if (props.detailOnly && props.initialSelectedId != null) {
+    selectedPersonId.value = props.initialSelectedId;
+    return;
+  }
   const rows = personRows.value;
+  const preferred = props.initialSelectedId;
+  if (preferred != null && rows.some((r) => r.id === preferred)) {
+    selectedPersonId.value = preferred;
+    return;
+  }
   if (selectedPersonId.value != null && rows.some((r) => r.id === selectedPersonId.value)) {
     return;
   }
@@ -92,6 +117,19 @@ function syncDefaultSelection() {
 watch(
   () => [props.worldState, props.realmFilter] as const,
   () => syncDefaultSelection(),
+  { immediate: true }
+);
+
+watch(
+  () => props.initialSelectedId,
+  (id) => {
+    if (id == null) return;
+    const rows = personRows.value;
+    if (rows.some((r) => r.id === id)) {
+      selectedPersonId.value = id;
+      detailTab.value = "basic";
+    }
+  },
   { immediate: true }
 );
 
@@ -105,29 +143,32 @@ function onSelectRow(row: Record<string, unknown> | null) {
 </script>
 
 <template>
-  <div class="intel-pane">
-    <el-tabs v-model="listPreset" class="layer-tabs layer-tabs--list">
-      <el-tab-pane label="状态" name="status" />
-      <el-tab-pane label="仕官" name="office" />
-      <el-tab-pane label="命令" name="order" />
-      <el-tab-pane label="个人" name="personal" />
-      <el-tab-pane label="能力1" name="ability1" />
-      <el-tab-pane label="能力2" name="ability2" />
-    </el-tabs>
+  <div class="intel-pane" :class="{ 'intel-pane--detail-only': detailOnly }">
+    <template v-if="!detailOnly">
+      <el-tabs v-model="listPreset" class="layer-tabs layer-tabs--list">
+        <el-tab-pane label="状态" name="status" />
+        <el-tab-pane label="仕官" name="office" />
+        <el-tab-pane label="命令" name="order" />
+        <el-tab-pane label="个人" name="personal" />
+        <el-tab-pane label="能力1" name="ability1" />
+        <el-tab-pane label="能力2" name="ability2" />
+      </el-tabs>
 
-    <StrategyIntelSystemTable
-      :rows="listRows"
-      :columns="listColumns"
-      :current-id="selectedPersonId"
-      empty-text="暂无人物数据"
-      @current-change="onSelectRow"
-    />
+      <StrategyIntelSystemTable
+        :rows="listRows"
+        :columns="listColumns"
+        :current-id="selectedPersonId"
+        empty-text="暂无人物数据"
+        @current-change="onSelectRow"
+      />
+    </template>
 
-    <div class="detail-section">
+    <div class="detail-section" :class="{ 'detail-section--solo': detailOnly }">
       <el-tabs v-model="detailTab" class="layer-tabs layer-tabs--detail">
         <el-tab-pane label="基本" name="basic" />
         <el-tab-pane label="属性" name="attributes" />
         <el-tab-pane label="能力" name="skills" />
+        <el-tab-pane label="人际关系" name="relations" />
         <el-tab-pane label="影响" name="effects" />
         <el-tab-pane label="介绍" name="intro" />
       </el-tabs>
@@ -143,6 +184,16 @@ function onSelectRow(row: Record<string, unknown> | null) {
 
       <div v-else-if="detailTab === 'skills'" class="detail-body">
         <StrategyIntelPersonSkills :rows="skillRows" />
+      </div>
+
+      <div v-else-if="detailTab === 'relations'" class="detail-body">
+        <StrategyIntelSystemTable
+          :rows="relationListRows"
+          :columns="PERSON_RELATION_COLUMNS"
+          :highlight-current="false"
+          empty-text="暂无特殊人际关系"
+          :max-height="220"
+        />
       </div>
 
       <div v-else-if="detailTab === 'effects'" class="detail-body">
@@ -174,6 +225,11 @@ function onSelectRow(row: Record<string, unknown> | null) {
 .detail-section {
   border-top: 1px solid #e2e8f0;
   padding-top: 10px;
+}
+
+.detail-section--solo {
+  border-top: none;
+  padding-top: 0;
 }
 
 .detail-body {

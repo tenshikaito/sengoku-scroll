@@ -37,7 +37,8 @@ public static class ForceSuccessionRules
         GameMasterData gameMasterData,
         StrategyScenarioMeta meta,
         StrategyForceLordRegistry lordRegistry,
-        StrategyDayOutcomeBuffer? dayOutcomeBuffer)
+        StrategyDayOutcomeBuffer? dayOutcomeBuffer,
+        int removedLordCharacterId = 0)
     {
         // 业务：当主被俘即视为势力投降灭亡，无需再判继承
         if (lordCaptured)
@@ -53,6 +54,9 @@ public static class ForceSuccessionRules
         // 业务：当主阵亡但仍有城或部队抵抗时，尝试指定继承人继位
         if (ForceResistanceRules.HasActiveResistance(forceId, gameData))
         {
+            if (removedLordCharacterId > 0)
+                StrongholdGovernanceRules.ReleaseGovernanceRoles(forceId, removedLordCharacterId, gameData);
+
             if (TryAppointSuccessor(forceId, gameData, meta, lordRegistry, dayOutcomeBuffer))
                 return LordRemovalReason.KilledWithSuccession;
 
@@ -123,6 +127,9 @@ public static class ForceSuccessionRules
         }
 
         lordRegistry.SetLordCharacterId(forceId, successorId);
+
+        // 业务：新当主不可兼任外臣领主或代官；原据点改回直辖/待任命
+        StrongholdGovernanceRules.ReleaseGovernanceRoles(forceId, successorId, gameData);
 
         var forceName = force.Name;
         dayOutcomeBuffer?.AddEvent(new StrategyEventDto

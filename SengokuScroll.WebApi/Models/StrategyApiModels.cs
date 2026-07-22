@@ -38,6 +38,21 @@ public sealed class MoveUnitRequest
     public List<MapPointRequest>? Via { get; init; }
 }
 
+/// <summary>角色入城目标据点。</summary>
+public sealed class EnterStrongholdRequest
+{
+    public required int StrongholdId { get; init; }
+
+    /// <summary>据点被封锁/包围时须为 true 以强行出入。</summary>
+    public bool Force { get; init; }
+}
+
+/// <summary>角色出城（可选强行突围）。</summary>
+public sealed class CharacterGateRequest
+{
+    public bool Force { get; init; }
+}
+
 /// <summary>单位方针变更（M3-b）。</summary>
 public sealed class SetUnitDirectiveRequest
 {
@@ -65,11 +80,39 @@ public sealed class StrategySaveExportResponse
     public required string Json { get; init; }
 }
 
-/// <summary>从 JSON 恢复存档请求。</summary>
-public sealed class StrategyRestoreSaveRequest
-{
-    public required string Json { get; init; }
-}
+    /// <summary>从 JSON 恢复存档请求。</summary>
+    public sealed class StrategyRestoreSaveRequest
+    {
+        public required string Json { get; init; }
+    }
+
+    /// <summary>存档位列表响应。</summary>
+    public sealed class StrategySaveSlotListResponse
+    {
+        public required IReadOnlyList<StrategySaveSlotSummaryDto> Slots { get; init; }
+    }
+
+    /// <summary>单个存档位摘要。</summary>
+    public sealed class StrategySaveSlotSummaryDto
+    {
+        public required int Slot { get; init; }
+
+        public required bool Occupied { get; init; }
+
+        public string? SavedAtUtc { get; init; }
+
+        public string? ScenarioId { get; init; }
+
+        public string? LordName { get; init; }
+
+        public string? DateLabel { get; init; }
+    }
+
+    /// <summary>写入存档位响应。</summary>
+    public sealed class StrategySaveSlotWriteResponse
+    {
+        public required StrategySaveSlotSummaryDto Slot { get; init; }
+    }
 
 /// <summary>攻城指令请求。</summary>
 public sealed class SiegeOrderRequest
@@ -137,4 +180,58 @@ public sealed class RecordEspionageIntelRequest
 
     /** Fuzzy | Exact */
     public required string Precision { get; init; }
+}
+
+/// <summary>调整据点税率；省略的字段保持不变。</summary>
+public sealed class SetStrongholdTaxRateRequest
+{
+    public byte? PollTaxRate { get; init; }
+
+    public byte? AgricultureTaxRate { get; init; }
+
+    public byte? CommerceTaxRate { get; init; }
+
+    public byte? TariffTaxRate { get; init; }
+}
+
+/// <summary>据点征兵请求。</summary>
+public sealed class RecruitAtStrongholdRequest
+{
+    public required int Soldiers { get; init; }
+}
+
+/// <summary>任命据点领主或代官；领主任命时 characterId 为当主 Id 表示设为直辖。</summary>
+public sealed class AppointStrongholdLordRequest
+{
+    public required int CharacterId { get; init; }
+
+    /** Lord | Mayor */
+    public string AppointType { get; init; } = "Lord";
+}
+
+/// <summary>外交关系变更。</summary>
+public sealed class SetDiplomacyRelationRequest
+{
+    public required int TargetForceId { get; init; }
+
+    /** Neutral | Allied | Enemy */
+    public required string Relation { get; init; }
+}
+
+/// <summary>藩属/独立指令。</summary>
+public sealed class DiplomacyVassalageRequest
+{
+    public required int TargetForceId { get; init; }
+
+    /** impose | submit | release | independence */
+    public required string Action { get; init; }
+}
+
+/// <summary>内藩外政指令。</summary>
+public sealed class RealmInnerVassalRequest
+{
+    public required int TargetForceId { get; init; }
+
+    /** appoint | revoke */
+    public required string Action { get; init; }
 }

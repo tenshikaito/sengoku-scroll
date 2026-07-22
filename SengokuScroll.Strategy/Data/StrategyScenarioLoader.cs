@@ -79,6 +79,7 @@ public static class StrategyScenarioLoader
             LordUnitId = scenario.Lord?.UnitId,
             LordStrongholdId = scenario.Lord?.StrongholdId,
             ForceLordCharacterIds = BuildForceLordCharacterIds(scenario),
+            ForceLordResidenceStrongholdIds = BuildForceLordResidenceStrongholdIds(scenario),
             Intel = intel,
             RegionHarvestProfiles = BuildRegionHarvestProfiles(document.Map)
         };
@@ -100,6 +101,7 @@ public static class StrategyScenarioLoader
         return new StrategyScenarioMeta
         {
             PlayerForceId = meta.PlayerForceId,
+            AllForcesAiControlled = loadOptions.AllForcesAiControlled || meta.AllForcesAiControlled,
             Difficulty = difficulty,
             StartOptions = startOptions,
             KnownStrongholdIds = meta.KnownStrongholdIds,
@@ -107,6 +109,7 @@ public static class StrategyScenarioLoader
             LordUnitId = meta.LordUnitId,
             LordStrongholdId = meta.LordStrongholdId,
             ForceLordCharacterIds = meta.ForceLordCharacterIds,
+            ForceLordResidenceStrongholdIds = meta.ForceLordResidenceStrongholdIds,
             Intel = meta.Intel,
             RegionHarvestProfiles = meta.RegionHarvestProfiles
         };
@@ -200,6 +203,33 @@ public static class StrategyScenarioLoader
                 string.Equals(c.Name, scenario.Lord.Name, StringComparison.Ordinal));
             if (lordCharacter is not null)
                 map[scenario.PlayerForceId] = lordCharacter.Id;
+        }
+
+        return map;
+    }
+
+    private static Dictionary<int, int> BuildForceLordResidenceStrongholdIds(StrategyScenarioDefinition scenario)
+    {
+        var map = new Dictionary<int, int>();
+
+        foreach (var force in scenario.Forces)
+        {
+            if (force.LordCharacterId <= 0)
+                continue;
+
+            var lordCharacter = scenario.Characters.FirstOrDefault(c => c.Id == force.LordCharacterId);
+            if (lordCharacter?.StrongholdId is int residenceId)
+                map[force.Id] = residenceId;
+        }
+
+        if (scenario.Lord?.StrongholdId is int playerResidenceId)
+            map[scenario.PlayerForceId] = playerResidenceId;
+        else if (scenario.Lord is not null)
+        {
+            var lordCharacter = scenario.Characters.FirstOrDefault(c =>
+                string.Equals(c.Name, scenario.Lord.Name, StringComparison.Ordinal));
+            if (lordCharacter?.StrongholdId is int residenceId)
+                map[scenario.PlayerForceId] = residenceId;
         }
 
         return map;
@@ -308,7 +338,7 @@ public static class StrategyScenarioLoader
                 SubUnits = subUnits,
                 Characters = characters,
                 SupplyConvoys = [],
-                Messengers = []
+                MessageCarriers = []
             }
         };
 

@@ -1,6 +1,7 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Data.Models;
 
 namespace SengokuScroll.Strategy.Calculators;
 
@@ -20,11 +21,25 @@ public static class EconomyCalculator
 
     /// <summary>中央实际收税比例（万分比）。</summary>
     public static int CalculateCollectionEfficiencyBp(Stronghold stronghold)
+        => CalculateCollectionEfficiencyBp(stronghold, gameData: null, meta: null);
+
+    /// <summary>中央实际收税比例（万分比）；传入 world 上下文时计入距居城行政损耗。</summary>
+    public static int CalculateCollectionEfficiencyBp(
+        Stronghold stronghold,
+        GameData? gameData,
+        StrategyScenarioMeta? meta)
     {
-        // 业务：权威 50→7500bp 基准，腐败每点扣约 67bp，虚构据点打折
+        if (stronghold.LordId > 0)
+            return EconomyConstants.BasisPointsPer100Percent;
+
+        // 业务：权威 50→7500bp 基准，腐败（含距离损耗）每点扣约 67bp，虚构据点打折
+        var corruption = gameData is not null && meta is not null
+            ? AdministrationCalculator.CalculateEffectiveCorruption(stronghold, gameData, meta)
+            : stronghold.Corruption;
+
         var authorityFactor = 5000 + stronghold.Authority * 50;
         var corruptionFactor = EconomyConstants.BasisPointsPer100Percent
-            - stronghold.Corruption * EconomyConstants.BasisPointsPer100Percent / 150;
+            - corruption * EconomyConstants.BasisPointsPer100Percent / 150;
         var historicalFactor = stronghold.IsHistorical
             ? EconomyConstants.BasisPointsPer100Percent
             : EconomyConstants.FictionalIncomePenaltyBp;
@@ -52,17 +67,23 @@ public static class EconomyCalculator
         => stronghold.CommerceValue / EconomyConstants.CommerceValuePerShopSlot;
 
     /// <summary>月度人头税（文，从市民征收）。</summary>
-    public static int CalculateMonthlyPollTaxMoney(Stronghold stronghold)
+    public static int CalculateMonthlyPollTaxMoney(
+        Stronghold stronghold,
+        GameData? gameData = null,
+        StrategyScenarioMeta? meta = null)
     {
         var baseTax = stronghold.Population * stronghold.PollTaxRate / 5;
-        return ApplyBasisPointsTax(baseTax, CalculateCollectionEfficiencyBp(stronghold));
+        return ApplyBasisPointsTax(baseTax, CalculateCollectionEfficiencyBp(stronghold, gameData, meta));
     }
 
     /// <summary>月度基础商业税（文，按商业值）。</summary>
-    public static int CalculateMonthlyCommerceBaseTaxMoney(Stronghold stronghold)
+    public static int CalculateMonthlyCommerceBaseTaxMoney(
+        Stronghold stronghold,
+        GameData? gameData = null,
+        StrategyScenarioMeta? meta = null)
     {
         var baseTax = stronghold.CommerceValue * stronghold.CommerceTaxRate / 20;
-        return ApplyBasisPointsTax(baseTax, CalculateCollectionEfficiencyBp(stronghold));
+        return ApplyBasisPointsTax(baseTax, CalculateCollectionEfficiencyBp(stronghold, gameData, meta));
     }
 
     /// <summary>运输队载货折钱（文）：现金 + 粮×当地粮价。</summary>

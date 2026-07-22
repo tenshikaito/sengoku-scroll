@@ -95,9 +95,10 @@ public class CharacterMoveAction(
         if (target is null)
             return;
 
-        character.LocationType = CharacterLocationType.Stronghold;
-        character.LocationStrongholdId = target.Id;
+        character.ForceId = target.ForceId;
         character.StrongholdId = target.Id;
         character.Location = target.Location;
+        character.LocationType = CharacterLocationType.Stronghold;
+        character.LocationStrongholdId = target.Id;
     }
 }

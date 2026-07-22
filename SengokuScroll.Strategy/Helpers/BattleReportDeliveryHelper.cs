@@ -13,7 +13,7 @@ namespace SengokuScroll.Strategy.Helpers;
 
 /// <summary>战报与战略情报：玩家消息须经信使抵达当主/居城后方可查看。</summary>
 public sealed class BattleReportDeliveryHelper(
-    MessengerDispatchHelper messengerDispatchHelper,
+    MessageCarrierDispatchHelper MessageCarrierDispatchHelper,
     StrategyPendingBattleReportStore pendingReports,
     StrategyPendingEventStore pendingEvents,
     StrategyDayOutcomeBuffer dayOutcomeBuffer,
@@ -118,7 +118,7 @@ public sealed class BattleReportDeliveryHelper(
 
         MaybePushInstantBattleSummary(battleResult);
 
-        var messengerId = messengerDispatchHelper.DispatchBattleReport(
+        var messengerId = MessageCarrierDispatchHelper.DispatchBattleReport(
             origin,
             forceId,
             destination.SourceStrongholdId,
@@ -148,7 +148,7 @@ public sealed class BattleReportDeliveryHelper(
 
         MaybePushInstantStrategicSummary(reportEvent);
 
-        var messengerId = messengerDispatchHelper.DispatchStrategicReport(
+        var messengerId = MessageCarrierDispatchHelper.DispatchStrategicReport(
             origin,
             forceId,
             destination.SourceStrongholdId,

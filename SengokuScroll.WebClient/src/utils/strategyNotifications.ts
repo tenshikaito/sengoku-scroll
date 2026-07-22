@@ -43,6 +43,73 @@ export function isSettlementEvent(event: StrategyEvent): boolean {
   return SETTLEMENT_CATEGORIES.has(event.category);
 }
 
+/** 是否可在消息区点击打开详情（战报、收支、战略情报等）。 */
+export function eventHasDetail(event: StrategyEvent): boolean {
+  if (isSettlementEvent(event)) return true;
+  if (event.category === "InstantEventSummary") return true;
+  if (event.category === "BattleReportArrived" && event.battleResult) return true;
+  if (event.category === "StrategicReportArrived") return true;
+  return false;
+}
+
+function notificationFromInstantSummary(event: StrategyEvent): StrategyPendingNotification {
+  return {
+    id: nextNotificationId(),
+    kind: "message",
+    icon: "⚡",
+    brief: eventBriefText(event),
+    event,
+  };
+}
+
+export function notificationFromEventDetail(
+  event: StrategyEvent,
+  playerForceId?: number,
+  worldState?: StrategyWorldState,
+): StrategyPendingNotification | null {
+  if (event.category === "InstantEventSummary") {
+    return notificationFromInstantSummary(event);
+  }
+
+  if (event.category === "BattleReportArrived" && event.battleResult && playerForceId != null) {
+    return notificationFromBattle(event.battleResult, playerForceId, worldState);
+  }
+
+  if (isSettlementEvent(event)) {
+    return {
+      id: nextNotificationId(),
+      kind: "economy",
+      icon: "📋",
+      brief: eventBriefText(event),
+      event,
+    };
+  }
+
+  if (event.category === "StrategicReportArrived") {
+    const icon =
+      event.detailCategory === "SiegeOrderStarted" || event.detailCategory === "SiegeEncircle"
+        ? "⭕"
+        : event.detailCategory === "SiegeAssault"
+          ? "⚔"
+          : event.detailCategory === "StrongholdCaptured"
+            ? "🏯"
+            : event.detailCategory === "UnitDestroyed"
+              ? "💥"
+              : event.detailCategory === "UnitFledToStronghold"
+                ? "🏯"
+                : "📨";
+    return {
+      id: nextNotificationId(),
+      kind: "message",
+      icon,
+      brief: eventBriefText(event),
+      event,
+    };
+  }
+
+  return null;
+}
+
 /** 战略情报抵达后的详情文案（溃灭、占城、围城开始等）。 */
 export function strategicReportDetailText(event: StrategyEvent): string {
   if (event.detailMessage?.trim()) return event.detailMessage.trim();
@@ -57,6 +124,10 @@ export function notificationFromEvent(
   playerForceId?: number,
   worldState?: StrategyWorldState
 ): StrategyPendingNotification | null {
+  if (event.category === "InstantEventSummary") {
+    return notificationFromInstantSummary(event);
+  }
+
   if (event.category === "BattleReportArrived" && event.battleResult && playerForceId != null) {
     return notificationFromBattle(event.battleResult, playerForceId, worldState);
   }
@@ -117,6 +188,8 @@ function simplifyLegacyMessage(event: StrategyEvent): string {
       return "年度收支结算";
     case "BattleReportArrived":
       return "战报信使抵达";
+    case "InstantEventSummary":
+      return "事件摘要";
     case "StrategicReportArrived":
       return "情报信使抵达";
     case "MessengerArrived":

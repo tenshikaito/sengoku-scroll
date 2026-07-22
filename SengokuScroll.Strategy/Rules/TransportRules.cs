@@ -14,6 +14,10 @@ public static class TransportRules
     /// <summary>评估邻格与占格威胁等级（0=安全）。</summary>
     public static int EvaluateThreatLevel(SupplyConvoy convoy, GameData gameData)
     {
+        // 移民队无所属势力，不受军事拦截威胁规则约束
+        if (convoy.Purpose == TransportPurpose.Migrant && convoy.ForceId == 0)
+            return 0;
+
         var threat = 0;
         var convoyForce = convoy.ForceId;
 
@@ -82,6 +86,9 @@ public static class TransportRules
     /// <summary>查找对运输队威胁最高的敌军单位 Id（用于缴获）。</summary>
     public static int? FindPrimaryThreatUnitId(SupplyConvoy convoy, GameData gameData)
     {
+        if (convoy.Purpose == TransportPurpose.Migrant && convoy.ForceId == 0)
+            return null;
+
         Unit? best = null;
         var bestThreat = 0;
 

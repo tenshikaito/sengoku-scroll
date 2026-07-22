@@ -1,7 +1,7 @@
 namespace SengokuScroll.Domain.Entities.Types;
 
-/// <summary>信使在途状态。</summary>
-public enum MessengerStatus
+/// <summary>文书载体在途状态。</summary>
+public enum MessageCarrierStatus
 {
     /// <summary>沿路径向目标移动。</summary>
     Moving,

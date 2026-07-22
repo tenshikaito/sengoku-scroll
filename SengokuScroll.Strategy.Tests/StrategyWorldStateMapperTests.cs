@@ -17,10 +17,10 @@ public class StrategyWorldStateMapperTests
         Assert.Equal(20, dto.Map.Width);
         Assert.Equal(20, dto.Map.Height);
         Assert.Equal(1560, dto.Date.Year);
-        Assert.Equal(4, dto.Forces.Count);
-        Assert.Equal(10, dto.Strongholds.Count);
+        Assert.Equal(6, dto.Forces.Count);
+        Assert.Equal(12, dto.Strongholds.Count);
         Assert.Equal(3, dto.Units.Count);
-        Assert.Equal(2, dto.Diplomacies.Count);
+        Assert.Equal(3, dto.Diplomacies.Count);
         Assert.Contains(dto.Diplomacies, d => d.TargetForceId == 2 && d.Relation == "Enemy");
         Assert.Contains(dto.Diplomacies, d => d.TargetForceId == 4 && d.Relation == "Enemy");
         Assert.All(dto.Units, u => Assert.True(u.Soldiers > 0));
@@ -61,11 +61,11 @@ public class StrategyWorldStateMapperTests
         var imagawa = dto.Forces.First(f => f.Id == 2);
         Assert.Equal(6, imagawa.LordResidenceStrongholdId);
 
-        Assert.Equal(7, dto.Characters.Count);
+        Assert.Equal(11, dto.Characters.Count);
 
         var oda = dto.Forces.First(f => f.Id == 1);
         Assert.Equal(5, oda.StrongholdCount);
-        Assert.Equal(4, oda.CharacterCount);
+        Assert.Equal(6, oda.CharacterCount);
         Assert.Equal(1, oda.LordResidenceStrongholdId);
         Assert.Equal("清洲", dto.Lord.ResidenceStrongholdName);
 
@@ -84,5 +84,18 @@ public class StrategyWorldStateMapperTests
         Assert.Equal(20, dto.Map.Width);
         Assert.Equal(20, dto.Map.Height);
         Assert.Equal("迷你关东试玩", dto.Map.Name);
+    }
+
+    [Fact]
+    public void ToDto_ClearedMayor_DoesNotFallBackToScenarioOverlay()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Maps", "mini_kanto.json");
+        var loaded = StrategyScenarioLoader.LoadFromFile(path);
+        loaded.World.GameData.Strongholds[1].LeaderId = 0;
+
+        var dto = StrategyWorldStateMapper.ToDto(loaded.World, "mini_kanto", loaded.Meta);
+        var kiyosu = dto.Strongholds.First(s => s.Id == 1);
+
+        Assert.Null(kiyosu.MayorName);
     }
 }

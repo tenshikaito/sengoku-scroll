@@ -119,6 +119,20 @@ public class Character : CharacterDefinition, IMovable
 
     public  GameDate LastAiCheckDate { get; set; }
 
+    /// <summary>父亲角色 Id；0 表示未知或无。</summary>
+    public int FatherId { get; set; }
+
+    /// <summary>母亲角色 Id；0 表示未知或无。</summary>
+    public int MotherId { get; set; }
+
+    /// <summary>配偶角色 Id；0 表示无。</summary>
+    public int SpouseId { get; set; }
+
+    /// <summary>师父角色 Id；0 表示无。</summary>
+    public int MasterId { get; set; }
+
+    /// <summary>仇敌角色 Id 列表。</summary>
+    public List<int> EnemyIds { get; set; } = [];
 
     public sealed class CharacterActionTarget : IActionTarget
     {

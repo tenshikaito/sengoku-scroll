@@ -72,10 +72,10 @@ function showUnavailableTip(reason: string) {
       <StrategyMapActionButton
         variant="muted"
         :tooltip-side="tooltipSide"
-        tooltip="调整税率功能尚未实装"
-        @click="showUnavailableTip('调整税率功能尚未实装')"
+        tooltip="税率功能尚未实装"
+        @click="showUnavailableTip('税率功能尚未实装')"
       >
-        💰 调整税率
+        💰 税率
       </StrategyMapActionButton>
       <StrategyMapActionButton
         variant="muted"

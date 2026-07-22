@@ -46,13 +46,13 @@ public class MiniKantoImagawaMainSiegeTests
         Assert.True(main.Location.IsSameTile(mikawaTile) || main.Location.IsAdjacent(mikawaTile),
             $"第3日主力应在三河凑格或邻格，实际=({main.Location.X},{main.Location.Y})");
 
-        var day3Messengers = ctx.World.GameData.Messengers.Values
-            .Where(m => m.PayloadType == MessengerPayloadType.BattleReport)
+        var day3MessageCarriers = ctx.World.GameData.MessageCarriers.Values
+            .Where(m => m.Payload.Type == MessagePayloadType.BattleReport)
             .ToList();
-        if (day3Messengers.Count > 0)
+        if (day3MessageCarriers.Count > 0)
         {
-            Assert.Contains(day3Messengers, m => m.ForceId == MiniKantoSiegeScenarioHelper.OdaForceId);
-            Assert.Contains(day3Messengers, m => m.ForceId == MiniKantoSiegeScenarioHelper.ImagawaForceId);
+            Assert.Contains(day3MessageCarriers, m => m.ForceId == MiniKantoSiegeScenarioHelper.OdaForceId);
+            Assert.Contains(day3MessageCarriers, m => m.ForceId == MiniKantoSiegeScenarioHelper.ImagawaForceId);
         }
 
         // 第 4 日：开始攻城，地图显示围城战场；兵力充足时同格为强攻，否则邻格包围

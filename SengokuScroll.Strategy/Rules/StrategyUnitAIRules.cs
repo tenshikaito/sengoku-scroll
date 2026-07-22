@@ -54,16 +54,71 @@ public static class StrategyUnitAIRules
         return null;
     }
 
+    /// <summary>
+    /// 对峙中 AI 脱困：对手离场则清除；长期同格对峙且胜率偏低则改撤退。
+    /// </summary>
+    public static StrategyAiDecision? TryResolveStandoffEngagement(
+        Unit unit,
+        GameData gameData,
+        StrategyFieldEngagementRegistry engagementRegistry,
+        GameMapMasterData? mapMaster)
+    {
+        if (unit.Status != UnitStatus.Standoff || unit.ActionTarget.UnitId <= 0)
+            return null;
+
+        var opponentId = unit.ActionTarget.UnitId;
+        if (!gameData.Units.TryGetValue(opponentId, out var opponent) || opponent.Soldier <= 0)
+        {
+            var thought = new StrategyAiThought().Add("对峙对手已消失，脱离战场");
+            BattlefieldEngagementRules.LeaveBattlefield(unit);
+            engagementRegistry.ClearStandoff(unit.Id, opponentId);
+            return StrategyAiDecision.Ok("StandoffOpponentGone", "对峙对手消失，脱离接敌", thought);
+        }
+
+        if (!MoveEngagementRules.IsInEngagementRange(unit, opponent))
+        {
+            var thought = new StrategyAiThought().Add("对手已不在同格，脱离战场");
+            BattlefieldEngagementRules.LeaveBattlefield(unit);
+            engagementRegistry.ClearStandoff(unit.Id, opponentId);
+            return StrategyAiDecision.Ok("StandoffOpponentLeft", "对手离格，脱离接敌", thought);
+        }
+
+        var standoffDays = engagementRegistry.GetStandoffDays(unit.Id, opponentId);
+        if (standoffDays < BattleConstants.AiStandoffBreakRetreatDays)
+            return null;
+
+        var winRate = BattleEngagementScorer.ScoreCommitWinRate(unit, opponent, gameData, mapMaster);
+        if (winRate >= BattleConstants.AiRetreatCommitWinRateThreshold)
+            return null;
+
+        var retreatThought = new StrategyAiThought().Add(
+            "对峙第{0}日 强袭胜率={1}%<{2}%，主动脱离改撤退",
+            standoffDays,
+            winRate,
+            BattleConstants.AiRetreatCommitWinRateThreshold);
+        unit.Directive = UnitDirective.Retreat;
+        BattlefieldEngagementRules.LeaveBattlefield(unit);
+        engagementRegistry.ClearStandoff(unit.Id, opponentId);
+        return StrategyAiDecision.Ok(
+            "StandoffBreakRetreat",
+            $"对峙{standoffDays}日胜率偏低，改撤退",
+            retreatThought);
+    }
+
     /// <summary>根据战局微调方针；返回是否改写及思维链。</summary>
     public static StrategyAiDirectiveDecision EvaluateDirective(
         Unit unit,
         GameData gameData,
         int playerForceId,
-        GameMapMasterData? mapMaster = null)
+        GameMapMasterData? mapMaster = null,
+        StrategyScenarioMeta? meta = null)
     {
         var thought = new StrategyAiThought();
         var from = unit.Directive.ToString();
-        thought.Add("当前方针={0} 士气={1} 兵力={2} 状态={3}", from, unit.Morale, unit.Soldier, unit.Status);
+        var aiControlled = meta is not null
+            ? StrategyAiControlRules.IsForceAiControlled(meta, unit.ForceId)
+            : unit.ForceId != playerForceId;
+        thought.Add("当前方针={0} 士气={1} 兵力={2} 状态={3} AI控制={4}", from, unit.Morale, unit.Soldier, unit.Status, aiControlled);
 
         var hostileUnits = ResolveHostileUnits(unit, gameData);
         var engagementEnemy = FindEngagementRangeEnemy(unit, hostileUnits);
@@ -130,17 +185,17 @@ public static class StrategyUnitAIRules
             }
         }
 
-        // 业务：非玩家势力默认将 Move 升为 Occupy，主动寻敌进攻
+        // 业务：AI 控制势力默认将 Move 升为 Occupy，主动寻敌进攻
         if (unit.Directive == UnitDirective.Move
-            && unit.ForceId != playerForceId
+            && aiControlled
             && unit.Morale >= LowMoraleRetreatThreshold
             && (hostileUnits.Count > 0 || ResolveHostileStrongholds(unit, gameData).Count > 0))
         {
-            thought.Add("非玩家势力默认 Move→Occupy（有敌对目标）");
+            thought.Add("AI 控制势力默认 Move→Occupy（有敌对目标）");
             unit.Directive = UnitDirective.Occupy;
             return StrategyAiDirectiveDecision.ChangedTo(
                 "PromoteOccupy",
-                "非玩家 Move 升为 Occupy",
+                "AI Move 升为 Occupy",
                 thought,
                 from,
                 nameof(UnitDirective.Occupy));
@@ -149,14 +204,14 @@ public static class StrategyUnitAIRules
         if (unit.Directive != UnitDirective.Retreat)
             return StrategyAiDirectiveDecision.Unchanged("KeepDirective", $"保持方针 {unit.Directive}", thought);
 
-        // 业务：撤退中士气恢复、无邻敌且非恐惧时，玩家恢复 Move、AI 恢复 Occupy
+        // 业务：撤退中士气恢复、无邻敌且非恐惧时，AI 恢复 Occupy、玩家恢复 Move
         if (unit.Morale >= RecoverOccupyMoraleThreshold
             && engagementEnemy is null
             && unit.Status != UnitStatus.Fearful)
         {
-            var to = unit.ForceId == playerForceId
-                ? UnitDirective.Move
-                : UnitDirective.Occupy;
+            var to = aiControlled
+                ? UnitDirective.Occupy
+                : UnitDirective.Move;
             thought.Add("撤退恢复：士气{0}>={1} 无邻敌 → {2}", unit.Morale, RecoverOccupyMoraleThreshold, to);
             unit.Directive = to;
             return StrategyAiDirectiveDecision.ChangedTo(
@@ -235,27 +290,44 @@ public static class StrategyUnitAIRules
     /// <summary>解析与己方外交敌对的地图军事单位列表。</summary>
     public static IReadOnlyList<Unit> ResolveHostileUnits(Unit unit, GameData gameData)
     {
-        if (!gameData.Forces.TryGetValue(unit.ForceId, out var myForce))
+        if (!TryResolveDiplomaticForce(unit.ForceId, gameData, out var myForce))
             return [];
 
         return [.. gameData.Units.Values
             .Where(u => u.IsMilitary
                         && u.Soldier > 0
                         && u.ForceId != unit.ForceId
-                        && gameData.Forces.TryGetValue(u.ForceId, out var otherForce)
+                        && TryResolveDiplomaticForce(u.ForceId, gameData, out var otherForce)
                         && DiplomacyRules.IsEnemy(myForce, otherForce).IsSuccess)];
     }
 
     /// <summary>解析与己方外交敌对的据点列表。</summary>
     public static IReadOnlyList<Stronghold> ResolveHostileStrongholds(Unit unit, GameData gameData)
     {
-        if (!gameData.Forces.TryGetValue(unit.ForceId, out var myForce))
+        if (!TryResolveDiplomaticForce(unit.ForceId, gameData, out var myForce))
             return [];
 
         return [.. gameData.Strongholds.Values
             .Where(s => s.ForceId != unit.ForceId
-                        && gameData.Forces.TryGetValue(s.ForceId, out var ownerForce)
+                        && TryResolveDiplomaticForce(s.ForceId, gameData, out var ownerForce)
                         && DiplomacyRules.IsEnemy(myForce, ownerForce).IsSuccess)];
+    }
+
+    /// <summary>内藩/外藩单位按宗主外交关系判定敌友。</summary>
+    private static bool TryResolveDiplomaticForce(int forceId, GameData gameData, out Force force)
+    {
+        if (!gameData.Forces.TryGetValue(forceId, out force!))
+            return false;
+
+        if (force.Status == Force.ForceStatus.InnerVassal
+            && force.SuzerainForceId is int suzerainId
+            && suzerainId > 0
+            && gameData.Forces.TryGetValue(suzerainId, out var suzerain))
+        {
+            force = suzerain;
+        }
+
+        return true;
     }
 
     /// <summary>解析己方势力控制的据点列表（撤退寻路用）。</summary>
@@ -757,7 +829,7 @@ public static class StrategyUnitAIRules
         IPathfindingService pathfinding,
         IGameWorldContext worldContext)
     {
-        if (forceId == meta.PlayerForceId)
+        if (forceId == meta.PlayerForceId && !meta.AllForcesAiControlled)
             return false;
 
         var residenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(forceId, gameData, meta);

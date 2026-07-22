@@ -47,6 +47,11 @@ internal static class StrategyScenarioCharacterFactory
             ForceId = definition.ForceId,
             StrongholdId = definition.StrongholdId ?? locationStrongholdId,
             LeaderId = definition.LeaderId ?? 0,
+            FatherId = definition.FatherId ?? 0,
+            MotherId = definition.MotherId ?? 0,
+            SpouseId = definition.SpouseId ?? 0,
+            MasterId = definition.MasterId ?? 0,
+            EnemyIds = definition.EnemyIds?.ToList() ?? [],
             LocationType = locationType,
             Location = location,
             LocationStrongholdId = locationStrongholdId,
@@ -55,7 +60,7 @@ internal static class StrategyScenarioCharacterFactory
             ActionStatus = CharacterActionStatus.Waiting,
             IsReadyToMove = false,
             Hp = 100,
-            Ap = 0,
+            Ap = 5,
             ActionTarget = new CharacterActionTarget
             {
                 RoutePoints = new Queue<Point2>()

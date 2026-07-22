@@ -7,6 +7,7 @@ export type {
   StrategyUnitState,
   StrategyUnitRosterEntry,
   StrategySupplyConvoyState,
+  StrategyMessageCarrierState,
   StrategyMessengerState,
   StrategyBattlefieldState,
   StrategyBattlefieldParticipant,
@@ -22,7 +23,14 @@ export {
   splitUnit,
   deployFromStronghold,
   recordEspionageIntel,
+  setStrongholdTaxRates,
+  recruitAtStronghold,
+  appointStrongholdLord,
   moveUnit,
+  leaveStrongholdAsCharacter,
+  moveCharacter,
+  enterStrongholdAsCharacter,
+  previewCharacterPath,
   previewUnitPath,
   previewBattle,
   executeInstantBattle,
@@ -33,9 +41,13 @@ export {
   exportStrategySave,
   restoreStrategySave,
   hasLocalStrategySave,
+  listStrategySaveSlots,
+  saveStrategyToSlot,
+  loadStrategyFromSlot,
 } from "./strategyClient";
 
 export type { StrategyMovementTraceEntry, StrategyAiDecisionTraceEntry } from "./strategyClient";
+export type { StrategySaveSlotSummary } from "./strategyTypes";
 export type { StrategyPathPreview, StrategyBattlePreview, StrategyBattleResult, StrategyBattleLogEntry, StrategyInstantBattleResponse, StrategyPolicyChangeResponse, StrategyAdvanceDayResponse, StrategyLordState, StrategyEvent, StrategyEconomySettlementDetail, StrategyEconomyMonthlyDetail, MapPoint } from "./strategyTypes";
 
 export {

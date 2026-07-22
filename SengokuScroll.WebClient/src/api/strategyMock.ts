@@ -385,7 +385,7 @@ export function createMiniKantoState(): StrategyWorldState {
     ],
     ownUnitRoster: [],
     supplyConvoys: [],
-    messengers: [],
+    messageCarriers: [],
   };
 }
 
@@ -555,15 +555,26 @@ export function mockOrderUnitAttack(unitId: number, x: number, y: number): Strat
 
 export function mockAdvanceDay(): StrategyAdvanceDayResponse {
   const events: StrategyEvent[] = [];
+  const instantEnabled =
+    mockState.startOptions?.instantEventMessages === true
+    || mockState.visibility?.instantEventMessages === true;
 
   for (const [unitId, target] of [...pendingAttacks.entries()]) {
     pendingAttacks.delete(unitId);
     const battle = mockExecuteInstantBattle(unitId, target.x, target.y);
     mockState = battle.state;
+    const brief = `${battle.result.attackerName} vs ${battle.result.defenderName}`;
+    if (instantEnabled) {
+      events.push({
+        category: "InstantEventSummary",
+        message: `⚡ 前线急报（待证实）：${brief}`,
+        brief,
+      });
+    }
     events.push({
       category: "BattleReportArrived",
-      message: `📨 战报信使抵达：${battle.result.attackerName} vs ${battle.result.defenderName}`,
-      brief: `${battle.result.attackerName} vs ${battle.result.defenderName}`,
+      message: `📨 战报信使抵达：${brief}`,
+      brief,
       battleResult: battle.result,
     });
   }
@@ -633,10 +644,10 @@ export function mockSetUnitDirective(
     return { state: cloneState(mockState), outcome: "AppliedImmediately" };
   }
 
-  const nextId = mockState.messengers.reduce((max, m) => Math.max(max, m.id), 0) + 1;
-  mockState.messengers.push({
+  const nextId = mockState.messageCarriers.reduce((max, m) => Math.max(max, m.id), 0) + 1;
+  mockState.messageCarriers.push({
     id: nextId,
-    name: `信使 #${nextId}`,
+    name: `文书 #${nextId}`,
     forceId: unit.forceId,
     x: issuerX,
     y: issuerY,
@@ -662,7 +673,7 @@ export function mockSetUnitDirective(
     pendingDirective: directive,
   });
 
-  return { state: cloneState(mockState), outcome: "MessengerDispatched" };
+  return { state: cloneState(mockState), outcome: "CarrierDispatched" };
 }
 
 function cloneState(state: StrategyWorldState): StrategyWorldState {

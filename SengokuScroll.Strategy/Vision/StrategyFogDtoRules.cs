@@ -70,14 +70,13 @@ public static class StrategyFogDtoRules
         if (options.FogMode == StrategyFogMode.None)
             return dto with { VisibilityTier = "Visible" };
 
+        // 直接本家与内藩等封地：完整数值情报（与 EspionageIntelRules 自势力圈一致）。
         if (IsDirectPlayerForce(dto.ForceId, meta.PlayerForceId))
             return dto with { VisibilityTier = "Visible" };
 
-        // 内藩等封地据点：地图与视野共享，数值情报与外部 Known 相同。
         if (gameData is not null
-            && IsOwnRealmForce(dto.ForceId, meta.PlayerForceId, gameData)
-            && !IsDirectPlayerForce(dto.ForceId, meta.PlayerForceId))
-            return MaskAsKnownStronghold(dto);
+            && IsOwnRealmForce(dto.ForceId, meta.PlayerForceId, gameData))
+            return dto with { VisibilityTier = "Visible" };
 
         if (visibility.VisibleCells.Contains((dto.X, dto.Y)))
             return dto with { VisibilityTier = "Visible" };
@@ -121,7 +120,7 @@ public static class StrategyFogDtoRules
         return visibility.VisibleCells.Contains((x, y));
     }
 
-    /// <summary>运输队/信使等地图实体：势力迷雾下封地全图可见；角色迷雾仅当前视野格。</summary>
+    /// <summary>运输队等地图实体：仅在当前视野格显示。</summary>
     public static bool IsMapMobileEntityVisible(
         int x,
         int y,
@@ -130,15 +129,17 @@ public static class StrategyFogDtoRules
         GameData gameData,
         ForceVisibilityState visibility)
     {
-        if (meta.StartOptions.FogMode == StrategyFogMode.None)
-            return true;
-
-        if (visibility.VisibleCells.Contains((x, y)))
-            return true;
-
-        return meta.StartOptions.FogMode == StrategyFogMode.Force
-               && IsOwnRealmForce(forceId, meta.PlayerForceId, gameData);
+        _ = forceId;
+        _ = gameData;
+        return IsMapEntityVisible(x, y, meta, visibility);
     }
+
+    /// <summary>文书载体是否在地图上显示（仅亮格；与单位动态态势规则一致）。</summary>
+    public static bool IsMessageCarrierMapVisible(
+        MessageCarrier carrier,
+        StrategyScenarioMeta meta,
+        ForceVisibilityState visibility)
+        => IsMapEntityVisible(carrier.Location.X, carrier.Location.Y, meta, visibility);
 
     public static bool IsOwnRealmForce(int forceId, int playerForceId, GameData gameData)
         => TributeRoutingHelper.ResolveRealmRootForceId(forceId, gameData)

@@ -5,8 +5,8 @@ defineProps<{
 
 const emit = defineEmits<{
   "update:visible": [value: boolean];
-  save: [];
-  load: [];
+  "open-save-slots": [];
+  "open-load-slots": [];
 }>();
 
 function close() {
@@ -14,12 +14,12 @@ function close() {
 }
 
 function onSave() {
-  emit("save");
+  emit("open-save-slots");
   close();
 }
 
 function onLoad() {
-  emit("load");
+  emit("open-load-slots");
   close();
 }
 </script>
@@ -33,7 +33,7 @@ function onLoad() {
     class="strategy-dialog-centered-footer"
     @update:model-value="emit('update:visible', $event)"
   >
-    <p class="hint">存档/读档暂使用浏览器 localStorage；存档位选择对话框后续实装。</p>
+    <p class="hint">存档与读档使用服务器 10 个存档位（App_Data/strategy-saves）。</p>
     <div class="menu-list">
       <el-button class="menu-item" @click="onSave">💾 存档</el-button>
       <el-button class="menu-item" @click="onLoad">📂 读档</el-button>

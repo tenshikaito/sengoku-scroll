@@ -63,7 +63,7 @@ public class BattleReportDeliveryTests
                  && e.Message.Contains("当日前线战报", StringComparison.Ordinal));
 
         Assert.True(
-            ctx.World.GameData.Messengers.Values.Any(m => m.PayloadType == MessengerPayloadType.BattleReport)
+            ctx.World.GameData.MessageCarriers.Values.Any(m => m.Payload.Type == MessagePayloadType.BattleReport)
             || dayBuffer.Events.Any(e =>
                 e.Category is "UnitDestroyed" or "UnitFledToStronghold" or "BattleReportArrived")
             || dayBuffer.ResolvedBattles.Count > 0

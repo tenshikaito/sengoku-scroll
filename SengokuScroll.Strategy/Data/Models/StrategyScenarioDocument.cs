@@ -308,6 +308,16 @@ public sealed class StrategyCharacterDefinition
 
     public int? LeaderId { get; init; }
 
+    public int? FatherId { get; init; }
+
+    public int? MotherId { get; init; }
+
+    public int? SpouseId { get; init; }
+
+    public int? MasterId { get; init; }
+
+    public List<int>? EnemyIds { get; init; }
+
     public string? Description { get; init; }
 
     public string? Portrait { get; init; }

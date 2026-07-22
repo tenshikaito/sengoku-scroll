@@ -59,4 +59,16 @@ public static class MarketConstants
 
     /// <summary>粮足时每日民心恢复上限。</summary>
     public const int PopularFeelingsRecoveryCap = 60;
+
+    /// <summary>税负综合分每升高 1 点扣除民心。</summary>
+    public const int PopularFeelingsTaxIncreasePenaltyPerPoint = 1;
+
+    /// <summary>单次加税民心下降上限。</summary>
+    public const int PopularFeelingsTaxIncreaseMaxPenalty = 8;
+
+    /// <summary>税负综合分每降低 1 点恢复民心。</summary>
+    public const int PopularFeelingsTaxDecreaseBonusPerPoint = 1;
+
+    /// <summary>单次减税民心恢复上限。</summary>
+    public const int PopularFeelingsTaxDecreaseMaxBonus = 5;
 }

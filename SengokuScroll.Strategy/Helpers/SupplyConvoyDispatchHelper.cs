@@ -383,6 +383,13 @@ public class SupplyConvoyDispatchHelper(
             {
                 if (gameData.Strongholds.TryGetValue(convoy.TargetStrongholdId, out var destination))
                 {
+                    if (convoy.Purpose == TransportPurpose.Migrant)
+                    {
+                        MigrantConvoyActions.CompleteMigrantArrival(convoy, destination);
+                        gameData.SupplyConvoys.Remove(convoy.Id);
+                        continue;
+                    }
+
                     if (convoy.Purpose == TransportPurpose.Trade
                         && gameData.Strongholds.TryGetValue(convoy.OriginStrongholdId, out var tradeOrigin))
                     {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Application, Container, Graphics, Text } from "pixi.js";
 import type { StrategyWorldState, StrategyMapMasterState } from "@/api/strategy";
 import type { MapRouteOverlay, MapMoveRelayMarker } from "./mapRouteStyles";
@@ -10,8 +10,13 @@ import { logStrategyMapCoords } from "@/utils/strategyMapDebug";
 import { terrainFillColor, terrainStrokeColor } from "@/utils/terrainColors";
 import { maskSoldiersFirstDigit } from "@/utils/strategyDisplayUnits";
 import { mapTileIndex } from "@/utils/mapTileLookup";
+import { resolveRoadCellStyle } from "@/utils/strategyFogCell";
+import { collectMapCellEntityOptions } from "@/utils/mapCellEntityPicker";
 
 const TILE_SIZE = 48;
+const ROAD_LINE_COLOR_BRIGHT = 0xfacc15;
+const ROAD_LINE_COLOR_FOG = 0x78716c;
+const ROAD_LINE_WIDTH = 4;
 /** 视口超出地图边缘的最远格数（再往外不再平移）。 */
 const VIEWPORT_OVERSCROLL_TILES = 5;
 /** 裁切范围相对视口向外扩展 20%，减少平移时的黑边与频繁重绘。 */
@@ -23,6 +28,7 @@ const props = defineProps<{
   worldState: StrategyWorldState | null;
   mapMaster: StrategyMapMasterState | null;
   selectedUnitId: number | null;
+  selectedCharacterId?: number | null;
   selectedStrongholdId?: number | null;
   selectedConvoyId?: number | null;
   hoverUnitId?: number | null;
@@ -32,6 +38,7 @@ const props = defineProps<{
   routeOverlays?: MapRouteOverlay[];
   moveRelayMarkers?: MapMoveRelayMarker[];
   mapUnitSelectionEnabled?: boolean;
+  mapCharacterSelectionEnabled?: boolean;
   mapStrongholdSelectionEnabled?: boolean;
   mapConvoySelectionEnabled?: boolean;
   mapCellSelectionEnabled?: boolean;
@@ -43,9 +50,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   selectUnit: [payload: { unitId: number; screenX: number; screenY: number }];
+  selectCharacter: [payload: { characterId: number; screenX: number; screenY: number }];
   selectStronghold: [payload: { strongholdId: number; screenX: number; screenY: number }];
   selectConvoy: [payload: { convoyId: number; screenX: number; screenY: number }];
   selectCell: [payload: { x: number; y: number; screenX: number; screenY: number }];
+  selectCellEntities: [payload: { x: number; y: number; screenX: number; screenY: number }];
   hoverCell: [cell: { x: number; y: number; screenX: number; screenY: number } | null];
   viewportChange: [];
 }>();
@@ -373,21 +382,6 @@ function screenToCell(clientX: number, clientY: number): { x: number; y: number 
   return isInsideMap(x, y) ? { x, y } : null;
 }
 
-function unitAtCell(x: number, y: number): number | null {
-  const unit = props.worldState?.units.find((u) => u.x === x && u.y === y);
-  return unit?.id ?? null;
-}
-
-function strongholdAtCell(x: number, y: number): number | null {
-  const stronghold = props.worldState?.strongholds.find((s) => s.x === x && s.y === y);
-  return stronghold?.id ?? null;
-}
-
-function convoyAtCell(x: number, y: number): number | null {
-  const convoy = props.worldState?.supplyConvoys.find((c) => c.x === x && c.y === y);
-  return convoy?.id ?? null;
-}
-
 function getCellPanelRect(x: number, y: number, panelEl?: HTMLElement | null) {
   if (!worldContainer || !hostRef.value) return null;
 
@@ -547,24 +541,86 @@ function drawMap() {
 
       const terrainId = master.terrainIds[mapTileIndex(master, x, y)] ?? 1;
       const tile = new Graphics();
-      const hasRoad = roadSet.has(`${x},${y}`);
-      const base = hasRoad ? 0x78716c : terrainFillColor(terrainId, x, y);
-      const stroke = hasRoad ? 0xa8a29e : terrainStrokeColor(terrainId);
       const terrainAlpha = visible ? 1 : 0.42;
       tile
         .rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-        .fill({ color: base, alpha: terrainAlpha })
-        .stroke({ width: 1, color: stroke, alpha: visible ? 0.6 : 0.35 });
+        .fill({ color: terrainFillColor(terrainId, x, y), alpha: terrainAlpha })
+        .stroke({
+          width: 1,
+          color: terrainStrokeColor(terrainId),
+          alpha: visible ? 0.6 : 0.35,
+        });
       mapLayer.addChild(tile);
+    }
+  }
 
-      if (hasRoad && visible) {
-        const roadMark = new Graphics();
-        roadMark
-          .rect(x * TILE_SIZE + 10, y * TILE_SIZE + TILE_SIZE / 2 - 2, TILE_SIZE - 20, 4)
-          .fill({ color: 0xd6d3d1, alpha: 0.85 });
-        mapLayer.addChild(roadMark);
+  const roadCenter = (cellX: number, cellY: number) => ({
+    cx: cellX * TILE_SIZE + TILE_SIZE / 2,
+    cy: cellY * TILE_SIZE + TILE_SIZE / 2,
+  });
+
+  const roadEdgeToward = (
+    cellX: number,
+    cellY: number,
+    dx: number,
+    dy: number
+  ) => {
+    const { cx, cy } = roadCenter(cellX, cellY);
+    if (dx === 1) return { cx: cellX * TILE_SIZE + TILE_SIZE, cy };
+    if (dx === -1) return { cx: cellX * TILE_SIZE, cy };
+    if (dy === 1) return { cx, cy: cellY * TILE_SIZE + TILE_SIZE };
+    return { cx, cy: cellY * TILE_SIZE };
+  };
+
+  const roadLayerFog = new Graphics();
+  const roadLayerBright = new Graphics();
+  let hasFogRoadSegments = false;
+  let hasBrightRoadSegments = false;
+  const ws = props.worldState;
+
+  const roadDirections: Array<[number, number]> = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+
+  for (let y = yStart; y <= yEnd; y++) {
+    for (let x = xStart; x <= xEnd; x++) {
+      if (!roadSet.has(`${x},${y}`)) continue;
+      const style = ws ? resolveRoadCellStyle(ws, x, y) : "bright";
+      if (!style) continue;
+
+      const { cx, cy } = roadCenter(x, y);
+      const layer = style === "bright" ? roadLayerBright : roadLayerFog;
+
+      for (const [dx, dy] of roadDirections) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!roadSet.has(`${nx},${ny}`)) continue;
+
+        const edge = roadEdgeToward(x, y, dx, dy);
+        layer.moveTo(cx, cy).lineTo(edge.cx, edge.cy);
+        if (style === "bright") hasBrightRoadSegments = true;
+        else hasFogRoadSegments = true;
       }
     }
+  }
+  if (hasFogRoadSegments) {
+    roadLayerFog.stroke({
+      width: ROAD_LINE_WIDTH,
+      color: ROAD_LINE_COLOR_FOG,
+      alpha: 0.72,
+    });
+    mapLayer.addChild(roadLayerFog);
+  }
+  if (hasBrightRoadSegments) {
+    roadLayerBright.stroke({
+      width: ROAD_LINE_WIDTH,
+      color: ROAD_LINE_COLOR_BRIGHT,
+      alpha: 0.92,
+    });
+    mapLayer.addChild(roadLayerBright);
   }
 
   for (const landmark of master.landmarks ?? []) {
@@ -702,24 +758,41 @@ function drawEntities() {
     if (!isCellInViewport(character.x, character.y, bounds)) continue;
     if (battlefieldTiles.has(`${character.x},${character.y}`)) continue;
 
-    const color = entityMapColor(character.forceId);
+    const isAnonymous = character.isAnonymous !== false;
+    const isPlayer = character.isPlayerControlled === true;
+    const selected = props.selectedCharacterId === character.id;
+    const color = isAnonymous ? 0x94a3b8 : entityMapColor(character.forceId);
     const center = cellCenter(character.x, character.y);
-    const radius = TILE_SIZE * 0.22;
+    const radius = TILE_SIZE * (isPlayer ? 0.28 : 0.22);
+    const markerY = center.y - TILE_SIZE * 0.18;
+
+    if (selected) {
+      const glow = new Graphics();
+      glow.circle(center.x, markerY, radius + 6).stroke({ width: 2, color: 0xfbbf24, alpha: 0.95 });
+      entityLayer.addChild(glow);
+    }
+
     const marker = new Graphics();
     marker
-      .circle(center.x, center.y - TILE_SIZE * 0.18, radius)
+      .circle(center.x, markerY, radius)
       .fill(color)
-      .stroke({ width: 2, color: 0xffffff, alpha: 0.95 });
+      .stroke({
+        width: selected ? 3 : 2,
+        color: selected ? 0xfbbf24 : isAnonymous ? 0x64748b : 0xffffff,
+        alpha: 0.95,
+      });
     entityLayer.addChild(marker);
 
-    const initial = character.name?.trim().charAt(0) || "将";
-    const label = new Text({
-      text: initial,
-      style: { fontSize: 11, fill: 0xffffff, fontWeight: "bold", fontFamily: "serif" },
-    });
-    label.anchor.set(0.5);
-    label.position.set(center.x, center.y - TILE_SIZE * 0.18);
-    entityLayer.addChild(label);
+    if (!isAnonymous && character.name?.trim()) {
+      const initial = character.name.trim().charAt(0);
+      const label = new Text({
+        text: initial,
+        style: { fontSize: isPlayer ? 12 : 11, fill: 0xffffff, fontWeight: "bold", fontFamily: "serif" },
+      });
+      label.anchor.set(0.5);
+      label.position.set(center.x, markerY);
+      entityLayer.addChild(label);
+    }
   }
 
   for (const battlefield of props.worldState.battlefields ?? []) {
@@ -770,6 +843,7 @@ function drawEntities() {
 
   for (const convoy of props.worldState.supplyConvoys) {
     if (!isCellInViewport(convoy.x, convoy.y, bounds)) continue;
+    if (!isTileVisible(convoy.x, convoy.y)) continue;
     const color = entityMapColor(convoy.forceId);
     const cx = convoy.x * TILE_SIZE + TILE_SIZE * 0.72;
     const cy = convoy.y * TILE_SIZE + TILE_SIZE * 0.28;
@@ -805,11 +879,12 @@ function drawEntities() {
     entityLayer.addChild(label);
   }
 
-  for (const messenger of props.worldState.messengers) {
-    if (!isCellInViewport(messenger.x, messenger.y, bounds)) continue;
-    const color = entityMapColor(messenger.forceId);
-    const cx = messenger.x * TILE_SIZE + TILE_SIZE * 0.28;
-    const cy = messenger.y * TILE_SIZE + TILE_SIZE * 0.72;
+  for (const carrier of props.worldState.messageCarriers) {
+    if (!isCellInViewport(carrier.x, carrier.y, bounds)) continue;
+    if (!isTileVisible(carrier.x, carrier.y)) continue;
+    const color = entityMapColor(carrier.forceId);
+    const cx = carrier.x * TILE_SIZE + TILE_SIZE * 0.28;
+    const cy = carrier.y * TILE_SIZE + TILE_SIZE * 0.72;
     const r = TILE_SIZE * 0.14;
 
     const marker = new Graphics();
@@ -1040,6 +1115,48 @@ function onPointerLeave() {
   }
 }
 
+function dispatchCellSelection(cell: { x: number; y: number }, screenX: number, screenY: number) {
+  const worldState = props.worldState;
+  if (!worldState) return;
+
+  const entities = collectMapCellEntityOptions(worldState, cell.x, cell.y, {
+    includeUnits: props.mapUnitSelectionEnabled ?? false,
+    includeCharacters: props.mapCharacterSelectionEnabled ?? false,
+    includeStrongholds: props.mapStrongholdSelectionEnabled ?? false,
+    includeConvoys: props.mapConvoySelectionEnabled ?? false,
+  });
+
+  const payload = { x: cell.x, y: cell.y, screenX, screenY };
+
+  if (entities.length === 0) {
+    if (props.mapCellSelectionEnabled) {
+      emit("selectCell", payload);
+    }
+    return;
+  }
+
+  if (entities.length === 1) {
+    const entity = entities[0]!;
+    switch (entity.kind) {
+      case "unit":
+        emit("selectUnit", { unitId: entity.id, screenX, screenY });
+        break;
+      case "character":
+        emit("selectCharacter", { characterId: entity.id, screenX, screenY });
+        break;
+      case "stronghold":
+        emit("selectStronghold", { strongholdId: entity.id, screenX, screenY });
+        break;
+      case "convoy":
+        emit("selectConvoy", { convoyId: entity.id, screenX, screenY });
+        break;
+    }
+    return;
+  }
+
+  emit("selectCellEntities", payload);
+}
+
 function onPointerUp(event: PointerEvent) {
   const startedOnCanvas =
     pointerDownOnCanvas && activePointerId !== null && event.pointerId === activePointerId;
@@ -1047,27 +1164,7 @@ function onPointerUp(event: PointerEvent) {
   if (startedOnCanvas && !didPan && event.button === 0) {
     const cell = screenToCell(event.clientX, event.clientY);
     if (cell) {
-      const unitId = unitAtCell(cell.x, cell.y);
-      const strongholdId = strongholdAtCell(cell.x, cell.y);
-      const convoyId = convoyAtCell(cell.x, cell.y);
-
-      if (props.mapUnitSelectionEnabled && unitId !== null) {
-        emit("selectUnit", { unitId, screenX: event.clientX, screenY: event.clientY });
-      } else if (props.mapStrongholdSelectionEnabled && strongholdId !== null) {
-        emit("selectStronghold", {
-          strongholdId,
-          screenX: event.clientX,
-          screenY: event.clientY,
-        });
-      } else if (props.mapConvoySelectionEnabled && convoyId !== null) {
-        emit("selectConvoy", {
-          convoyId,
-          screenX: event.clientX,
-          screenY: event.clientY,
-        });
-      } else if (props.mapCellSelectionEnabled) {
-        emit("selectCell", { x: cell.x, y: cell.y, screenX: event.clientX, screenY: event.clientY });
-      }
+      dispatchCellSelection(cell, event.clientX, event.clientY);
     }
   }
 
@@ -1082,6 +1179,21 @@ function onPointerUp(event: PointerEvent) {
   }
 
   resetPointerGesture();
+}
+
+function scheduleInitialViewportFit() {
+  const fitWhenReady = () => {
+    if (!app || !hostRef.value) return;
+    const rect = hostRef.value.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) {
+      requestAnimationFrame(fitWhenReady);
+      return;
+    }
+    fitMapToView();
+    lastCulledBounds = null;
+    refreshViewportLayers();
+  };
+  requestAnimationFrame(fitWhenReady);
 }
 
 async function initPixi() {
@@ -1113,9 +1225,8 @@ async function initPixi() {
   window.addEventListener("pointerup", onPointerUp);
   app.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
-  fitMapToView();
-  lastCulledBounds = null;
-  refreshViewportLayers();
+  await nextTick();
+  scheduleInitialViewportFit();
 }
 
 function destroyPixi() {

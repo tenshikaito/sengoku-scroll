@@ -19,7 +19,7 @@ public class MiniKantoImagawaMainSiegeDiagTests
             var main = MiniKantoSiegeScenarioHelper.ImagawaMain(ctx.World.GameData);
             var garrison = StrongholdGarrisonRules.FindGarrisonUnit(mikawa, ctx.World.GameData);
             var bfs = ctx.World.GameData.Battlefields.Values.Where(b => !b.IsClosed).ToList();
-            var msgs = ctx.World.GameData.Messengers.Values.Count(m => m.PayloadType == MessengerPayloadType.BattleReport);
+            var msgs = ctx.World.GameData.MessageCarriers.Values.Count(m => m.Payload.Type == MessagePayloadType.BattleReport);
 
             _output.WriteLine(
                 $"D{day} main=({main.Location.X},{main.Location.Y}) status={main.Status} siege={main.SiegeMode} " +

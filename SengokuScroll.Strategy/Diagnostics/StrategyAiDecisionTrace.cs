@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using SengokuScroll.Common.Types;
+using Microsoft.Extensions.Options;
 using SengokuScroll.Localization;
 
 namespace SengokuScroll.Strategy.Diagnostics;
@@ -7,13 +8,18 @@ namespace SengokuScroll.Strategy.Diagnostics;
 /// <summary>策略 AI 决策诊断环形缓冲（供 WebApi debug 端点）。</summary>
 public sealed class StrategyAiDecisionTrace
 {
-    private const int MaxEntries = 400;
     private readonly ConcurrentQueue<StrategyAiDecisionTraceEntry> entries = new();
     private readonly IStrategyDayDebugLog dayDebugLog;
+    private readonly int maxEntries;
     private int sequence;
 
-    public StrategyAiDecisionTrace(IStrategyDayDebugLog dayDebugLog)
-        => this.dayDebugLog = dayDebugLog;
+    public StrategyAiDecisionTrace(
+        IStrategyDayDebugLog dayDebugLog,
+        IOptions<StrategyAiTraceOptions>? traceOptions = null)
+    {
+        this.dayDebugLog = dayDebugLog;
+        maxEntries = traceOptions?.Value.MaxEntries ?? 400;
+    }
 
     public void Clear() => entries.Clear();
 
@@ -52,6 +58,8 @@ public sealed class StrategyAiDecisionTrace
             decision.FromDirective ?? "-",
             decision.ToDirective ?? "-",
             decision.Message);
+
+        LogThoughtSteps(decision.Steps);
     }
 
     public void LogAction(int unitId, string unitName, int forceId, string directive, StrategyAiDecision decision)
@@ -88,7 +96,13 @@ public sealed class StrategyAiDecisionTrace
             decision.Message);
 
         if (decision.Steps.Count > 0)
-            dayDebugLog.LogLine("AI", $"  steps: {string.Join(" | ", decision.Steps)}");
+            LogThoughtSteps(decision.Steps);
+    }
+
+    private void LogThoughtSteps(IReadOnlyList<string> steps)
+    {
+        foreach (var step in steps)
+            dayDebugLog.LogLine("AI", $"  thought: {step}");
     }
 
     public void LogSkip(int unitId, string unitName, int forceId, string reason)
@@ -121,12 +135,17 @@ public sealed class StrategyAiDecisionTrace
             unitId,
             unitName,
             reason);
+
+        LogThoughtSteps([reason]);
     }
 
     private void Enqueue(StrategyAiDecisionTraceEntry entry)
     {
         entries.Enqueue(entry);
-        while (entries.Count > MaxEntries && entries.TryDequeue(out _))
+        if (maxEntries == int.MaxValue)
+            return;
+
+        while (entries.Count > maxEntries && entries.TryDequeue(out _))
         {
         }
     }

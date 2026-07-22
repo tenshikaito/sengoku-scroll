@@ -155,7 +155,7 @@ public static class InstantBattleCalculator
                 },
                 Characters = [],
                 SupplyConvoys = [],
-                Messengers = [],
+                MessageCarriers = [],
                 SubUnits = []
             },
             Phase = BattleEvaluationPhase.Resolve

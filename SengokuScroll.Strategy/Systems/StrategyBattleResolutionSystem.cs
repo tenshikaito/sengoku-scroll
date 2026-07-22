@@ -31,7 +31,7 @@ public sealed class StrategyBattleResolutionSystem(
     StrategyScenarioMeta scenarioMeta,
     StrategyDayOutcomeBuffer dayOutcomeBuffer,
     StrategyFieldEngagementRegistry engagementRegistry,
-    MessengerDispatchHelper messengerDispatchHelper,
+    MessageCarrierDispatchHelper MessageCarrierDispatchHelper,
     BattleReportDeliveryHelper battleReportDeliveryHelper,
     BattleAftermathHelper aftermathHelper,
     IStrategyDayDebugLog dayDebugLog,
@@ -74,6 +74,8 @@ public sealed class StrategyBattleResolutionSystem(
             if (!MoveEngagementRules.IsInEngagementRange(challenger, defender))
             {
                 BattlefieldEngagementRules.LeaveBattlefield(challenger);
+                BattlefieldEngagementRules.LeaveBattlefield(defender);
+                engagementRegistry.ClearStandoff(challenger.Id, defender.Id);
                 continue;
             }
 
@@ -359,7 +361,7 @@ public sealed class StrategyBattleResolutionSystem(
         var lordLocation = StrategyLordHelper.ResolveLocation(gameData, meta);
         var strongholdId = StrategyLordHelper.ResolveSourceStrongholdId(gameData, meta, lordLocation);
 
-        messengerDispatchHelper.DispatchBattleReport(origin, forceId, strongholdId, lordLocation);
+        MessageCarrierDispatchHelper.DispatchBattleReport(origin, forceId, strongholdId, lordLocation);
     }
 
     private void DispatchBattleReports(

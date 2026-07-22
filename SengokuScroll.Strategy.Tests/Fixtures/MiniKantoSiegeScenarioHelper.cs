@@ -132,20 +132,20 @@ public static class MiniKantoSiegeScenarioHelper
         => StrategyWorldStateMapper.ToDto(ctx.World, "mini_kanto", meta);
 
     public static bool HasBattleReportMessenger(GameData data, int forceId)
-        => data.Messengers.Values.Any(m =>
-            m.ForceId == forceId && m.PayloadType == MessengerPayloadType.BattleReport);
+        => data.MessageCarriers.Values.Any(m =>
+            m.ForceId == forceId && m.Payload.Type == MessagePayloadType.BattleReport);
 
     public static bool HasStrategicReportMessenger(GameData data, int forceId)
-        => data.Messengers.Values.Any(m =>
-            m.ForceId == forceId && m.PayloadType == MessengerPayloadType.StrategicReport);
+        => data.MessageCarriers.Values.Any(m =>
+            m.ForceId == forceId && m.Payload.Type == MessagePayloadType.StrategicReport);
 
     public static bool HasBattleReportMessengerToward(
         GameData data,
         int forceId,
         Point3 destination)
-        => data.Messengers.Values.Any(m =>
+        => data.MessageCarriers.Values.Any(m =>
             m.ForceId == forceId
-            && m.PayloadType == MessengerPayloadType.BattleReport
+            && m.Payload.Type == MessagePayloadType.BattleReport
             && m.RoutePoints.Count > 0
             && m.RoutePoints.Last().X == destination.X
             && m.RoutePoints.Last().Y == destination.Y);

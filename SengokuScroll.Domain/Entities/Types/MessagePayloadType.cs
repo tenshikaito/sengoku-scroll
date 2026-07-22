@@ -1,7 +1,7 @@
 namespace SengokuScroll.Domain.Entities.Types;
 
-/// <summary>信使携带的信息类型。</summary>
-public enum MessengerPayloadType
+/// <summary>文书载荷类型。</summary>
+public enum MessagePayloadType
 {
     /// <summary>变更部队战斗/攻城方针。</summary>
     PolicyChange,
@@ -16,5 +16,8 @@ public enum MessengerPayloadType
     StrategicReport,
 
     /// <summary>向运输队传递假情报，使其改向或停留（谍报玩法）。</summary>
-    FalseIntelligence
+    FalseIntelligence,
+
+    /// <summary>变更目标据点税率；由居城当主下达，非直辖城经信使投递。</summary>
+    TaxRateChange
 }

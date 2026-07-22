@@ -116,7 +116,7 @@ public class TacticalBattleSimulatorTests
             },
             Characters = [],
             SupplyConvoys = [],
-            Messengers = [],
+            MessageCarriers = [],
             SubUnits = []
         };
 

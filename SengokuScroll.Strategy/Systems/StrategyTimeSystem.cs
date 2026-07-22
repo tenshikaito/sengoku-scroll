@@ -70,7 +70,27 @@ public class StrategyTimeSystem(
             }
         }
 
-        // 阶段2：恢复在途运输队行动力
+        // 阶段2：恢复角色（当主/将领等）行动力，与军事单位日初对称
+        var characterApCap = context.GameRuleConfig.MilitaryMaxMovement;
+        foreach (var character in context.GameWorldContext.EachCharacter())
+        {
+            if (character.IsDead)
+                continue;
+
+            var apBefore = character.Ap;
+            character.Ap = Math.Min(characterApCap, character.Ap + recovery);
+            if (apBefore != character.Ap)
+            {
+                trace.Log(
+                    "DayStart",
+                    "日初角色 AP",
+                    character.Id,
+                    character.Location,
+                    detail: $"AP {apBefore}->{character.Ap}");
+            }
+        }
+
+        // 阶段3：恢复在途运输队行动力
         var gameData = context.GameWorldContext.GameWorld.GameData;
         foreach (var convoy in gameData.SupplyConvoys.Values)
         {

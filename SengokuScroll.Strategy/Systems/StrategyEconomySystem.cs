@@ -93,7 +93,9 @@ public class StrategyEconomySystem(
                 var (poll, commerce, trade, tariff) = StrongholdEconomyActions.ApplyMonthlyMoneyTaxes(
                     stronghold,
                     merchantTaxLedger,
-                    tariffTaxLedger);
+                    tariffTaxLedger,
+                    gameData,
+                    scenarioMeta);
 
                 monthlyTaxCollectionLedger.RecordMonthlyMoneyTaxes(
                     stronghold.Id,

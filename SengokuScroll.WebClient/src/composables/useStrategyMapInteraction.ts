@@ -1,7 +1,9 @@
 import { computed, onScopeDispose, ref, type Ref } from "vue";
 import type { StrategyWorldState } from "@/api/strategy";
+import type { MapCellEntityOption } from "@/utils/mapCellEntityPicker";
 import type {
   MapHoverCellPayload,
+  MapSelectCellEntitiesPayload,
   MapSelectCellPayload,
   MapSelectStrongholdPayload,
   MapSelectUnitPayload,
@@ -14,10 +16,19 @@ import {
   type StrategyMapInteractionStateSnapshot,
 } from "@/strategyMapInteraction/StrategyMapInteractionMachine";
 import { SplitSpawnSelectionInteractionState } from "@/strategyMapInteraction/states/SplitSpawnSelectionInteractionState";
+import {
+  isLordInStrongholdId,
+  isLordOnMap,
+  isPlayerRealmStronghold,
+  isPlayerRealmUnit,
+  playerLordMapCharacterAtCell,
+  resolvePlayerLordCharacterId,
+} from "@/utils/strategyPlayerCharacter";
 
 export interface UseStrategyMapInteractionOptions {
   worldState: Ref<StrategyWorldState | null>;
   selectedUnitId: Ref<number | null>;
+  selectedCharacterId: Ref<number | null>;
   selectedStrongholdId: Ref<number | null>;
   selectedConvoyId: Ref<number | null>;
   selectedCell: Ref<{ x: number; y: number } | null>;
@@ -31,6 +42,7 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
   const lockedCommand = ref<StrategyMoveTarget | null>(null);
   const pendingMergeTargetUnitId = ref<number | null>(null);
   const pendingSplitSubUnitIds = ref<number[]>([]);
+  const cellEntityOptions = ref<MapCellEntityOption[]>([]);
   const snapshot = ref<StrategyMapInteractionStateSnapshot>({
     id: "navigate",
     mapUnitSelectionEnabled: true,
@@ -60,6 +72,10 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
     setSelectedConvoyId: (id) => {
       options.selectedConvoyId.value = id;
     },
+    getSelectedCharacterId: () => options.selectedCharacterId.value,
+    setSelectedCharacterId: (id) => {
+      options.selectedCharacterId.value = id;
+    },
     getSelectedCell: () => options.selectedCell.value,
     setSelectedCell: (cell) => {
       options.selectedCell.value = cell;
@@ -87,6 +103,41 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
       const roster = world.ownUnitRoster?.find((u) => u.id === unitId);
       return roster ? { x: roster.x, y: roster.y } : null;
     },
+    resolveCharacterLocation: (characterId) => {
+      const world = options.worldState.value;
+      if (!world) return null;
+      const mapChar = world.mapCharacters?.find((c) => c.id === characterId);
+      if (mapChar) return { x: mapChar.x, y: mapChar.y };
+      if (world.lord.characterId === characterId) {
+        return { x: world.lord.x, y: world.lord.y };
+      }
+      return null;
+    },
+    resolvePlayerLordCharacterId: () => {
+      const world = options.worldState.value;
+      return world ? resolvePlayerLordCharacterId(world) : null;
+    },
+    isLordInStrongholdAt: (strongholdId) => {
+      const world = options.worldState.value;
+      return world ? isLordInStrongholdId(world, strongholdId) : false;
+    },
+    isPlayerCharacterAtCell: (x, y) => {
+      const world = options.worldState.value;
+      if (!world || !isLordOnMap(world)) return false;
+      return playerLordMapCharacterAtCell(world, x, y) != null;
+    },
+    isValidCharacterMovePathCell: (x, y) => {
+      const characterId = options.selectedCharacterId.value;
+      const world = options.worldState.value;
+      if (!characterId || !world) return false;
+      const mapChar = world.mapCharacters?.find((c) => c.id === characterId);
+      const loc = mapChar
+        ?? (world.lord.characterId === characterId
+          ? { x: world.lord.x, y: world.lord.y }
+          : null);
+      if (!loc) return false;
+      return loc.x !== x || loc.y !== y;
+    },
     resolveStrongholdLocation: (strongholdId) => {
       const sh = options.worldState.value?.strongholds.find((s) => s.id === strongholdId);
       return sh ? { x: sh.x, y: sh.y } : null;
@@ -102,22 +153,19 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
     isSelectableUnit: (unitId) => {
       const world = options.worldState.value;
       if (!world) return false;
-      const unit = world.units.find((u) => u.id === unitId);
-      if (unit?.forceId === playerForceId) return true;
-      const roster = world.ownUnitRoster?.find((u) => u.id === unitId);
-      return roster?.forceId === playerForceId;
+      return isPlayerRealmUnit(world, unitId);
     },
     isPlayerUnit: (unitId) => {
       const world = options.worldState.value;
       if (!world) return false;
-      const unit = world.units.find((u) => u.id === unitId);
-      if (unit?.forceId === playerForceId) return true;
-      const roster = world.ownUnitRoster?.find((u) => u.id === unitId);
-      return roster?.forceId === playerForceId;
+      return isPlayerRealmUnit(world, unitId);
     },
     isPlayerStronghold: (strongholdId) => {
-      const sh = options.worldState.value?.strongholds.find((s) => s.id === strongholdId);
-      return sh?.forceId === playerForceId;
+      const world = options.worldState.value;
+      if (!world) return false;
+      const sh = world.strongholds.find((s) => s.id === strongholdId);
+      if (!sh) return false;
+      return isPlayerRealmStronghold(world, sh);
     },
     isPlayerConvoy: (convoyId) => {
       const convoy = options.worldState.value?.supplyConvoys.find((c) => c.id === convoyId);
@@ -186,6 +234,10 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
     clearPendingSplitSubUnitIds: () => {
       pendingSplitSubUnitIds.value = [];
     },
+    getCellEntityOptions: () => cellEntityOptions.value,
+    setCellEntityOptions: (options) => {
+      cellEntityOptions.value = [...options];
+    },
     transitionTo: (state) => machine.transitionTo(state),
   });
 
@@ -193,6 +245,7 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
     snapshot.value = next;
     menuAnchor.value = next.menuAnchor;
     moveTarget.value = next.moveTarget;
+    cellEntityOptions.value = [...(next.cellEntityOptions ?? [])];
   });
 
   onScopeDispose(unsubscribe);
@@ -200,10 +253,11 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
   const mapUnitSelectionEnabled = computed(() => snapshot.value.mapUnitSelectionEnabled);
   const mapStrongholdSelectionEnabled = computed(() => snapshot.value.mapStrongholdSelectionEnabled);
   const mapConvoySelectionEnabled = computed(() => snapshot.value.mapConvoySelectionEnabled);
+  const mapCharacterSelectionEnabled = computed(() => snapshot.value.id === "navigate");
   const mapCellSelectionEnabled = computed(() => snapshot.value.mapCellSelectionEnabled);
   const mapRightClickEnabled = computed(() => snapshot.value.mapRightClickEnabled);
   const popupMode = computed(() => snapshot.value.popupMode);
-  const secondaryPopupMode = computed(() => snapshot.value.secondaryPopupMode ?? null);
+  const cellEntityPickerOptions = computed(() => cellEntityOptions.value);
   const stateId = computed(() => snapshot.value.id);
 
   return {
@@ -217,14 +271,20 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
     mapUnitSelectionEnabled,
     mapStrongholdSelectionEnabled,
     mapConvoySelectionEnabled,
+    mapCharacterSelectionEnabled,
     mapCellSelectionEnabled,
     mapRightClickEnabled,
     popupMode,
-    secondaryPopupMode,
+    cellEntityPickerOptions,
     reset: () => machine.reset(),
     onSelectUnit: (payload: MapSelectUnitPayload) => machine.onSelectUnit(payload),
     onSelectStronghold: (payload: MapSelectStrongholdPayload) => machine.onSelectStronghold(payload),
     onSelectConvoy: (payload: MapSelectConvoyPayload) => machine.onSelectConvoy(payload),
+    onSelectCharacter: (payload: import("@/strategyMapInteraction/types").MapSelectCharacterPayload) =>
+      machine.onSelectCharacter(payload),
+    onSelectCellEntities: (payload: MapSelectCellEntitiesPayload, entities: readonly MapCellEntityOption[]) =>
+      machine.onSelectCellEntities(payload, entities),
+    onPickCellEntity: (entity: MapCellEntityOption) => machine.onPickCellEntity(entity),
     onSelectCell: (payload: MapSelectCellPayload) => machine.onSelectCell(payload),
     onHoverCell: (cell: MapHoverCellPayload) => machine.onHoverCell(cell),
     onMapRightClick: () => machine.onMapRightClick(),

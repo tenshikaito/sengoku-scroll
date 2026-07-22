@@ -10,7 +10,9 @@ import {
   type StrategyDifficultyId,
 } from "@/utils/strategyGameStartSettings";
 import {
+  CONTROL_MODE_HINTS,
   FOG_MODE_HINTS,
+  INSTANT_EVENT_MESSAGES_HINT,
   INTEL_MODE_HINTS,
   PRESET_SUMMARIES,
   resolveGameStartOptionUiRules,
@@ -89,6 +91,10 @@ const intelModeHint = computed(
   () => INTEL_MODE_HINTS[form.customStartOptions.intelMode] ?? "",
 );
 
+const controlModeHint = computed(
+  () => CONTROL_MODE_HINTS[form.customStartOptions.controlMode] ?? "",
+);
+
 const fogModeOptions = [
   { label: "无迷雾", value: "None" },
   { label: "势力迷雾", value: "Force" },
@@ -132,7 +138,7 @@ function onClose() {
 <template>
   <el-dialog
     :model-value="visible"
-    title="开局设置"
+    title="游戏设置"
     width="560px"
     :close-on-click-modal="allowCancel"
     :close-on-press-escape="allowCancel"
@@ -140,11 +146,7 @@ function onClose() {
     @close="onClose"
   >
     <el-form label-width="96px" label-position="left" class="start-form">
-      <el-form-item label="剧本" class="compact-item">
-        <el-input v-model="form.scenarioId" disabled />
-      </el-form-item>
-
-      <el-form-item label="快速开始" class="compact-item">
+      <el-form-item label="游戏难度" class="compact-item">
         <div class="control-stack">
           <el-radio-group v-model="form.difficulty" class="option-radios">
             <el-radio
@@ -176,9 +178,15 @@ function onClose() {
                   <el-switch v-model="form.customStartOptions.allySharedVision" />
                 </div>
               </div>
-              <p v-else-if="uiRules.controlModeLockedHint" class="field-hint muted">
-                {{ uiRules.controlModeLockedHint }}
-              </p>
+              <div v-if="uiRules.showCharacterSharedVision" class="sub-option">
+                <div class="sub-option-row">
+                  <span class="sub-option-label">角色共享视野</span>
+                  <el-switch v-model="form.customStartOptions.characterSharedVision" />
+                </div>
+                <p class="field-hint muted">
+                  地图上的 AI 角色 avatar 是否扩视野；玩家当主在任何模式下均提供视野。
+                </p>
+              </div>
             </div>
           </el-form-item>
 
@@ -199,7 +207,7 @@ function onClose() {
             </div>
           </el-form-item>
 
-          <el-form-item label="指挥消息" class="compact-item nested-item">
+          <el-form-item label="对象控制" class="compact-item nested-item">
             <div class="control-stack">
               <el-radio-group
                 v-if="uiRules.showControlMode"
@@ -210,13 +218,20 @@ function onClose() {
                   {{ o.label }}
                 </el-radio>
               </el-radio-group>
+              <p v-if="uiRules.showControlMode" class="field-hint">{{ controlModeHint }}</p>
               <p v-else class="field-hint muted">{{ uiRules.controlModeLockedHint }}</p>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="事件消息" class="compact-item nested-item">
+            <div class="control-stack">
               <div class="sub-option">
                 <div class="sub-option-row">
                   <span class="sub-option-label">即时事件摘要</span>
                   <el-switch v-model="form.customStartOptions.instantEventMessages" />
                 </div>
               </div>
+              <p class="field-hint">{{ INSTANT_EVENT_MESSAGES_HINT }}</p>
             </div>
           </el-form-item>
         </el-collapse-item>
@@ -243,13 +258,17 @@ function onClose() {
 
 .compact-item {
   margin-bottom: 8px;
+  align-items: flex-start;
 }
 
 .compact-item :deep(.el-form-item__label) {
   font-weight: 600;
   color: var(--el-text-color-primary);
-  line-height: 32px;
+  line-height: 1.4;
+  height: auto;
+  padding-top: 2px;
   padding-right: 8px;
+  align-self: flex-start;
 }
 
 .compact-item :deep(.el-form-item__content) {

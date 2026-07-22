@@ -3,7 +3,7 @@ import { onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import StrategyGameStartDialog from "@/components/strategy/StrategyGameStartDialog.vue";
 import type { GameStartSettings } from "@/utils/strategyGameStartSettings";
-import { writeGameStartSettings } from "@/utils/strategyGameStartSettings";
+import { writeGameStartSettings, buildGameStartNavigationState } from "@/utils/strategyGameStartSettings";
 
 const router = useRouter();
 const route = useRoute();
@@ -23,7 +23,10 @@ function closeDialog() {
 function onConfirm(settings: GameStartSettings) {
   writeGameStartSettings(settings);
   dialogVisible.value = false;
-  void router.push({ name: "strategy" });
+  void router.push({
+    name: "strategy",
+    state: buildGameStartNavigationState(settings),
+  });
 }
 
 onMounted(() => {

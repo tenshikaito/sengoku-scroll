@@ -8,6 +8,7 @@ using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Rules;
+using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Systems;
 
@@ -25,6 +26,7 @@ public class StrategyAISystem(
     StrategyScenarioMeta scenarioMeta,
     IPathfindingService pathfinding,
     StrategyAiDecisionTrace aiTrace,
+    StrategyFieldEngagementRegistry engagementRegistry,
     IStrategyDayDebugLog dayDebugLog,
     BattleReportDeliveryHelper battleReportDeliveryHelper,
     ILogger<StrategyAISystem> logger) : IStrategyAISystem
@@ -39,6 +41,9 @@ public class StrategyAISystem(
         var mapMaster = worldContext.GameWorld.GameMapMasterData;
         var rules = context.GameRuleConfig;
         var playerForceId = scenarioMeta.PlayerForceId;
+
+        // 业务：日初清理无效接敌锁定，避免 AI 永久 Skip
+        engagementRegistry.PruneOrphanEngagements(gameData);
 
         // 业务：日初先于单位 AI——威胁逼近时占格守城，封锁时抽象出击
         foreach (var stronghold in worldContext.EachStronghold())
@@ -94,7 +99,7 @@ public class StrategyAISystem(
 
         foreach (var force in gameData.Forces.Values)
         {
-            if (force.Id == playerForceId)
+            if (force.Id == playerForceId && !scenarioMeta.AllForcesAiControlled)
                 continue;
 
             if (StrategyUnitAIRules.TryDispatchLordRelief(
@@ -113,6 +118,22 @@ public class StrategyAISystem(
         var militaryUnits = worldContext.EachUnit().ToList();
         foreach (var unit in militaryUnits)
         {
+            if (unit.Status == UnitStatus.Standoff)
+            {
+                var standoffBreak = StrategyUnitAIRules.TryResolveStandoffEngagement(
+                    unit, gameData, engagementRegistry, mapMaster);
+                if (standoffBreak is { } breakDecision)
+                {
+                    aiTrace.LogAction(
+                        unit.Id,
+                        unit.Name,
+                        unit.ForceId,
+                        unit.Directive.ToString(),
+                        StrategyAiDecision.WithUnitContext(breakDecision, unit));
+                    continue;
+                }
+            }
+
             if (StrategyUnitAIRules.ShouldSkipDailyAi(unit))
             {
                 var reason = StrategyUnitAIRules.DescribeSkipReason(unit) ?? "跳过";
@@ -121,7 +142,7 @@ public class StrategyAISystem(
             }
 
             var directiveDecision = StrategyUnitAIRules.EvaluateDirective(
-                unit, gameData, playerForceId, mapMaster);
+                unit, gameData, playerForceId, mapMaster, scenarioMeta);
             aiTrace.LogDirective(unit.Id, unit.Name, unit.ForceId, directiveDecision);
 
             if (directiveDecision.Changed)

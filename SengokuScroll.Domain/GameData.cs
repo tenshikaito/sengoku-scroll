@@ -32,8 +32,8 @@ public class GameData
     /// <summary>地图上所有运输队，Key 为运输队 Id。</summary>
     public required Dictionary<int, SupplyConvoy> SupplyConvoys { get; init; } = [];
 
-    /// <summary>地图上所有信使，Key 为信使 Id。</summary>
-    public required Dictionary<int, Messenger> Messengers { get; init; } = [];
+    /// <summary>地图上所有在途文书载体，Key 为载体 Id。</summary>
+    public required Dictionary<int, MessageCarrier> MessageCarriers { get; init; } = [];
 
     /// <summary>进行中的法理战争。</summary>
     public Dictionary<int, War> Wars { get; init; } = [];

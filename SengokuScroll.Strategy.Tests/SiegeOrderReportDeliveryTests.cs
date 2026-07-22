@@ -31,11 +31,11 @@ public class SiegeOrderReportDeliveryTests
             gameData);
 
         Assert.DoesNotContain(
-            gameData.Messengers.Values,
-            m => m.PayloadType == MessengerPayloadType.BattleReport);
+            gameData.MessageCarriers.Values,
+            m => m.Payload.Type == MessagePayloadType.BattleReport);
 
         Assert.Contains(
-            gameData.Messengers.Values,
-            m => m.PayloadType == MessengerPayloadType.StrategicReport && m.ForceId == 1);
+            gameData.MessageCarriers.Values,
+            m => m.Payload.Type == MessagePayloadType.StrategicReport && m.ForceId == 1);
     }
 }

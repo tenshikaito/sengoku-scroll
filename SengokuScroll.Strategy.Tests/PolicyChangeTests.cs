@@ -35,11 +35,11 @@ public class PolicyChangeHostTests
         var result = host.OrderUnitDirective(1, UnitDirective.Occupy);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("MessengerDispatched", result.Value!.Outcome);
+        Assert.Equal("CarrierDispatched", result.Value!.Outcome);
         Assert.Equal("Move", result.Value.State.Units.First(u => u.Id == 1).Directive);
-        Assert.Single(result.Value.State.Messengers);
-        Assert.Equal("Occupy", result.Value.State.Messengers[0].PendingDirective);
-        Assert.Equal(lord.X, result.Value.State.Messengers[0].X);
-        Assert.Equal(lord.Y, result.Value.State.Messengers[0].Y);
+        Assert.Single(result.Value.State.MessageCarriers);
+        Assert.Equal("Occupy", result.Value.State.MessageCarriers[0].PendingDirective);
+        Assert.Equal(lord.X, result.Value.State.MessageCarriers[0].X);
+        Assert.Equal(lord.Y, result.Value.State.MessageCarriers[0].Y);
     }
 }

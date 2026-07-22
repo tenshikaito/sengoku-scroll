@@ -1,8 +1,11 @@
 using SengokuScroll.Common.Types;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
+using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
+using SengokuScroll.Strategy.Models;
 using static SengokuScroll.Domain.Entities.Character;
 using static SengokuScroll.Domain.Entities.Unit;
 
@@ -141,6 +144,193 @@ public static class StrategyVisionRules
             return false;
 
         return true;
+    }
+
+    /// <summary>运输队是否可作为视野源（同 Realm、在途）。</summary>
+    public static bool IsControllableVisionConvoy(
+        SupplyConvoy convoy,
+        int playerForceId,
+        GameData gameData)
+    {
+        if (!IsSameRealmForce(convoy.ForceId, playerForceId, gameData))
+            return false;
+
+        return convoy.Status is SupplyConvoyStatus.Moving or SupplyConvoyStatus.Deceived;
+    }
+
+    /// <summary>是否为玩家势力当主角色（任何模式下恒可作为视野源）。</summary>
+    public static bool IsPlayerLordCharacter(
+        Character character,
+        StrategyScenarioMeta meta,
+        GameData gameData)
+    {
+        var lordId = StrategyStrongholdLordHelper.ResolveForceLordCharacterId(
+            meta.PlayerForceId,
+            meta,
+            gameData);
+        return lordId > 0 && character.Id == lordId;
+    }
+
+    /// <summary>势力迷雾下，该角色是否应作为视野源。</summary>
+    public static bool ShouldCharacterContributeForceVision(
+        Character character,
+        StrategyScenarioMeta meta,
+        GameData gameData,
+        GameStartOptions options)
+    {
+        if (IsPlayerLordCharacter(character, meta, gameData))
+            return IsLordCharacterOnMap(character, gameData);
+
+        if (!options.CharacterSharedVision)
+            return false;
+
+        return IsControllableVisionCharacter(character, meta.PlayerForceId, gameData);
+    }
+
+    /// <summary>当主在地图或随军时提供视野；仅驻留城内且未随军时不重复扩视野（据点已覆盖）。</summary>
+    public static bool IsLordCharacterOnMap(Character character, GameData gameData)
+    {
+        if (character.LocationType == CharacterLocationType.Map)
+            return true;
+
+        if (character.LocationType == CharacterLocationType.Unit)
+        {
+            var ledUnit = gameData.Units.Values.FirstOrDefault(u => u.LeaderId == character.Id);
+            return ledUnit is not null;
+        }
+
+        return false;
+    }
+
+    /// <summary>解析角色在地图上的视野中心格。</summary>
+    public static Point3 ResolveCharacterMapLocation(Character character, GameData data)
+    {
+        if (character.LocationType == CharacterLocationType.Unit)
+        {
+            var unit = data.Units.Values.FirstOrDefault(u =>
+                u.LeaderId == character.Id
+                || u.SubUnitIds.Any(id =>
+                    data.SubUnits.TryGetValue(id, out var sub) && sub.LeaderId == character.Id));
+
+            if (unit is not null)
+                return unit.Location;
+        }
+
+        return character.Location;
+    }
+
+    /// <summary>向可见集合追加本 Realm 军事单位视野。</summary>
+    public static void AddRealmUnitVision(
+        HashSet<(int X, int Y)> visible,
+        GameWorld world,
+        IReadOnlyCollection<int> visionForceIds,
+        int playerForceId,
+        GameData gameData,
+        int mapWidth,
+        int mapHeight)
+    {
+        foreach (var unit in gameData.Units.Values)
+        {
+            if (!visionForceIds.Contains(unit.ForceId))
+                continue;
+
+            if (!IsControllableVisionUnit(unit, playerForceId, gameData))
+                continue;
+
+            AddSightBox(
+                visible,
+                unit.Location,
+                ResolveUnitSightRange(unit, world),
+                mapWidth,
+                mapHeight);
+        }
+    }
+
+    /// <summary>向可见集合追加本 Realm 运输队视野。</summary>
+    public static void AddRealmConvoyVision(
+        HashSet<(int X, int Y)> visible,
+        IReadOnlyCollection<int> visionForceIds,
+        int playerForceId,
+        GameData gameData,
+        int mapWidth,
+        int mapHeight)
+    {
+        foreach (var convoy in gameData.SupplyConvoys.Values)
+        {
+            if (!visionForceIds.Contains(convoy.ForceId))
+                continue;
+
+            if (!IsControllableVisionConvoy(convoy, playerForceId, gameData))
+                continue;
+
+            AddSightBox(
+                visible,
+                convoy.Location,
+                StrategyTroopSightRanges.Convoy,
+                mapWidth,
+                mapHeight);
+        }
+    }
+
+    /// <summary>势力迷雾：单位护送编制文书载体贡献视野（与军事单位同规则）。</summary>
+    public static void AddRealmUnitEscortCarrierVision(
+        HashSet<(int X, int Y)> visible,
+        IReadOnlyCollection<int> visionForceIds,
+        int playerForceId,
+        GameData gameData,
+        int mapWidth,
+        int mapHeight)
+    {
+        foreach (var carrier in gameData.MessageCarriers.Values)
+        {
+            if (carrier.CarrierKind != MessageCarrierKind.UnitEscort)
+                continue;
+
+            if (carrier.Status != MessageCarrierStatus.Moving)
+                continue;
+
+            if (!visionForceIds.Contains(carrier.ForceId))
+                continue;
+
+            if (!IsSameRealmForce(carrier.ForceId, playerForceId, gameData))
+                continue;
+
+            AddSightBox(
+                visible,
+                carrier.Location,
+                StrategyTroopSightRanges.Default,
+                mapWidth,
+                mapHeight);
+        }
+    }
+
+    /// <summary>向可见集合追加符合条件的角色视野（含玩家当主）。</summary>
+    public static void AddForceModeCharacterVision(
+        HashSet<(int X, int Y)> visible,
+        GameWorld world,
+        StrategyScenarioMeta meta,
+        IReadOnlyCollection<int> visionForceIds,
+        GameData gameData,
+        GameStartOptions options,
+        int mapWidth,
+        int mapHeight)
+    {
+        foreach (var character in gameData.Characters.Values)
+        {
+            if (!visionForceIds.Contains(character.ForceId))
+                continue;
+
+            if (!ShouldCharacterContributeForceVision(character, meta, gameData, options))
+                continue;
+
+            var location = ResolveCharacterMapLocation(character, gameData);
+            AddSightBox(
+                visible,
+                location,
+                StrategyTroopSightRanges.Default,
+                mapWidth,
+                mapHeight);
+        }
     }
 
     /// <summary>地图/编入部队的角色是否提供视野（俘虏与城内角色除外）。</summary>

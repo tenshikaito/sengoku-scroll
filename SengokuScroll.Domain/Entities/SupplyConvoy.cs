@@ -40,6 +40,9 @@ public class SupplyConvoy : IHasForce, IMapObject, IHasLeader
     /// <summary>运载金钱（贯）；月初贡纳等。</summary>
     public int CargoMoney { get; set; }
 
+    /// <summary>移民队运载人口数。</summary>
+    public int CargoPopulation { get; set; }
+
     /// <summary>运输任务类型。</summary>
     public TransportPurpose Purpose { get; set; } = TransportPurpose.Supply;
 
@@ -58,7 +61,7 @@ public class SupplyConvoy : IHasForce, IMapObject, IHasLeader
     /// <summary>剩余路径格点队列；队首为下一日目标格。</summary>
     public Queue<Point3> RoutePoints { get; set; } = new();
 
-    /// <summary>是否正被假情报迷惑（信使 <see cref="MessengerPayloadType.FalseIntelligence"/> 所致）。</summary>
+    /// <summary>是否正被假情报迷惑（信使 <see cref="MessagePayloadType.FalseIntelligence"/> 所致）。</summary>
     public bool IsDeceived { get; set; }
 
     /// <summary>假情报误导的目标格；迷惑解除后可能改道至此（M3 完善）。</summary>

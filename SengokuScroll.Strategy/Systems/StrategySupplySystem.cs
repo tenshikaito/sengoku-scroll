@@ -48,8 +48,11 @@ public class StrategySupplySystem(
 
             SupplyConvoyActions.ApplyDailyTransitConsumption(convoy);
 
-            // 返程空载不扣粮尽；Outbound 载粮/载钱均为 0 则视为溃散
-            if (convoy.CargoFoodGo <= 0 && convoy.CargoMoney <= 0 && !convoy.IsReturningToOrigin)
+            // 返程空载不扣粮尽；Outbound 载粮/载钱均为 0 则视为溃散（移民队携带人口除外）
+            if (convoy.Purpose != TransportPurpose.Migrant
+                && convoy.CargoFoodGo <= 0
+                && convoy.CargoMoney <= 0
+                && !convoy.IsReturningToOrigin)
             {
                 convoy.Status = SupplyConvoyStatus.Destroyed;
                 continue;

@@ -5,7 +5,7 @@ import type { MapViewportWorldRect, MinimapNavigatePayload } from "./strategyMin
 import { isPlayerRealmForce, resolveEntityMapColor, type StrategyMapColorMode } from "@/utils/mapEntityColors";
 import { mapTileIndex } from "@/utils/mapTileLookup";
 import { terrainFillColor } from "@/utils/terrainColors";
-import { fogDisabled, isTileExplored, isTileVisible } from "@/utils/strategyFogCell";
+import { fogDisabled, isTileExplored, isTileVisible, resolveRoadCellStyle } from "@/utils/strategyFogCell";
 
 const props = defineProps<{
   worldState: StrategyWorldState;
@@ -118,14 +118,51 @@ function drawMinimap() {
       ctx.fillStyle = visible ? pixiColorToCss(base) : dimPixiColor(base, 0.42);
 
       ctx.fillRect(px, py, cellW, cellH);
-
-      if (roadSet.has(`${x},${y}`)) {
-        ctx.fillStyle = visible ? "rgba(251, 191, 36, 0.55)" : "rgba(120, 90, 40, 0.35)";
-        const inset = Math.max(0, scale * 0.15);
-        ctx.fillRect(px + inset, py + inset, Math.max(1, cellW - inset * 2), Math.max(1, cellH - inset * 2));
-      }
     }
   }
+
+  ctx.lineCap = "round";
+  ctx.lineWidth = Math.max(1.2, scale * 0.22);
+
+  const roadDirections: Array<[number, number]> = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+
+  const drawRoadSegments = (targetStyle: "bright" | "fog", strokeStyle: string) => {
+    ctx.strokeStyle = strokeStyle;
+    for (let y = 0; y < mapH; y++) {
+      for (let x = 0; x < mapW; x++) {
+        if (!roadSet.has(`${x},${y}`)) continue;
+        const style = resolveRoadCellStyle(props.worldState, x, y);
+        if (style !== targetStyle) continue;
+
+        const cx = (x + 0.5) * scale;
+        const cy = (y + 0.5) * scale;
+
+        for (const [dx, dy] of roadDirections) {
+          if (!roadSet.has(`${x + dx},${y + dy}`)) continue;
+
+          let tx = cx;
+          let ty = cy;
+          if (dx === 1) tx = (x + 1) * scale;
+          else if (dx === -1) tx = x * scale;
+          else if (dy === 1) ty = (y + 1) * scale;
+          else ty = y * scale;
+
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(tx, ty);
+          ctx.stroke();
+        }
+      }
+    }
+  };
+
+  drawRoadSegments("fog", "rgba(120, 113, 108, 0.72)");
+  drawRoadSegments("bright", "rgba(250, 204, 21, 0.92)");
 
   const dotRadius = Math.max(2.2, scale * 0.42);
   for (const stronghold of props.worldState.strongholds) {

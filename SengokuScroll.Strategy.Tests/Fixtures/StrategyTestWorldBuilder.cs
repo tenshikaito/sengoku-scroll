@@ -79,7 +79,7 @@ public static class StrategyTestWorldBuilder
                 Units = units,
                 Characters = [],
                 SupplyConvoys = [],
-                Messengers = [],
+                MessageCarriers = [],
                 SubUnits = []
             }
         };

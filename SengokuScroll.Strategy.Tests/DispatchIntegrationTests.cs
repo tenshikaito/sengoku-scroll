@@ -70,7 +70,7 @@ public class MessengerDispatchIntegrationTests
             unitLocation: new Common.Types.Point3(0, 0),
             unitFood: 2000);
 
-        var helper = ctx.Services.GetRequiredService<MessengerDispatchHelper>();
+        var helper = ctx.Services.GetRequiredService<MessageCarrierDispatchHelper>();
         var unit = ctx.World.GameData.Units[1];
         unit.Directive = UnitDirective.Move;
 
@@ -80,9 +80,9 @@ public class MessengerDispatchIntegrationTests
             unit,
             UnitDirective.Retreat);
 
-        Assert.Equal(MessengerDispatchOutcome.AppliedImmediately, outcome);
+        Assert.Equal(MessageCarrierDispatchOutcome.AppliedImmediately, outcome);
         Assert.Equal(UnitDirective.Retreat, unit.Directive);
-        Assert.Empty(ctx.World.GameData.Messengers);
+        Assert.Empty(ctx.World.GameData.MessageCarriers);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class MessengerDispatchIntegrationTests
             unitLocation: new Common.Types.Point3(5, 0),
             unitFood: 2000);
 
-        var helper = ctx.Services.GetRequiredService<MessengerDispatchHelper>();
+        var helper = ctx.Services.GetRequiredService<MessageCarrierDispatchHelper>();
         var unit = ctx.World.GameData.Units[1];
         unit.Directive = UnitDirective.Move;
 
@@ -103,19 +103,19 @@ public class MessengerDispatchIntegrationTests
             unit,
             UnitDirective.Occupy);
 
-        Assert.Equal(MessengerDispatchOutcome.MessengerDispatched, outcome);
+        Assert.Equal(MessageCarrierDispatchOutcome.CarrierDispatched, outcome);
         Assert.Equal(UnitDirective.Move, unit.Directive);
-        var messenger = Assert.Single(ctx.World.GameData.Messengers.Values);
-        Assert.False(string.IsNullOrWhiteSpace(messenger.Name));
-        Assert.Contains("信使", messenger.Name);
-        Assert.Equal(LogisticsConstants.DefaultMessengerCourierCount, messenger.CourierCount);
-        Assert.Equal(LogisticsConstants.DefaultMessengerEscortCount, messenger.EscortSoldierCount);
-        Assert.False(messenger.IsMilitary);
+        var MessageCarrier = Assert.Single(ctx.World.GameData.MessageCarriers.Values);
+        Assert.False(string.IsNullOrWhiteSpace(MessageCarrier.Name));
+        Assert.Contains("文书", MessageCarrier.Name);
+        Assert.Equal(LogisticsConstants.DefaultMessengerCourierCount, MessageCarrier.CourierCount);
+        Assert.Equal(LogisticsConstants.DefaultMessengerEscortCount, MessageCarrier.EscortSoldierCount);
+        Assert.False(MessageCarrier.IsMilitary);
 
         for (var day = 0; day < 5; day++)
             ctx.TimeController.AdvanceDay(ctx.World, ctx.Engine);
 
         Assert.Equal(UnitDirective.Occupy, unit.Directive);
-        Assert.Empty(ctx.World.GameData.Messengers);
+        Assert.Empty(ctx.World.GameData.MessageCarriers);
     }
 }

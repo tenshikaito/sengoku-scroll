@@ -19,6 +19,9 @@ public static class BattleConstants
     /// <summary>对峙累计达此天数时强制决战。</summary>
     public const int StandoffForceBattleDays = 30;
 
+    /// <summary>AI 在同格对峙超过此天数且胜率偏低时主动脱离并改撤退。</summary>
+    public const int AiStandoffBreakRetreatDays = 12;
+
     public const int RetreatApBonusBase = 3;
     public const int RetreatMoraleBonusThreshold = 70;
 

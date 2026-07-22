@@ -1,7 +1,7 @@
 import type {
   StrategyStrongholdState,
   StrategySupplyConvoyState,
-  StrategyMessengerState,
+  StrategyMessageCarrierState,
   StrategyUnitState,
   StrategyWorldState,
 } from "@/api/strategy";
@@ -56,18 +56,19 @@ export function isConvoyIntelVisible(
   convoy: StrategySupplyConvoyState,
 ): boolean {
   if (fogDisabled(worldState)) return true;
-  if (isOwnRealmForce(worldState, convoy.forceId)) return true;
   return isTileVisible(worldState, convoy.x, convoy.y);
 }
 
-export function isMessengerIntelVisible(
+export function isMessageCarrierIntelVisible(
   worldState: StrategyWorldState,
-  messenger: StrategyMessengerState,
+  carrier: StrategyMessageCarrierState,
 ): boolean {
   if (fogDisabled(worldState)) return true;
-  if (isOwnRealmForce(worldState, messenger.forceId)) return true;
-  return isTileVisible(worldState, messenger.x, messenger.y);
+  return isTileVisible(worldState, carrier.x, carrier.y);
 }
+
+/** @deprecated Use isMessageCarrierIntelVisible */
+export const isMessengerIntelVisible = isMessageCarrierIntelVisible;
 
 export function strongholdsAtCellForIntel(
   worldState: StrategyWorldState,
@@ -97,15 +98,18 @@ export function convoysAtCellForIntel(
   );
 }
 
-export function messengersAtCellForIntel(
+export function messageCarriersAtCellForIntel(
   worldState: StrategyWorldState,
   x: number,
   y: number,
-): StrategyMessengerState[] {
-  return worldState.messengers.filter(
-    (m) => m.x === x && m.y === y && isMessengerIntelVisible(worldState, m),
+): StrategyMessageCarrierState[] {
+  return worldState.messageCarriers.filter(
+    (m) => m.x === x && m.y === y && isMessageCarrierIntelVisible(worldState, m),
   );
 }
+
+/** @deprecated Use messageCarriersAtCellForIntel */
+export const messengersAtCellForIntel = messageCarriersAtCellForIntel;
 
 function battlefieldAtCell(worldState: StrategyWorldState, x: number, y: number) {
   return worldState.battlefields?.find((b) => b.x === x && b.y === y) ?? null;
@@ -121,7 +125,7 @@ export function intelEntityCountAtCell(worldState: StrategyWorldState, x: number
     count += unitsAtCellForIntel(worldState, x, y).length;
   }
   count += convoysAtCellForIntel(worldState, x, y).length;
-  count += messengersAtCellForIntel(worldState, x, y).length;
+  count += messageCarriersAtCellForIntel(worldState, x, y).length;
   return count;
 }
 
@@ -130,4 +134,18 @@ export function canShowCellHoverIntel(worldState: StrategyWorldState, x: number,
   if (fogDisabled(worldState)) return intelEntityCountAtCell(worldState, x, y) > 0;
   if (!isTileExplored(worldState, x, y)) return false;
   return intelEntityCountAtCell(worldState, x, y) > 0;
+}
+
+export type RoadSegmentFogStyle = "bright" | "fog";
+
+/** 道路颜色由当前格决定：视野内亮黄，已探索灰格为记忆色，未探索不绘制。 */
+export function resolveRoadCellStyle(
+  worldState: StrategyWorldState,
+  x: number,
+  y: number
+): RoadSegmentFogStyle | null {
+  if (fogDisabled(worldState)) return "bright";
+  if (!isTileExplored(worldState, x, y)) return null;
+  if (isTileVisible(worldState, x, y)) return "bright";
+  return "fog";
 }

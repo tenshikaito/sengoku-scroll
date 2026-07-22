@@ -1,19 +1,16 @@
 <script setup lang="ts">
 import type {
   StrategyMessengerState,
-  StrategyStrongholdState,
   StrategySupplyConvoyState,
   StrategyUnitState,
   StrategyWorldState,
 } from "@/api/strategy";
 import StrategyConvoyIntelDetail from "./StrategyConvoyIntelDetail.vue";
 import StrategyMessengerIntelDetail from "./StrategyMessengerIntelDetail.vue";
-import StrategyStrongholdIntelDetail from "./StrategyStrongholdIntelDetail.vue";
 import StrategyUnitIntelDetail from "./StrategyUnitIntelDetail.vue";
 
 export type EntityIntelTarget =
   | { kind: "unit"; unit: StrategyUnitState }
-  | { kind: "stronghold"; stronghold: StrategyStrongholdState }
   | { kind: "convoy"; convoy: StrategySupplyConvoyState }
   | { kind: "messenger"; messenger: StrategyMessengerState };
 
@@ -34,13 +31,11 @@ defineEmits<{
     :title="
       target?.kind === 'unit'
         ? '单位情报'
-        : target?.kind === 'stronghold'
-          ? '据点情报'
-          : target?.kind === 'convoy'
-            ? '运输队情报'
-            : target?.kind === 'messenger'
-              ? '信使情报'
-              : '情报'
+        : target?.kind === 'convoy'
+          ? '运输队情报'
+          : target?.kind === 'messenger'
+            ? '信使情报'
+            : '情报'
     "
     width="min(720px, 92vw)"
     align-center
@@ -53,11 +48,6 @@ defineEmits<{
       v-if="target?.kind === 'unit'"
       :world-state="worldState"
       :unit="target.unit"
-    />
-    <StrategyStrongholdIntelDetail
-      v-else-if="target?.kind === 'stronghold'"
-      :world-state="worldState"
-      :stronghold="target.stronghold"
     />
     <StrategyConvoyIntelDetail
       v-else-if="target?.kind === 'convoy'"

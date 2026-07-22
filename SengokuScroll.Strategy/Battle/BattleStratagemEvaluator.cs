@@ -53,10 +53,10 @@ public static class BattleStratagemEvaluator
     }
 
     private static bool IsUnitConfused(Unit unit, GameData gameData)
-        => gameData.Messengers.Values.Any(m =>
-            m.TargetUnitId == unit.Id
-            && m.PayloadType == MessengerPayloadType.FalseIntelligence
-            && m.Status == MessengerStatus.Arrived);
+        => gameData.MessageCarriers.Values.Any(m =>
+            m.Payload.TargetUnitId == unit.Id
+            && m.Payload.Type == MessagePayloadType.FalseIntelligence
+            && m.Status == MessageCarrierStatus.Arrived);
 
     private static bool HasDeceivedInboundSupply(Unit unit, GameData gameData)
         => gameData.SupplyConvoys.Values.Any(c =>

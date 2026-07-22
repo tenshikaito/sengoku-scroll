@@ -1,18 +1,50 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { StrategyEvent } from "@/api/strategyTypes";
-import { formatEventsAsPlainText } from "@/utils/messageCategories";
+import { messageCategoryLabel } from "@/utils/messageCategories";
+import {
+  eventHasDetail,
+  messengerFeedBrief,
+  notificationFromEventDetail,
+} from "@/utils/strategyNotifications";
+import type { StrategyPendingNotification } from "@/components/strategy/StrategyNotificationTray.vue";
 
 const props = defineProps<{
   visible: boolean;
   events: StrategyEvent[];
+  playerForceId?: number;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   "update:visible": [value: boolean];
+  "open-detail": [notification: StrategyPendingNotification];
 }>();
 
-const messageText = computed(() => formatEventsAsPlainText(props.events));
+interface MessageRow {
+  key: string;
+  label: string;
+  text: string;
+  detailAvailable: boolean;
+  event: StrategyEvent;
+}
+
+const rows = computed<MessageRow[]>(() =>
+  props.events.map((event, index) => ({
+    key: `${event.category}-${index}-${event.message.slice(0, 24)}`,
+    label: messageCategoryLabel(event.category),
+    text: messengerFeedBrief(event).replace(/^\[[^\]]+\]\s*/, ""),
+    detailAvailable: eventHasDetail(event),
+    event,
+  })),
+);
+
+function openDetail(row: MessageRow) {
+  if (!row.detailAvailable) return;
+  const notification = notificationFromEventDetail(row.event, props.playerForceId);
+  if (!notification) return;
+  emit("open-detail", notification);
+  emit("update:visible", false);
+}
 </script>
 
 <template>
@@ -25,14 +57,20 @@ const messageText = computed(() => formatEventsAsPlainText(props.events));
     class="strategy-message-dialog strategy-dialog-centered-footer"
     @update:model-value="$emit('update:visible', $event)"
   >
-    <textarea
-      v-if="messageText"
-      class="message-textarea"
-      readonly
-      tabindex="-1"
-      :value="messageText"
-      aria-label="完整消息记录"
-    />
+    <ul v-if="rows.length" class="message-list">
+      <li v-for="row in rows" :key="row.key" class="message-row">
+        <span class="message-category">[{{ row.label }}]</span>
+        <button
+          v-if="row.detailAvailable"
+          type="button"
+          class="message-link"
+          @click="openDetail(row)"
+        >
+          {{ row.text }}
+        </button>
+        <span v-else class="message-plain">{{ row.text }}</span>
+      </li>
+    </ul>
     <el-empty v-else description="当前筛选无消息" :image-size="64" />
 
     <template #footer>
@@ -42,25 +80,53 @@ const messageText = computed(() => formatEventsAsPlainText(props.events));
 </template>
 
 <style scoped>
-.message-textarea {
-  display: block;
-  width: 100%;
-  min-height: min(420px, 55vh);
-  max-height: min(420px, 55vh);
+.message-list {
+  list-style: none;
   margin: 0;
-  padding: 10px 12px;
-  box-sizing: border-box;
+  padding: 0;
+  max-height: min(420px, 55vh);
+  overflow-y: auto;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  resize: none;
-  outline: none;
   background: #f8fafc;
-  color: #1e293b;
+}
+
+.message-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
   font-family: "Yu Mincho", "MS Mincho", "SimSun", serif;
   font-size: 0.88rem;
   line-height: 1.55;
-  white-space: pre-wrap;
-  overflow-y: auto;
+  color: #1e293b;
+}
+
+.message-row:last-child {
+  border-bottom: none;
+}
+
+.message-category {
+  color: #64748b;
+  margin-right: 0.35rem;
+}
+
+.message-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2563eb;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.message-link:hover {
+  color: #1d4ed8;
+}
+
+.message-plain {
+  color: #1e293b;
 }
 
 .strategy-message-dialog :deep(.el-dialog__title) {

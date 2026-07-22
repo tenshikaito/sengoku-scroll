@@ -1,4 +1,4 @@
-import type { StrategyStrongholdState, StrategyUnitState, StrategyWorldState } from "@/api/strategy";
+import type { StrategyForceState, StrategyStrongholdState, StrategyUnitState, StrategyWorldState } from "@/api/strategy";
 import { isPlayerRealmForce, resolveRealmRootId } from "@/utils/mapEntityColors";
 import { formatFoodGo, formatMoney, formatSoldiers } from "@/utils/strategyDisplayUnits";
 
@@ -284,8 +284,12 @@ export function shouldObscureStrongholdPersonnel(
   worldState: StrategyWorldState,
   stronghold: StrategyStrongholdState,
 ): boolean {
-  if (stronghold.forceId === worldState.playerForceId) return false;
-  if (isKnownStrongholdIntelMasked(stronghold, worldState.playerForceId)) return true;
+  if (isPlayerRealmForce(stronghold.forceId, worldState.playerForceId, worldState.forces)) {
+    return false;
+  }
+  if (isKnownStrongholdIntelMasked(stronghold, worldState.playerForceId, worldState.forces)) {
+    return true;
+  }
   return isForeignIntelRestricted(worldState, stronghold.forceId);
 }
 
@@ -313,18 +317,26 @@ export function strongholdHoverFieldValue(
     return UNKNOWN_INTEL;
   }
 
-  if (stronghold.visibilityTier === "Known" && KNOWN_STRONGHOLD_HIDDEN_LABELS.has(label)) {
+  if (
+    stronghold.visibilityTier === "Known" &&
+    KNOWN_STRONGHOLD_HIDDEN_LABELS.has(label) &&
+    worldState &&
+    !isPlayerRealmForce(stronghold.forceId, worldState.playerForceId, worldState.forces)
+  ) {
     return UNKNOWN_INTEL;
   }
   return value;
 }
 
-/** Known 层级非本家据点：地图可见但数值情报隐藏（含内藩）。 */
+/** Known 层级非自势力圈据点：地图可见但数值情报隐藏。 */
 export function isKnownStrongholdIntelMasked(
   stronghold: StrategyStrongholdState,
   playerForceId: number,
+  forces: readonly StrategyForceState[],
 ): boolean {
-  return stronghold.visibilityTier === "Known" && stronghold.forceId !== playerForceId;
+  if (stronghold.visibilityTier !== "Known") return false;
+  if (isPlayerRealmForce(stronghold.forceId, playerForceId, forces)) return false;
+  return true;
 }
 
 export function battlefieldParticipantMoraleLabel(

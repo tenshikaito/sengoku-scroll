@@ -184,6 +184,7 @@ export interface IntelDiplomacyRow {
 }
 
 function forceName(worldState: StrategyWorldState, forceId: number): string {
+  if (forceId === 0) return "—";
   return worldState.forces.find((f) => f.id === forceId)?.name ?? `势力#${forceId}`;
 }
 
@@ -291,6 +292,14 @@ function formatCityGenerals(worldState: StrategyWorldState, strongholdId: number
   const inCity = countStrongholdCharactersInCity(worldState, strongholdId);
   const total = countStrongholdCharacters(worldState, strongholdId);
   return `${inCity}/${total}`;
+}
+
+/** 据点城内将领数，格式如 2/5（在城/所属）。 */
+export function formatStrongholdCityGenerals(
+  worldState: StrategyWorldState,
+  strongholdId: number
+): string {
+  return formatCityGenerals(worldState, strongholdId);
 }
 
 function resolveSuccessorName(
@@ -1508,6 +1517,29 @@ export function masterDataIntelRows(
   if (!master) return [];
   if (preset === "enums") return mapMasterEntries(master.enums);
   return mapMasterEntries(master[preset]);
+}
+
+export interface IntelPersonRelationRow {
+  id: number;
+  relationType: string;
+  characterName: string;
+  characterId: number;
+}
+
+/** 人物详情 · 人际关系表格行。 */
+export function personRelationshipTableRows(
+  worldState: StrategyWorldState,
+  characterId: number,
+): IntelPersonRelationRow[] {
+  const character = worldState.characters?.find((c) => c.id === characterId);
+  if (!character?.relations?.length) return [];
+
+  return character.relations.map((rel, index) => ({
+    id: index + 1,
+    relationType: rel.relationType,
+    characterName: rel.characterName,
+    characterId: rel.characterId,
+  }));
 }
 
 /** @deprecated 使用 playerPersonRows */

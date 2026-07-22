@@ -102,8 +102,8 @@ public static class BattleReportDispatchRules
     }
 
     private static bool HasInFlightBattleReport(GameData gameData, int forceId)
-        => gameData.Messengers.Values.Any(m =>
+        => gameData.MessageCarriers.Values.Any(m =>
             m.ForceId == forceId
-            && m.PayloadType == MessengerPayloadType.BattleReport
-            && m.Status == MessengerStatus.Moving);
+            && m.Payload.Type == MessagePayloadType.BattleReport
+            && m.Status == MessageCarrierStatus.Moving);
 }

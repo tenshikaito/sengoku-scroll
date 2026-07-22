@@ -68,9 +68,9 @@ public static class StrategyLordHelper
 
         if (lordCharacter.LocationType == CharacterLocationType.Stronghold)
         {
-            var strongholdId = lordCharacter.StrongholdId > 0
-                ? lordCharacter.StrongholdId
-                : lordCharacter.LocationStrongholdId;
+            var strongholdId = lordCharacter.LocationStrongholdId > 0
+                ? lordCharacter.LocationStrongholdId
+                : lordCharacter.StrongholdId;
             if (strongholdId > 0
                 && gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
             {
@@ -113,12 +113,26 @@ public static class StrategyLordHelper
         return targetUnit.Location;
     }
 
-    /// <summary>解析势力当主居城据点 Id（当主角色 <see cref="Character.StrongholdId"/>；无则 0）。</summary>
+    /// <summary>解析势力当主名义居城据点 Id（剧本固定；不随当主出访其它据点而改变）。</summary>
     public static int ResolveLordResidenceStrongholdId(
         int forceId,
         GameData gameData,
         StrategyScenarioMeta meta)
     {
+        if (meta.ForceLordResidenceStrongholdIds.TryGetValue(forceId, out var residenceId)
+            && residenceId > 0
+            && gameData.Strongholds.ContainsKey(residenceId))
+        {
+            return residenceId;
+        }
+
+        if (forceId == meta.PlayerForceId
+            && meta.LordStrongholdId is int playerResidence
+            && gameData.Strongholds.ContainsKey(playerResidence))
+        {
+            return playerResidence;
+        }
+
         var lordCharacterId = StrategyStrongholdLordHelper.ResolveForceLordCharacterId(
             forceId,
             meta,

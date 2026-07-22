@@ -214,11 +214,11 @@ public class StrategyApiTests : IClassFixture<StrategyWebApplicationFactory>
 
         var payload = await response.Content.ReadFromJsonAsync<StrategyPolicyChangeResponseDto>();
         Assert.NotNull(payload);
-        Assert.Equal("MessengerDispatched", payload!.Outcome);
-        Assert.Single(payload.State.Messengers);
-        Assert.Equal("Retreat", payload.State.Messengers[0].PendingDirective);
-        Assert.Equal(state.Lord.X, payload.State.Messengers[0].X);
-        Assert.Equal(state.Lord.Y, payload.State.Messengers[0].Y);
+        Assert.Equal("CarrierDispatched", payload!.Outcome);
+        Assert.Single(payload.State.MessageCarriers);
+        Assert.Equal("Retreat", payload.State.MessageCarriers[0].PendingDirective);
+        Assert.Equal(state.Lord.X, payload.State.MessageCarriers[0].X);
+        Assert.Equal(state.Lord.Y, payload.State.MessageCarriers[0].Y);
     }
 
     [Fact]
@@ -238,8 +238,8 @@ public class StrategyApiTests : IClassFixture<StrategyWebApplicationFactory>
         Assert.NotNull(payload);
         Assert.Empty(payload!.ResolvedBattles);
         Assert.Contains(
-            payload.State.Messengers,
-            m => string.Equals(m.PayloadType, "BattleReport", StringComparison.OrdinalIgnoreCase));
+            payload.State.MessageCarriers,
+            m => string.Equals(m.Payload.Type, "BattleReport", StringComparison.OrdinalIgnoreCase));
         Assert.True(payload.State.Units.First(u => u.Id == 1).Soldiers < 3000);
     }
 

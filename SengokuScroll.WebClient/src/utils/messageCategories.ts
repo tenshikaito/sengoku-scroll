@@ -10,6 +10,7 @@ const POLICY_CATEGORIES = new Set([
 ]);
 
 const BATTLE_CATEGORIES = new Set([
+  "InstantEventSummary",
   "BattleReportArrived",
   "StrategicReportArrived",
   "BattleResolved",

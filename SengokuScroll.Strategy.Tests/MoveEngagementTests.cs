@@ -33,7 +33,7 @@ public class MoveEngagementTests
         var buffer = ctx.Services.GetRequiredService<StrategyDayOutcomeBuffer>();
         Assert.True(
             buffer.ResolvedBattles.Count > 0
-            || ctx.World.GameData.Messengers.Values.Any(m => m.PayloadType == MessengerPayloadType.BattleReport)
+            || ctx.World.GameData.MessageCarriers.Values.Any(m => m.Payload.Type == MessagePayloadType.BattleReport)
             || enemy.BattlefieldId > 0
             || player.BattlefieldId > 0
             || player.Stance == UnitStance.Attacking

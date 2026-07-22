@@ -7,6 +7,9 @@ public sealed class StrategyScenarioMeta
 {
     public int PlayerForceId { get; init; } = 1;
 
+    /// <summary>全势力军事由 AI 接管（仿真/观战；玩家势力亦按 AI 逻辑行动）。</summary>
+    public bool AllForcesAiControlled { get; init; }
+
     /// <summary>本局难度；非 Custom 时使用固定预设模板。</summary>
     public StrategyDifficulty Difficulty { get; init; } = StrategyDifficulty.Normal;
 
@@ -27,6 +30,10 @@ public sealed class StrategyScenarioMeta
 
     /// <summary>各势力当主角色 Id（ForceId → Character.Id）。</summary>
     public IReadOnlyDictionary<int, int> ForceLordCharacterIds { get; init; }
+        = new Dictionary<int, int>();
+
+    /// <summary>各势力当主名义居城据点 Id（剧本初始值，不随出访变更）。</summary>
+    public IReadOnlyDictionary<int, int> ForceLordResidenceStrongholdIds { get; init; }
         = new Dictionary<int, int>();
 
     /// <summary>实体情报展示文本（来自剧本 JSON）。</summary>

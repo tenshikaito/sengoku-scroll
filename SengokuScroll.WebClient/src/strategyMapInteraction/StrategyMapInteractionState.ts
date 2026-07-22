@@ -1,5 +1,7 @@
+import type { MapCellEntityOption } from "@/utils/mapCellEntityPicker";
 import type {
   MapHoverCellPayload,
+  MapSelectCellEntitiesPayload,
   MapSelectCellPayload,
   MapSelectUnitPayload,
   StrategyMapInteractionContext,
@@ -43,9 +45,21 @@ export abstract class StrategyMapInteractionState {
 
   onSelectUnit(_ctx: StrategyMapInteractionContext, _payload: MapSelectUnitPayload): void {}
 
+  onSelectCharacter(_ctx: StrategyMapInteractionContext, _payload: import("./types").MapSelectCharacterPayload): void {}
+
+  onSelectCharacterAndStronghold(_ctx: StrategyMapInteractionContext, _payload: import("./types").MapSelectCharacterStrongholdPayload): void {}
+
   onSelectStronghold(_ctx: StrategyMapInteractionContext, _payload: import("./types").MapSelectStrongholdPayload): void {}
 
   onSelectUnitAndStronghold(_ctx: StrategyMapInteractionContext, _payload: import("./types").MapSelectUnitStrongholdPayload): void {}
+
+  onSelectCellEntities(
+    _ctx: StrategyMapInteractionContext,
+    _payload: MapSelectCellEntitiesPayload,
+    _entities: readonly MapCellEntityOption[],
+  ): void {}
+
+  onPickCellEntity(_ctx: StrategyMapInteractionContext, _entity: MapCellEntityOption): void {}
 
   onSelectConvoy(_ctx: StrategyMapInteractionContext, _payload: import("./types").MapSelectConvoyPayload): void {}
 

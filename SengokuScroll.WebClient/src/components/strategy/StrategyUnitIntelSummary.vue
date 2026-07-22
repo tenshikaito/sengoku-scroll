@@ -24,8 +24,8 @@ const showDebugFields = isStrategySimpleIntelMode();
     <div v-if="unit.siegeMode && unit.siegeMode !== 'None'" class="extra">
       攻城：{{ siegeModeLabel(unit.siegeMode) }}
     </div>
-    <div v-if="pendingPolicyText(worldState.messengers, unit.id)" class="pending">
-      📨 {{ pendingPolicyText(worldState.messengers, unit.id) }}
+    <div v-if="pendingPolicyText(worldState.messageCarriers, unit.id)" class="pending">
+      📨 {{ pendingPolicyText(worldState.messageCarriers, unit.id) }}
     </div>
   </div>
 </template>

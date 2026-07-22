@@ -4,6 +4,7 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Extensions;
 using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Rules;
+using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Diagnostics;
 
@@ -49,11 +50,37 @@ public sealed class StrategyFieldEngagementRegistry
             }
         }
 
+        // 业务：登记表外仍残留 Standoff/Attacking 锁定时，对手已离场则强制脱离
+        PruneOrphanEngagements(gameData);
+
         // 业务：同步 Battlefield 对峙日
         foreach (var bf in gameData.Battlefields.Values.Where(b => !b.IsClosed))
         {
             if (bf.MainCombatantAUnitId > 0 && bf.MainCombatantBUnitId > 0)
                 SetStandoffDays(bf.MainCombatantAUnitId, bf.MainCombatantBUnitId, bf.StandoffDays);
+        }
+    }
+
+    /// <summary>清除对手无效或已不同格的接敌锁定（避免 AI 永久 Skip）。</summary>
+    public void PruneOrphanEngagements(GameData gameData)
+    {
+        foreach (var unit in gameData.Units.Values.ToList())
+        {
+            if (unit.ActionTarget.UnitId <= 0)
+                continue;
+
+            if (unit.Status != UnitStatus.Standoff
+                && unit.Stance != UnitStance.Attacking)
+                continue;
+
+            var opponentId = unit.ActionTarget.UnitId;
+            if (!gameData.Units.TryGetValue(opponentId, out var opponent)
+                || opponent.Soldier <= 0
+                || !MoveEngagementRules.IsInEngagementRange(unit, opponent))
+            {
+                ClearStandoff(unit.Id, opponentId);
+                BattlefieldEngagementRules.LeaveBattlefield(unit);
+            }
         }
     }
 }

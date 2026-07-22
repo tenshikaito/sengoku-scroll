@@ -3,6 +3,7 @@ using SengokuScroll.Localization.Abstractions;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Extensions;
 using SengokuScroll.Strategy.Hosting;
+using SengokuScroll.Strategy.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +16,12 @@ builder.Services.AddCors(options =>
 
 builder.Services.Configure<StrategyDayDebugOptions>(builder.Configuration.GetSection("Strategy:DayDebug"));
 builder.Services.AddStrategySimulationHost();
+builder.Services.AddSingleton(sp =>
+{
+    var env = sp.GetRequiredService<IHostEnvironment>();
+    var directory = Path.Combine(env.ContentRootPath, "App_Data", "strategy-saves");
+    return new StrategySaveSlotRepository(directory);
+});
 
 var app = builder.Build();
 

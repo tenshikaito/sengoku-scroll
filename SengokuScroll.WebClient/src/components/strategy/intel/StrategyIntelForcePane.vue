@@ -22,6 +22,10 @@ import {
 const props = defineProps<{
   worldState: StrategyWorldState;
   realmFilter?: IntelRealmFilterMode;
+  /** 打开对话框时预选势力 Id。 */
+  initialSelectedId?: number | null;
+  /** 仅显示详情二级 Tab（隐藏列表）。 */
+  detailOnly?: boolean;
 }>();
 
 const listPreset = ref<ForceListPreset>("status");
@@ -91,12 +95,26 @@ function defaultForceId(): number | null {
 }
 
 function syncDefaultSelection() {
+  if (props.detailOnly && props.initialSelectedId != null) {
+    selectedForceId.value = props.initialSelectedId;
+    return;
+  }
   const rows = forceRows.value;
   if (selectedForceId.value != null && rows.some((r) => r.id === selectedForceId.value)) {
     return;
   }
   selectedForceId.value = defaultForceId();
 }
+
+watch(
+  () => props.initialSelectedId,
+  (id) => {
+    if (id == null) return;
+    selectedForceId.value = id;
+    detailTab.value = "basic";
+  },
+  { immediate: true }
+);
 
 watch(
   () => [props.worldState, props.realmFilter] as const,
@@ -127,21 +145,23 @@ function onSelectRow(row: Record<string, unknown> | null) {
 </script>
 
 <template>
-  <div class="intel-pane">
-    <el-tabs v-model="listPreset" class="layer-tabs layer-tabs--list">
-      <el-tab-pane label="状态" name="status" />
-      <el-tab-pane label="军备" name="military" />
-    </el-tabs>
+  <div class="intel-pane" :class="{ 'intel-pane--detail-only': detailOnly }">
+    <template v-if="!detailOnly">
+      <el-tabs v-model="listPreset" class="layer-tabs layer-tabs--list">
+        <el-tab-pane label="状态" name="status" />
+        <el-tab-pane label="军备" name="military" />
+      </el-tabs>
 
-    <StrategyIntelSystemTable
-      :rows="listRows"
-      :columns="listColumns"
-      :current-id="selectedForceId"
-      empty-text="暂无势力数据"
-      @current-change="onSelectRow"
-    />
+      <StrategyIntelSystemTable
+        :rows="listRows"
+        :columns="listColumns"
+        :current-id="selectedForceId"
+        empty-text="暂无势力数据"
+        @current-change="onSelectRow"
+      />
+    </template>
 
-    <div class="detail-section">
+    <div class="detail-section" :class="{ 'detail-section--solo': detailOnly }">
       <el-tabs v-model="detailTab" class="layer-tabs layer-tabs--detail">
         <el-tab-pane label="基本" name="basic" />
         <el-tab-pane label="外交" name="diplomacy" />
@@ -207,6 +227,11 @@ function onSelectRow(row: Record<string, unknown> | null) {
 .detail-section {
   border-top: 1px solid #e2e8f0;
   padding-top: 10px;
+}
+
+.detail-section--solo {
+  border-top: none;
+  padding-top: 0;
 }
 
 .detail-body {

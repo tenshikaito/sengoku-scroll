@@ -13,5 +13,8 @@ public enum TransportPurpose : byte
     Trade,
 
     /// <summary>月度金钱税赋运输。</summary>
-    TaxMoney
+    TaxMoney,
+
+    /// <summary>人口移民队。</summary>
+    Migrant
 }

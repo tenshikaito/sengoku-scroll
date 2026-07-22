@@ -23,8 +23,40 @@ const props = defineProps<{
   /** 当主是否位于本家居城（据点指令总开关） */
   lordAtResidence?: boolean;
   strongholdCommandsTooltip?: string;
+  /** 是否可调整税率（己方非内藩据点） */
+  canAdjustTax?: boolean;
+  /** 税率指令说明（直辖即时 / 非直辖信使） */
+  taxRateTooltip?: string;
   /** 可对当前格敌方据点展开谍报 */
   canEspionage?: boolean;
+  /** 双弹窗模式下隐藏据点侧谍报（改由角色菜单操作） */
+  hideStrongholdEspionage?: boolean;
+  /** 当主在城内 */
+  lordInStronghold?: boolean;
+  /** 可出城 */
+  canLeaveStronghold?: boolean;
+  /** 可移动（在地图） */
+  canCharacterMove?: boolean;
+  /** 可入城 */
+  canEnterStronghold?: boolean;
+  /** 城内有其它角色可拜访 */
+  canVisitOthers?: boolean;
+  /** 角色菜单谍报（他势力据点） */
+  canCharacterEspionage?: boolean;
+  /** 出入城 AP 消耗 */
+  gateApCost?: number;
+  /** 当主当前 AP */
+  lordAp?: number;
+  /** 据点正被围攻/包围 */
+  isStrongholdBesieged?: boolean;
+  /** 外政据点显示「方针」按钮（有城主或内藩当主居城） */
+  showStrongholdDirective?: boolean;
+  /** 内藩据点：仅显示方针（隐藏本家据点指令） */
+  strongholdDirectiveOnly?: boolean;
+  /** 本家直属兵队可移动 */
+  canUnitMove?: boolean;
+  /** 本家直属兵队可攻城 */
+  canUnitSiege?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -34,7 +66,13 @@ const emit = defineEmits<{
   beginMerge: [];
   beginSplit: [];
   beginExpedition: [];
+  beginTaxRate: [];
+  beginRecruit: [];
   beginEspionage: [];
+  beginAppointLord: [];
+  beginLeaveStronghold: [];
+  beginEnterStronghold: [];
+  beginVisit: [];
   siegeAssault: [];
   siegeEncircle: [];
   showIntel: [];
@@ -57,7 +95,7 @@ function showUnavailableTip(reason: string) {
 const attackBlockReason = computed(() => attackApBlockReason(props.unit));
 const attackUnavailable = computed(() => attackBlockReason.value !== null);
 const attackTooltip = computed(() =>
-  attackBlockReason.value ?? `选择相邻敌军所在格发起攻击（消耗 ${ATTACK_AP_COST} AP）`
+  attackBlockReason.value ?? `对相邻敌方据点或部队下达攻城指令（消耗 ${ATTACK_AP_COST} AP）`
 );
 
 const siegeBlockReason = computed(() => siegeApBlockReason(props.unit));
@@ -66,17 +104,73 @@ const siegeTooltip = computed(() =>
   siegeBlockReason.value ?? `对相邻敌方据点下达攻城指令（消耗 ${SIEGE_AP_COST} AP）`
 );
 
-const expeditionUnavailable = computed(() => !props.canExpedition);
-const expeditionTip = computed(
-  () => props.expeditionTooltip ?? "从当主居城分配城内兵与将领出征（据点格生成部队）"
+const expeditionUnavailable = computed(
+  () => !props.canExpedition || besieged.value,
+);
+const expeditionTip = computed(() => {
+  if (besieged.value && props.mode === "strongholdCommand") return strongholdBesiegedBlockTip;
+  return props.expeditionTooltip ?? "从当主居城分配城内兵与将领出征（据点格生成部队）";
+});
+
+const besieged = computed(() => props.isStrongholdBesieged === true);
+
+const strongholdBesiegedBlockTip = "据点被围，无法执行命令";
+
+function blockIfStrongholdBesieged(): boolean {
+  if (
+    (props.mode === "strongholdCommand" || props.mode === "characterCommand")
+    && besieged.value
+  ) {
+    showUnavailableTip(strongholdBesiegedBlockTip);
+    return true;
+  }
+  return false;
+}
+
+const strongholdCommandsUnavailable = computed(
+  () => props.lordAtResidence === false || besieged.value,
+);
+const strongholdCommandsTip = computed(() => {
+  if (besieged.value && props.mode === "strongholdCommand") return strongholdBesiegedBlockTip;
+  return props.strongholdCommandsTooltip ?? "当主须在本家居城方可下达据点指令";
+});
+
+const taxRateUnavailable = computed(
+  () =>
+    besieged.value
+    || props.lordAtResidence === false
+    || props.canAdjustTax === false,
+);
+const taxRateTip = computed(
+  () =>
+    props.taxRateTooltip
+    ?? (props.lordAtResidence === false
+      ? strongholdCommandsTip.value
+      : "调整人头/农/商/关税；非直辖城经信使传达后生效")
 );
 
-const strongholdCommandsUnavailable = computed(() => props.lordAtResidence === false);
-const strongholdCommandsTip = computed(
-  () => props.strongholdCommandsTooltip ?? "当主须在本家居城方可下达据点指令"
-);
+function onTaxRateClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (taxRateUnavailable.value) {
+    showUnavailableTip(
+      props.lordAtResidence === false ? strongholdCommandsTip.value : taxRateTip.value
+    );
+    return;
+  }
+  emit("beginTaxRate");
+}
+
+function onRecruitClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (strongholdCommandsUnavailable.value) {
+    showUnavailableTip(strongholdCommandsTip.value);
+    return;
+  }
+  emit("beginRecruit");
+}
 
 function onExpeditionClick() {
+  if (blockIfStrongholdBesieged()) return;
   if (expeditionUnavailable.value) {
     showUnavailableTip(expeditionTip.value);
     return;
@@ -84,12 +178,100 @@ function onExpeditionClick() {
   emit("beginExpedition");
 }
 
+function onAppointClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (strongholdCommandsUnavailable.value) {
+    showUnavailableTip(strongholdCommandsTip.value);
+    return;
+  }
+  emit("beginAppointLord");
+}
+
 function onStrongholdMutedAction(tip: string) {
+  if (blockIfStrongholdBesieged()) return;
   if (strongholdCommandsUnavailable.value) {
     showUnavailableTip(strongholdCommandsTip.value);
     return;
   }
   showUnavailableTip(tip);
+}
+
+const gateApCost = computed(() => Math.max(1, props.gateApCost ?? 1));
+const lordApValue = computed(() => props.lordAp ?? 0);
+const apInsufficient = computed(() => lordApValue.value < gateApCost.value);
+
+const leaveAvailable = computed(
+  () => props.canLeaveStronghold && !apInsufficient.value && !besieged.value,
+);
+const enterAvailable = computed(
+  () => props.canEnterStronghold && !apInsufficient.value && !besieged.value,
+);
+
+const visitAvailable = computed(
+  () => props.canVisitOthers && !besieged.value,
+);
+
+const characterEspionageAvailable = computed(
+  () => props.canCharacterEspionage && !besieged.value,
+);
+
+const leaveTip = computed(() => {
+  if (besieged.value) return strongholdBesiegedBlockTip;
+  if (!props.canLeaveStronghold) return "仅在城内可出城";
+  if (apInsufficient.value) return `行动力不足（需要 ${gateApCost.value} AP）`;
+  return `离开据点出现在地图格（消耗 ${gateApCost.value} AP）`;
+});
+
+const enterTip = computed(() => {
+  if (besieged.value) return strongholdBesiegedBlockTip;
+  if (!props.canEnterStronghold) return "须在据点格上且处于地图方可入城";
+  if (apInsufficient.value) return `行动力不足（需要 ${gateApCost.value} AP）`;
+  return `进入同格据点（消耗 ${gateApCost.value} AP）`;
+});
+
+function onLeaveClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (leaveAvailable.value) {
+    emit("beginLeaveStronghold");
+    return;
+  }
+  showUnavailableTip(leaveTip.value);
+}
+
+function onCharacterMoveClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (props.canCharacterMove) {
+    emit("beginMove");
+    return;
+  }
+  showUnavailableTip("须先出城方可移动");
+}
+
+function onEnterClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (enterAvailable.value) {
+    emit("beginEnterStronghold");
+    return;
+  }
+  showUnavailableTip(enterTip.value);
+}
+
+function onVisitClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (visitAvailable.value) {
+    emit("beginVisit");
+    return;
+  }
+  showUnavailableTip("拜访功能尚未实装（RPG 模式扩展）");
+}
+
+function onCharacterEspionageClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (characterEspionageAvailable.value) {
+    emit("beginEspionage");
+    return;
+  }
+  showUnavailableTip(strongholdBesiegedBlockTip);
 }
 </script>
 
@@ -109,17 +291,18 @@ function onStrongholdMutedAction(tip: string) {
           tooltip="设定部队作战方针（待机/移动/进攻/撤退/支援等）；与当主同格即时生效，否则派出信使传达"
           @click="emit('beginDirective')"
         >
-          📜 下达方针
+          📜 方针
         </StrategyMapActionButton>
         <StrategyMapActionButton
           variant="muted"
           :tooltip-side="tooltipSide"
-          tooltip="派遣信使功能尚未实装"
-          @click="showUnavailableTip('派遣信使功能尚未实装')"
+          tooltip="设定部队作战姿态（尚未实装）"
+          @click="showUnavailableTip('姿态设定功能尚未实装')"
         >
-          📨 派遣信使
+          🛡 姿态
         </StrategyMapActionButton>
         <StrategyMapActionButton
+          v-if="canUnitMove"
           variant="primary"
           :tooltip-side="tooltipSide"
           tooltip="在地图上规划路径并移动到目标格"
@@ -128,28 +311,73 @@ function onStrongholdMutedAction(tip: string) {
           移动
         </StrategyMapActionButton>
         <StrategyMapActionButton
+          v-if="canUnitSiege"
           :variant="attackUnavailable ? 'muted' : 'primary'"
           :tooltip="attackTooltip"
           :tooltip-side="tooltipSide"
           @click="emit('beginAttack')"
         >
-          ⚔ 攻击目标
+          ⚔ 攻城
         </StrategyMapActionButton>
         <StrategyMapActionButton
+          v-if="canUnitMove"
           variant="primary"
           :tooltip-side="tooltipSide"
-          tooltip="与同格或邻格友军合并子编制"
+          tooltip="同格友军合并或分割编制（尚未实装）"
           @click="emit('beginMerge')"
         >
-          🔀 合并
+          🏴 军团
+        </StrategyMapActionButton>
+        <div class="divider" />
+        <button type="button" class="map-action map-action--default" @click.stop="emit('showIntel')">
+          📋 情报
+        </button>
+        <button type="button" class="map-action map-action--default" @click.stop="emit('cancel')">取消</button>
+      </div>
+    </template>
+
+    <template v-else-if="mode === 'characterCommand'">
+      <div class="actions actions--vertical">
+        <StrategyMapActionButton
+          :variant="leaveAvailable ? 'primary' : 'muted'"
+          :tooltip-side="tooltipSide"
+          :tooltip="leaveTip"
+          @click="onLeaveClick"
+        >
+          🚪 出城
         </StrategyMapActionButton>
         <StrategyMapActionButton
-          variant="primary"
+          :variant="canCharacterMove && !besieged ? 'primary' : 'muted'"
           :tooltip-side="tooltipSide"
-          tooltip="拆出子编制并在邻格生成新部队"
-          @click="emit('beginSplit')"
+          :tooltip="besieged ? strongholdBesiegedBlockTip : canCharacterMove ? '在地图上规划路径并移动' : '须先出城方可移动'"
+          @click="onCharacterMoveClick"
         >
-          ✂ 分兵
+          移动
+        </StrategyMapActionButton>
+        <StrategyMapActionButton
+          :variant="enterAvailable ? 'primary' : 'muted'"
+          :tooltip-side="tooltipSide"
+          :tooltip="enterTip"
+          @click="onEnterClick"
+        >
+          🏯 入城
+        </StrategyMapActionButton>
+        <StrategyMapActionButton
+          :variant="visitAvailable ? 'primary' : 'muted'"
+          :tooltip-side="tooltipSide"
+          :tooltip="besieged ? strongholdBesiegedBlockTip : '拜访城内将领：登庸、密谈、计谋等（RPG 模式扩展）'"
+          @click="onVisitClick"
+        >
+          🤝 拜访
+        </StrategyMapActionButton>
+        <StrategyMapActionButton
+          v-if="canCharacterEspionage"
+          :variant="characterEspionageAvailable ? 'primary' : 'muted'"
+          :tooltip-side="tooltipSide"
+          :tooltip="besieged ? strongholdBesiegedBlockTip : '对该据点展开间谍搜索（从角色菜单下达）'"
+          @click="onCharacterEspionageClick"
+        >
+          🕵 谍报
         </StrategyMapActionButton>
         <div class="divider" />
         <button type="button" class="map-action map-action--default" @click.stop="emit('showIntel')">
@@ -164,10 +392,10 @@ function onStrongholdMutedAction(tip: string) {
         <StrategyMapActionButton
           variant="muted"
           :tooltip-side="tooltipSide"
-          tooltip="派遣忍者功能尚未实装"
-          @click="showUnavailableTip('派遣忍者功能尚未实装')"
+          tooltip="计略功能尚未实装"
+          @click="showUnavailableTip('计略功能尚未实装')"
         >
-          🕵 派遣忍者
+          🕵 计略
         </StrategyMapActionButton>
         <div class="divider" />
         <button type="button" class="map-action map-action--default" @click.stop="emit('showIntel')">
@@ -180,12 +408,30 @@ function onStrongholdMutedAction(tip: string) {
     <template v-else-if="mode === 'strongholdCommand'">
       <div class="actions actions--vertical">
         <StrategyMapActionButton
+          v-if="showStrongholdDirective"
+          variant="muted"
+          :tooltip-side="tooltipSide"
+          :tooltip="strongholdCommandsUnavailable ? strongholdCommandsTip : '外政据点方针设定尚未实装'"
+          @click="onStrongholdMutedAction('外政据点方针设定尚未实装')"
+        >
+          📜 方针
+        </StrategyMapActionButton>
+        <template v-if="!strongholdDirectiveOnly">
+        <StrategyMapActionButton
           :variant="expeditionUnavailable ? 'muted' : 'primary'"
           :tooltip-side="tooltipSide"
           :tooltip="expeditionTip"
           @click="onExpeditionClick"
         >
           🚩 出征
+        </StrategyMapActionButton>
+        <StrategyMapActionButton
+          :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
+          :tooltip-side="tooltipSide"
+          :tooltip="strongholdCommandsUnavailable ? strongholdCommandsTip : '从居城选派将领担任领主或代官，或设为当主直辖'"
+          @click="onAppointClick"
+        >
+          👤 任命
         </StrategyMapActionButton>
         <StrategyMapActionButton
           variant="muted"
@@ -196,28 +442,20 @@ function onStrongholdMutedAction(tip: string) {
           🏗 建设
         </StrategyMapActionButton>
         <StrategyMapActionButton
-          variant="muted"
+          :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
           :tooltip-side="tooltipSide"
-          tooltip="征兵功能尚未实装"
-          @click="onStrongholdMutedAction('征兵功能尚未实装')"
+          :tooltip="strongholdCommandsUnavailable ? strongholdCommandsTip : '消耗人口与钱粮补充城内兵（当主须在居城）'"
+          @click="onRecruitClick"
         >
           ⚔ 征兵
         </StrategyMapActionButton>
         <StrategyMapActionButton
-          variant="muted"
+          :variant="taxRateUnavailable ? 'muted' : 'primary'"
           :tooltip-side="tooltipSide"
-          tooltip="任命城主功能尚未实装"
-          @click="onStrongholdMutedAction('任命城主功能尚未实装')"
+          :tooltip="taxRateTip"
+          @click="onTaxRateClick"
         >
-          👤 任命城主
-        </StrategyMapActionButton>
-        <StrategyMapActionButton
-          variant="muted"
-          :tooltip-side="tooltipSide"
-          tooltip="据点方针设定尚未实装"
-          @click="onStrongholdMutedAction('据点方针设定尚未实装')"
-        >
-          📜 设定方针
+          💰 税率
         </StrategyMapActionButton>
         <StrategyMapActionButton
           variant="muted"
@@ -227,6 +465,7 @@ function onStrongholdMutedAction(tip: string) {
         >
           📦 运输
         </StrategyMapActionButton>
+        </template>
         <div class="divider" />
         <button type="button" class="map-action map-action--default" @click.stop="emit('showIntel')">
           📋 情报
@@ -257,21 +496,13 @@ function onStrongholdMutedAction(tip: string) {
           <div class="divider" />
         </template>
         <StrategyMapActionButton
-          v-if="canEspionage"
+          v-if="canEspionage && !hideStrongholdEspionage"
           variant="primary"
           :tooltip-side="tooltipSide"
-          tooltip="对该据点展开谍报搜索，揭示内政或军事情报（约 2 个月有效）"
+          tooltip="对该据点展开间谍搜索，揭示内政或军事情报（约 2 个月有效）"
           @click="emit('beginEspionage')"
         >
-          🕵 谍报
-        </StrategyMapActionButton>
-        <StrategyMapActionButton
-          variant="muted"
-          :tooltip-side="tooltipSide"
-          tooltip="派遣忍者功能尚未实装"
-          @click="showUnavailableTip('派遣忍者功能尚未实装')"
-        >
-          🕵 派遣忍者
+          🕵 间谍
         </StrategyMapActionButton>
         <div class="divider" />
         <button type="button" class="map-action map-action--default" @click.stop="emit('showIntel')">
@@ -283,7 +514,6 @@ function onStrongholdMutedAction(tip: string) {
 
     <template v-else-if="mode === 'convoyCommand'">
       <div class="title">🌾 {{ entityName ?? "运输队" }}</div>
-      <div class="subtitle">格点 ({{ x }}, {{ y }})</div>
       <div class="subtitle hint">移动由系统自动调度；抵达后卸粮并返回出发据点。</div>
       <div class="actions actions--vertical">
         <StrategyMapActionButton
@@ -315,8 +545,8 @@ function onStrongholdMutedAction(tip: string) {
     </template>
 
     <template v-else-if="mode === 'attackSelect'">
-      <div class="title">选择攻击目标</div>
-      <div class="subtitle hint">点击相邻敌军所在格</div>
+      <div class="title">选择攻城目标</div>
+      <div class="subtitle hint">点击相邻敌军或敌方据点所在格</div>
       <div class="subtitle hint">右键取消并返回指令菜单</div>
       <div class="actions actions--vertical">
         <button type="button" class="map-action map-action--default" @click.stop="emit('cancel')">取消</button>
@@ -324,7 +554,7 @@ function onStrongholdMutedAction(tip: string) {
     </template>
 
     <template v-else-if="mode === 'mergeSelect'">
-      <div class="title">选择合并目标</div>
+      <div class="title">选择军团目标</div>
       <div class="subtitle hint">点击同格或邻格友军部队</div>
       <div class="subtitle hint">右键取消并返回指令菜单</div>
       <div class="actions actions--vertical">

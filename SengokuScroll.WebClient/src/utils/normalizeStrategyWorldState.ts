@@ -1,5 +1,6 @@
 import type {
   MapPoint,
+  StrategyCharacterRelationState,
   StrategyCharacterSummaryState,
   StrategyMasterDataEntry,
   StrategyMasterDataSnapshot,
@@ -7,7 +8,7 @@ import type {
   StrategyForceState,
   StrategyLordState,
   StrategyMapCharacterState,
-  StrategyMessengerState,
+  StrategyMessageCarrierState,
   StrategyStrongholdState,
   StrategySupplyConvoyState,
   StrategySubUnitState,
@@ -57,6 +58,12 @@ function normalizeLord(raw: unknown): StrategyLordState {
     residenceStrongholdName: optionalString(
       pick(l, "residenceStrongholdName", "ResidenceStrongholdName")
     ),
+    characterId:
+      pick(l, "characterId", "CharacterId") == null
+        ? null
+        : safeInt(pick(l, "characterId", "CharacterId"), 0) || null,
+    locationType: optionalString(pick(l, "locationType", "LocationType")),
+    ap: safeInt(pick(l, "ap", "Ap"), 0),
   };
 }
 
@@ -200,6 +207,10 @@ function normalizeStronghold(
     food: safeInt(pick(s, "food", "Food")),
     population: safeInt(pick(s, "population", "Population")),
     stability: safeInt(pick(s, "stability", "Stability"), 50),
+    administrativeEfficiency: safeInt(
+      pick(s, "administrativeEfficiency", "AdministrativeEfficiency"),
+      100,
+    ),
     popularFeelings: safeInt(pick(s, "popularFeelings", "PopularFeelings"), 50),
     isLordResidence: Boolean(pick(s, "isLordResidence", "IsLordResidence")),
     lordId,
@@ -256,6 +267,7 @@ function normalizeVisibility(raw: unknown): StrategyVisibilityState | undefined 
     controlMode: requiredString(pick(v, "controlMode", "ControlMode"), "DirectiveOnly"),
     instantEventMessages: pick(v, "instantEventMessages", "InstantEventMessages") === true,
     allySharedVision: pick(v, "allySharedVision", "AllySharedVision") === true,
+    characterSharedVision: pick(v, "characterSharedVision", "CharacterSharedVision") === true,
     showAllyIntel: pick(v, "showAllyIntel", "ShowAllyIntel") === true,
     mapWidth: safeInt(pick(v, "mapWidth", "MapWidth"), 0),
     mapHeight: safeInt(pick(v, "mapHeight", "MapHeight"), 0),
@@ -273,6 +285,7 @@ function normalizeStartOptions(raw: unknown): GameStartOptionsState | undefined 
     intelMode: requiredString(pick(o, "intelMode", "IntelMode"), "ForceIntel"),
     controlMode: requiredString(pick(o, "controlMode", "ControlMode"), "DirectiveOnly"),
     allySharedVision: pick(o, "allySharedVision", "AllySharedVision") === true,
+    characterSharedVision: pick(o, "characterSharedVision", "CharacterSharedVision") === true,
     showAllyIntel: pick(o, "showAllyIntel", "ShowAllyIntel") === true,
     instantEventMessages: pick(o, "instantEventMessages", "InstantEventMessages") === true,
   };
@@ -367,7 +380,7 @@ function normalizeConvoy(raw: unknown): StrategySupplyConvoyState {
   };
 }
 
-function normalizeMessenger(raw: unknown): StrategyMessengerState {
+function normalizeMessageCarrier(raw: unknown): StrategyMessageCarrierState {
   const m = (raw ?? {}) as Record<string, unknown>;
   const id = safeInt(pick(m, "id", "Id"));
   const routeRaw = pick(m, "route", "Route");
@@ -377,7 +390,7 @@ function normalizeMessenger(raw: unknown): StrategyMessengerState {
   const soldiersRaw = pick(m, "soldiers", "Soldiers");
   return {
     id,
-    name: requiredString(pick(m, "name", "Name"), `信使 #${id}`),
+    name: requiredString(pick(m, "name", "Name"), `文书 #${id}`),
     forceId: safeInt(pick(m, "forceId", "ForceId"), 1),
     x: safeInt(pick(m, "x", "X")),
     y: safeInt(pick(m, "y", "Y")),
@@ -389,6 +402,7 @@ function normalizeMessenger(raw: unknown): StrategyMessengerState {
     movement: safeInt(pick(m, "movement", "Movement"), 6),
     status: requiredString(pick(m, "status", "Status"), "Moving"),
     payloadType: requiredString(pick(m, "payloadType", "PayloadType"), "PolicyChange"),
+    carrierKind: optionalString(pick(m, "carrierKind", "CarrierKind")) ?? "Character",
     directive: requiredString(pick(m, "directive", "Directive"), "PolicyChange"),
     route: Array.isArray(routeRaw) ? routeRaw.map(normalizeMapPoint) : [],
     morale: safeInt(pick(m, "morale", "Morale"), 80),
@@ -406,13 +420,24 @@ function normalizeMessenger(raw: unknown): StrategyMessengerState {
 
 function normalizeMapCharacter(raw: unknown): StrategyMapCharacterState {
   const row = (raw ?? {}) as Record<string, unknown>;
+  const isAnonymous = pick(row, "isAnonymous", "IsAnonymous") === true;
+  const routeRaw = pick(row, "route", "Route");
   return {
     id: safeInt(pick(row, "id", "Id")),
-    name: requiredString(pick(row, "name", "Name"), "—"),
-    forceId: safeInt(pick(row, "forceId", "ForceId")),
+    name: isAnonymous ? "" : requiredString(pick(row, "name", "Name"), "—"),
+    forceId: isAnonymous ? 0 : safeInt(pick(row, "forceId", "ForceId")),
     x: safeInt(pick(row, "x", "X")),
     y: safeInt(pick(row, "y", "Y")),
     mapVisible: pick(row, "mapVisible", "MapVisible") as boolean | undefined,
+    isAnonymous,
+    isPlayerControlled: pick(row, "isPlayerControlled", "IsPlayerControlled") === true,
+    route: Array.isArray(routeRaw)
+      ? routeRaw.map((p) => {
+          const pt = (p ?? {}) as Record<string, unknown>;
+          return { x: safeInt(pick(pt, "x", "X")), y: safeInt(pick(pt, "y", "Y")) };
+        })
+      : undefined,
+    ap: safeInt(pick(row, "ap", "Ap"), 0),
   };
 }
 
@@ -483,6 +508,20 @@ function normalizeCharacter(raw: unknown): StrategyCharacterSummaryState {
       return n >= 0 ? n : null;
     })(),
     loyalty: safeInt(pick(row, "loyalty", "Loyalty"), 0) || undefined,
+    relations: (() => {
+      const raw = pick(row, "relations", "Relations");
+      if (!Array.isArray(raw)) return undefined;
+      return raw
+        .map((item) => {
+          const rel = (item ?? {}) as Record<string, unknown>;
+          const characterId = safeInt(pick(rel, "characterId", "CharacterId"), 0);
+          const characterName = optionalString(pick(rel, "characterName", "CharacterName"));
+          const relationType = optionalString(pick(rel, "relationType", "RelationType"));
+          if (!characterId || !characterName || !relationType) return null;
+          return { relationType, characterId, characterName };
+        })
+        .filter((item): item is StrategyCharacterRelationState => item != null);
+    })(),
   };
 }
 
@@ -562,7 +601,9 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
   const strongholdsRaw = pick(o, "strongholds", "Strongholds");
   const forcesRaw = pick(o, "forces", "Forces");
   const convoysRaw = pick(o, "supplyConvoys", "SupplyConvoys");
-  const messengersRaw = pick(o, "messengers", "Messengers");
+  const carriersRaw =
+    pick(o, "messageCarriers", "MessageCarriers") ??
+    pick(o, "messengers", "Messengers");
   const charactersRaw = pick(o, "characters", "Characters");
   const mapCharactersRaw = pick(o, "mapCharacters", "MapCharacters");
   const espionageIntelRaw = pick(o, "espionageIntel", "EspionageIntel");
@@ -644,7 +685,7 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
       ? battlefieldsRaw.map(normalizeBattlefield)
       : [],
     supplyConvoys: Array.isArray(convoysRaw) ? convoysRaw.map(normalizeConvoy) : [],
-    messengers: Array.isArray(messengersRaw) ? messengersRaw.map(normalizeMessenger) : [],
+    messageCarriers: Array.isArray(carriersRaw) ? carriersRaw.map(normalizeMessageCarrier) : [],
     characters: Array.isArray(charactersRaw)
       ? charactersRaw.map(normalizeCharacter)
       : [],

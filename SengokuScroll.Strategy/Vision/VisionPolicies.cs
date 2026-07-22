@@ -4,7 +4,6 @@ using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
-using static SengokuScroll.Domain.Entities.Character;
 
 namespace SengokuScroll.Strategy.Vision;
 
@@ -30,7 +29,7 @@ public sealed class NoFogVisionPolicy : IVisionPolicy
 }
 
 /// <summary>
-/// 势力视野：本藩据点 + 可控部队/地图角色曼哈顿菱形视野；可选同盟共享视野。
+/// 势力视野：本藩据点 + 军事 Unit + 运输队 + 可选角色；玩家当主任何外出状态恒提供视野。
 /// </summary>
 public sealed class ForceVisionPolicy : IVisionPolicy
 {
@@ -62,63 +61,47 @@ public sealed class ForceVisionPolicy : IVisionPolicy
                 tileMap.Height);
         }
 
-        foreach (var unit in data.Units.Values)
-        {
-            if (!visionForceIds.Contains(unit.ForceId))
-                continue;
+        StrategyVisionRules.AddRealmUnitVision(
+            visible,
+            world,
+            visionForceIds,
+            observerForceId,
+            data,
+            tileMap.Width,
+            tileMap.Height);
 
-            if (!StrategyVisionRules.IsControllableVisionUnit(unit, observerForceId, data))
-                continue;
+        StrategyVisionRules.AddRealmConvoyVision(
+            visible,
+            visionForceIds,
+            observerForceId,
+            data,
+            tileMap.Width,
+            tileMap.Height);
 
-            var sight = StrategyVisionRules.ResolveUnitSightRange(unit, world);
-            StrategyVisionRules.AddSightBox(
-                visible,
-                unit.Location,
-                sight,
-                tileMap.Width,
-                tileMap.Height);
-        }
+        StrategyVisionRules.AddRealmUnitEscortCarrierVision(
+            visible,
+            visionForceIds,
+            observerForceId,
+            data,
+            tileMap.Width,
+            tileMap.Height);
 
-        foreach (var character in data.Characters.Values)
-        {
-            if (!visionForceIds.Contains(character.ForceId))
-                continue;
-
-            if (!StrategyVisionRules.IsControllableVisionCharacter(character, observerForceId, data))
-                continue;
-
-            var location = ResolveCharacterMapLocation(character, data);
-            StrategyVisionRules.AddSightBox(
-                visible,
-                location,
-                StrategyTroopSightRanges.Default,
-                tileMap.Width,
-                tileMap.Height);
-        }
+        StrategyVisionRules.AddForceModeCharacterVision(
+            visible,
+            world,
+            meta,
+            visionForceIds,
+            data,
+            options,
+            tileMap.Width,
+            tileMap.Height);
 
         return visible;
-    }
-
-    private static Common.Types.Point3 ResolveCharacterMapLocation(Character character, GameData data)
-    {
-        // 业务：将领编入部队时，视野中心跟随部队格而非角色抽象坐标
-        if (character.LocationType == CharacterLocationType.Unit)
-        {
-            var unit = data.Units.Values.FirstOrDefault(u =>
-                u.LeaderId == character.Id
-                || u.SubUnitIds.Any(id =>
-                    data.SubUnits.TryGetValue(id, out var sub) && sub.LeaderId == character.Id));
-
-            if (unit is not null)
-                return unit.Location;
-        }
-
-        return character.Location;
     }
 }
 
 /// <summary>
-/// 角色视野（Normal/Hard）：以当主所在格为主视野源，内藩部队共享视野但不替代当主主格。
+/// 角色视野（Normal/Hard）：以当主所在格为主视野源，内藩部队与运输队共享视野。
 /// </summary>
 public sealed class CharacterVisionPolicy : IVisionPolicy
 {
@@ -145,7 +128,6 @@ public sealed class CharacterVisionPolicy : IVisionPolicy
             tileMap.Width,
             tileMap.Height);
 
-        // 内藩等单位：共享部队视野；本家部队仍仅当主格提供（见上方 lordLocation）。
         foreach (var unit in data.Units.Values)
         {
             if (unit.ForceId == observerForceId)
@@ -164,6 +146,14 @@ public sealed class CharacterVisionPolicy : IVisionPolicy
                 tileMap.Width,
                 tileMap.Height);
         }
+
+        StrategyVisionRules.AddRealmConvoyVision(
+            visible,
+            StrategyVisionRules.EnumerateVisionForceIds(observerForceId, data, allySharedVision: false).ToHashSet(),
+            observerForceId,
+            data,
+            tileMap.Width,
+            tileMap.Height);
 
         return visible;
     }

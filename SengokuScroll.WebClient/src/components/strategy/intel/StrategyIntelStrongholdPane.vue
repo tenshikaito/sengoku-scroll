@@ -23,6 +23,10 @@ import {
 const props = defineProps<{
   worldState: StrategyWorldState;
   realmFilter?: IntelRealmFilterMode;
+  /** 打开对话框时预选据点 Id。 */
+  initialSelectedId?: number | null;
+  /** 仅显示详情二级 Tab（隐藏列表）。 */
+  detailOnly?: boolean;
 }>();
 
 const listPreset = ref<StrongholdListPreset>("status");
@@ -85,7 +89,16 @@ function defaultStrongholdId(): number | null {
 }
 
 function syncDefaultSelection() {
+  if (props.detailOnly && props.initialSelectedId != null) {
+    selectedStrongholdId.value = props.initialSelectedId;
+    return;
+  }
   const rows = strongholdRows.value;
+  const preferred = props.initialSelectedId;
+  if (preferred != null && rows.some((r) => r.id === preferred)) {
+    selectedStrongholdId.value = preferred;
+    return;
+  }
   if (
     selectedStrongholdId.value != null &&
     rows.some((r) => r.id === selectedStrongholdId.value)
@@ -98,6 +111,19 @@ function syncDefaultSelection() {
 watch(
   () => [props.worldState, props.realmFilter] as const,
   () => syncDefaultSelection(),
+  { immediate: true }
+);
+
+watch(
+  () => props.initialSelectedId,
+  (id) => {
+    if (id == null) return;
+    const rows = strongholdRows.value;
+    if (rows.some((r) => r.id === id)) {
+      selectedStrongholdId.value = id;
+      detailTab.value = "basic";
+    }
+  },
   { immediate: true }
 );
 
@@ -115,23 +141,25 @@ function rowClass(row: Record<string, unknown>) {
 </script>
 
 <template>
-  <div class="intel-pane">
-    <el-tabs v-model="listPreset" class="layer-tabs layer-tabs--list">
-      <el-tab-pane label="状态" name="status" />
-      <el-tab-pane label="内政" name="supplies" />
-      <el-tab-pane label="军备" name="military" />
-    </el-tabs>
+  <div class="intel-pane" :class="{ 'intel-pane--detail-only': detailOnly }">
+    <template v-if="!detailOnly">
+      <el-tabs v-model="listPreset" class="layer-tabs layer-tabs--list">
+        <el-tab-pane label="状态" name="status" />
+        <el-tab-pane label="内政" name="supplies" />
+        <el-tab-pane label="军备" name="military" />
+      </el-tabs>
 
-    <StrategyIntelSystemTable
-      :rows="listRows"
-      :columns="listColumns"
-      :current-id="selectedStrongholdId"
-      empty-text="暂无据点数据"
-      :row-class-name="rowClass"
-      @current-change="onSelectRow"
-    />
+      <StrategyIntelSystemTable
+        :rows="listRows"
+        :columns="listColumns"
+        :current-id="selectedStrongholdId"
+        empty-text="暂无据点数据"
+        :row-class-name="rowClass"
+        @current-change="onSelectRow"
+      />
+    </template>
 
-    <div class="detail-section">
+    <div class="detail-section" :class="{ 'detail-section--solo': detailOnly }">
       <el-tabs v-model="detailTab" class="layer-tabs layer-tabs--detail">
         <el-tab-pane label="基本" name="basic" />
         <el-tab-pane label="城防" name="defense" />
@@ -195,6 +223,11 @@ function rowClass(row: Record<string, unknown>) {
 .detail-section {
   border-top: 1px solid #e2e8f0;
   padding-top: 10px;
+}
+
+.detail-section--solo {
+  border-top: none;
+  padding-top: 0;
 }
 
 .detail-body {

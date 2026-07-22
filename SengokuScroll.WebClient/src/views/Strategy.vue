@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessageBox } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   advanceDay,
-  exportStrategySave,
-  restoreStrategySave,
-  hasLocalStrategySave,
+  listStrategySaveSlots,
+  saveStrategyToSlot,
+  loadStrategyFromSlot,
   getMovementTrace,
   getStrategyState,
   getStrategyMapMaster,
@@ -17,7 +17,14 @@ import {
   splitUnit,
   deployFromStronghold,
   recordEspionageIntel,
+  setStrongholdTaxRates,
+  recruitAtStronghold,
+  appointStrongholdLord,
   moveUnit,
+  leaveStrongholdAsCharacter,
+  moveCharacter,
+  enterStrongholdAsCharacter,
+  previewCharacterPath,
   previewBattle,
   previewUnitPath,
   setUnitDirective,
@@ -29,11 +36,13 @@ import {
   type StrategyEvent,
   type StrategyEconomySettlementDetail,
   type StrategyMovementTraceEntry,
+  type StrategySaveSlotSummary,
   type StrategyWorldState,
   type StrategyMapMasterState,
   type MapPoint,
 } from "@/api/strategy";
 import StrategyMapCanvas from "@/components/strategy/StrategyMapCanvas.vue";
+import StrategyMapCellEntityPicker from "@/components/strategy/StrategyMapCellEntityPicker.vue";
 import StrategyMapLoadingScene, {
   type StrategyMapLoadingPhase,
 } from "@/components/strategy/StrategyMapLoadingScene.vue";
@@ -49,6 +58,9 @@ import StrategyBattleResultDialog from "@/components/strategy/StrategyBattleResu
 import StrategyDirectiveDialog from "@/components/strategy/StrategyDirectiveDialog.vue";
 import StrategySplitDialog from "@/components/strategy/StrategySplitDialog.vue";
 import StrategyExpeditionDialog from "@/components/strategy/StrategyExpeditionDialog.vue";
+import StrategyTaxRateDialog from "@/components/strategy/StrategyTaxRateDialog.vue";
+import StrategyRecruitDialog from "@/components/strategy/StrategyRecruitDialog.vue";
+import StrategyAppointLordDialog from "@/components/strategy/StrategyAppointLordDialog.vue";
 import StrategyEventFeed from "@/components/strategy/StrategyEventFeed.vue";
 import StrategyNotificationTray, {
   type StrategyPendingNotification,
@@ -62,6 +74,7 @@ import StrategyEconomySettlementDialog from "@/components/strategy/StrategyEcono
 import StrategyIntelSystemDialog from "@/components/strategy/StrategyIntelSystemDialog.vue";
 import StrategyOperableUnitList from "@/components/strategy/StrategyOperableUnitList.vue";
 import StrategySystemMenuDialog from "@/components/strategy/StrategySystemMenuDialog.vue";
+import StrategySaveSlotDialog from "@/components/strategy/StrategySaveSlotDialog.vue";
 import StrategyForceCommandPopup from "@/components/strategy/StrategyForceCommandPopup.vue";
 import StrategyCellIntelHover from "@/components/strategy/StrategyCellIntelHover.vue";
 import StrategyMapViewControls from "@/components/strategy/StrategyMapViewControls.vue";
@@ -103,8 +116,25 @@ import { isForeignIntelRestricted } from "@/utils/strategyIntelDisplay";
 import {
   isLordAtResidence,
   LORD_AT_RESIDENCE_REQUIRED_TIP,
+  LORD_COMMAND_STRONGHOLD_TIP,
   resolveLordResidenceStronghold,
 } from "@/utils/strategyLordCommands";
+import {
+  canCharacterEspionageAtCell,
+  canEnterStrongholdAtCell,
+  canLordCommandStronghold,
+  canShowStrongholdDirectiveButton,
+  countOtherCharactersInStronghold,
+  CHARACTER_GATE_AP_COST,
+  isLordDirectlyControlledUnit,
+  isInnerVassalRealmStronghold,
+  isLordInStronghold,
+  isLordOnMap,
+  isStrongholdBesieged,
+  resolveCharacterGateStronghold,
+  resolvePlayerLordCharacterId,
+  strongholdAtLordCell,
+} from "@/utils/strategyPlayerCharacter";
 import {
   notificationFromEvent,
   strategicReportDetailText,
@@ -119,9 +149,11 @@ import {
   unitsAtCellForIntel,
 } from "@/utils/strategyFogCell";
 import { findOperableUnit, isMapOperableUnit, operableUnitAsMapState } from "@/utils/strategyOperableUnits";
+import { collectMapCellEntityOptions } from "@/utils/mapCellEntityPicker";
 import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
 import {
-  readGameStartSettings,
+  resolveDifficultyFromOptions,
+  takeGameStartSettingsFromNavigation,
   writeGameStartSettings,
   type GameStartSettings,
 } from "@/utils/strategyGameStartSettings";
@@ -143,6 +175,7 @@ const loading = ref(false);
 const error = ref("");
 const info = ref("");
 const selectedUnitId = ref<number | null>(null);
+const selectedCharacterId = ref<number | null>(null);
 const selectedStrongholdId = ref<number | null>(null);
 const selectedConvoyId = ref<number | null>(null);
 const selectedCell = ref<{ x: number; y: number } | null>(null);
@@ -151,6 +184,7 @@ const mapPanelRef = ref<HTMLElement | null>(null);
 const mapCanvasRef = ref<InstanceType<typeof StrategyMapCanvas> | null>(null);
 const minimapViewport = ref<MapViewportWorldRect | null>(null);
 const menuPopupRef = ref<InstanceType<typeof StrategyMapPopup> | null>(null);
+const cellEntityPickerRef = ref<InstanceType<typeof StrategyMapCellEntityPicker> | null>(null);
 const cornerPopupRef = ref<InstanceType<typeof StrategyMapPopup> | null>(null);
 const hoverIntelLayerRef = ref<HTMLElement | null>(null);
 const mapTopOverlayRef = ref<HTMLElement | null>(null);
@@ -168,6 +202,7 @@ const movePendingRelay = ref<MapPoint | null>(null);
 const mapInteraction = useStrategyMapInteraction({
   worldState: state,
   selectedUnitId,
+  selectedCharacterId,
   selectedStrongholdId,
   selectedConvoyId,
   selectedCell,
@@ -181,13 +216,17 @@ const {
   mapUnitSelectionEnabled,
   mapStrongholdSelectionEnabled,
   mapConvoySelectionEnabled,
+  mapCharacterSelectionEnabled,
   mapCellSelectionEnabled,
   mapRightClickEnabled,
   popupMode,
-  secondaryPopupMode,
+  cellEntityPickerOptions,
   onSelectUnit,
   onSelectStronghold,
+  onSelectCharacter,
   onSelectConvoy,
+  onSelectCellEntities,
+  onPickCellEntity,
   onSelectCell,
   onHoverCell,
   onMapRightClick,
@@ -227,11 +266,20 @@ const showWorldMessages = ref(true);
 const directiveDialogVisible = ref(false);
 const splitDialogVisible = ref(false);
 const expeditionDialogVisible = ref(false);
+const taxRateDialogVisible = ref(false);
+const recruitDialogVisible = ref(false);
+const appointLordDialogVisible = ref(false);
 const pendingSplitUnitName = ref<string | undefined>(undefined);
 const intelSystemVisible = ref(false);
 const intelSystemInitialTab = ref("force");
 const intelSystemInitialRealmFilter = ref<IntelRealmFilterMode>("all");
+const intelSystemInitialEntityId = ref<number | null>(null);
+const intelSystemFocusMode = ref(false);
+const intelSystemFocusTitle = ref("");
 const systemMenuVisible = ref(false);
+const saveSlotDialogVisible = ref(false);
+const saveSlots = ref<StrategySaveSlotSummary[]>([]);
+const saveSlotsLoading = ref(false);
 const forceCommandVisible = ref(false);
 const forceStatusRef = ref<HTMLElement | null>(null);
 const forcePopupRef = ref<InstanceType<typeof StrategyForceCommandPopup> | null>(null);
@@ -296,9 +344,79 @@ const isLordAtOwnResidence = computed(() =>
   state.value ? isLordAtResidence(state.value) : false
 );
 
-const activeStrongholdForCommands = computed(
-  () => selectedStronghold.value ?? popupStronghold.value
+const canLordCommandActiveStronghold = computed(() => {
+  if (!state.value) return false;
+  return canLordCommandStronghold(state.value, activeStrongholdForCommands.value);
+});
+
+const lordStrongholdAtCell = computed(() =>
+  state.value ? strongholdAtLordCell(state.value) : null
 );
+
+const activeCharacterStronghold = computed(
+  () => selectedStronghold.value ?? lordStrongholdAtCell.value ?? popupStronghold.value,
+);
+
+const lordAp = computed(() => state.value?.lord.ap ?? 0);
+
+const characterPopupProps = computed(() => {
+  const ws = state.value;
+  if (!ws) {
+    return {
+      canLeaveStronghold: false,
+      canCharacterMove: false,
+      canEnterStronghold: false,
+      canVisitOthers: false,
+      canCharacterEspionage: false,
+      isStrongholdBesieged: false,
+    };
+  }
+  const inStronghold = isLordInStronghold(ws);
+  const onMap = isLordOnMap(ws);
+  const sh = activeCharacterStronghold.value;
+  const besieged = isStrongholdBesieged(sh);
+  return {
+    canLeaveStronghold: inStronghold,
+    canCharacterMove: onMap,
+    canEnterStronghold: canEnterStrongholdAtCell(ws, sh),
+    canVisitOthers: inStronghold && sh != null && countOtherCharactersInStronghold(ws, sh.id) > 0,
+    canCharacterEspionage: canCharacterEspionageAtCell(ws, sh),
+    isStrongholdBesieged: besieged,
+  };
+});
+
+const primaryPopupEntityName = computed(() => {
+  const mode = menuPopupMode.value;
+  if (mode === "characterCommand") return state.value?.lord.name ?? "当主";
+  if (mode === "strongholdCommand" || mode === "foreignStrongholdCommand") {
+    return activeStrongholdForCommands.value?.name ?? popupStronghold.value?.name;
+  }
+  return popupEntityName.value;
+});
+
+/** 据点指令（任命/征兵/税率等）的作用对象：地图据点菜单以弹窗格为准，避免情报面板选中它势力据点时误判。 */
+const activeStrongholdForCommands = computed(() => {
+  if (menuPopupMode.value === "strongholdCommand" && popupStronghold.value) {
+    return popupStronghold.value;
+  }
+  return selectedStronghold.value ?? popupStronghold.value;
+});
+
+const showStrongholdDirectiveButton = computed(() => {
+  if (!state.value) return false;
+  return canShowStrongholdDirectiveButton(state.value, activeStrongholdForCommands.value);
+});
+
+/** 内藩据点仅显示方针，不显示本家据点内政/军事指令。 */
+const strongholdDirectiveOnlyMenu = computed(() => {
+  if (!state.value) return false;
+  return isInnerVassalRealmStronghold(state.value, activeStrongholdForCommands.value);
+});
+
+const selectedUnitDirectlyControlled = computed(() => {
+  if (!state.value) return false;
+  return isLordDirectlyControlledUnit(state.value, selectedUnit.value);
+});
 
 const canExpeditionFromStronghold = computed(() => {
   const sh = activeStrongholdForCommands.value;
@@ -327,6 +445,33 @@ const expeditionTooltip = computed(() => {
   return "从当主居城分配城内兵与将领出征（据点格生成部队）";
 });
 
+const canAdjustTaxStronghold = computed(() => {
+  const sh = activeStrongholdForCommands.value;
+  const playerForceId = state.value?.playerForceId;
+  if (!sh || playerForceId == null) return false;
+  if (sh.forceId !== playerForceId || !sh.isDirectRule) return false;
+  const force = state.value?.forces.find((f) => f.id === playerForceId);
+  return force?.status !== "InnerVassal";
+});
+
+const taxRateTooltip = computed(() => {
+  if (!canLordCommandActiveStronghold.value) return LORD_AT_RESIDENCE_REQUIRED_TIP;
+  const sh = activeStrongholdForCommands.value;
+  if (!sh) return LORD_AT_RESIDENCE_REQUIRED_TIP;
+  if (sh.forceId !== state.value?.playerForceId) return "仅本家据点可调整税率";
+  if (!sh.isDirectRule) return "已任命领主领地，税率由城主自行决定，当主不可干涉";
+  return "仅直辖城可调整税率；税令将从当主居城派出信使，抵达后生效";
+});
+
+const maxRecruitableSoldiers = computed(() => {
+  const sh = activeStrongholdForCommands.value;
+  if (!sh) return 0;
+  const byMoney = Math.floor(sh.money / 100);
+  const byFood = Math.floor(sh.food / 50);
+  const byPopulation = Math.floor(sh.population / 2);
+  return Math.min(500, byMoney, byFood, byPopulation);
+});
+
 const canEspionageStronghold = computed(() => {
   const sh = popupStronghold.value ?? selectedStronghold.value;
   if (!sh || !state.value) return false;
@@ -345,7 +490,12 @@ const selectedEntityName = computed(
     (selectedConvoy.value ? `运输队 #${selectedConvoy.value.id}` : undefined)
 );
 
-const popupEntityName = computed(() => selectedEntityName.value);
+const popupEntityName = computed(() => {
+  if (menuPopupMode.value === "characterCommand") {
+    return state.value?.lord.name ?? "当主";
+  }
+  return selectedEntityName.value;
+});
 
 const playerForce = computed(
   () =>
@@ -821,6 +971,7 @@ const menuPopupMode = computed(() => {
   const mode = popupMode.value;
   if (
     mode === "none" ||
+    mode === "entityPicker" ||
     mode === "moveSelect" ||
     mode === "attackSelect" ||
     mode === "mergeSelect" ||
@@ -831,20 +982,17 @@ const menuPopupMode = computed(() => {
   return mode;
 });
 
-const secondaryMenuPopupMode = computed(() => {
-  const mode = secondaryPopupMode.value;
-  if (
-    !mode ||
-    mode === "none" ||
-    mode === "moveSelect" ||
-    mode === "attackSelect" ||
-    mode === "mergeSelect" ||
-    mode === "splitSelect"
-  ) {
-    return null;
+const menuPopupBesieged = computed(() => {
+  if (menuPopupMode.value === "characterCommand") {
+    return isStrongholdBesieged(activeCharacterStronghold.value);
   }
-  return mode;
+  if (menuPopupMode.value === "strongholdCommand") {
+    return isStrongholdBesieged(activeStrongholdForCommands.value);
+  }
+  return false;
 });
+
+const entityPickerVisible = computed(() => popupMode.value === "entityPicker");
 
 const routeOverlays = computed((): MapRouteOverlay[] => {
   const overlays: MapRouteOverlay[] = [];
@@ -853,9 +1001,26 @@ const routeOverlays = computed((): MapRouteOverlay[] => {
     routeVisibilityContext.value
   );
   const previewActive =
-    popupMode.value === "moveSelect" &&
-    previewRoutePoints.value.length >= 2 &&
-    selectedUnitId.value !== null;
+    popupMode.value === "moveSelect"
+    && previewRoutePoints.value.length >= 2
+    && (selectedUnitId.value !== null || selectedCharacterId.value !== null);
+
+  for (const character of state.value?.mapCharacters ?? []) {
+    if (!character.isPlayerControlled || !character.route?.length) continue;
+    const points = normalizeRoute(character.route);
+    if (points.length < 2) continue;
+    if (
+      previewActive
+      && selectedCharacterId.value === character.id
+    ) {
+      continue;
+    }
+    overlays.push({
+      unitId: -character.id,
+      points,
+      variant: selectedCharacterId.value === character.id ? "emphasized" : "committed",
+    });
+  }
 
   for (const unit of visibleUnits) {
     const points = normalizeRoute(unit.route);
@@ -870,8 +1035,9 @@ const routeOverlays = computed((): MapRouteOverlay[] => {
   }
 
   if (previewActive) {
+    const actorId = selectedUnitId.value ?? -(selectedCharacterId.value ?? 0);
     overlays.push({
-      unitId: selectedUnitId.value!,
+      unitId: actorId,
       points: previewRoutePoints.value,
       variant: "preview",
     });
@@ -919,20 +1085,48 @@ function resetMovePath() {
 }
 
 function isValidMovePathCell(x: number, y: number): boolean {
+  if (selectedCharacterId.value !== null && state.value) {
+    const mapChar = state.value.mapCharacters?.find((c) => c.id === selectedCharacterId.value);
+    if (mapChar) return mapChar.x !== x || mapChar.y !== y;
+  }
   const unit = selectedUnit.value;
   if (!unit) return false;
   return unit.x !== x || unit.y !== y;
 }
 
 async function refreshMovePathPreview(): Promise<boolean> {
-  const unit = selectedUnit.value;
-  if (!unit || selectedUnitId.value === null || !movePendingRelay.value) {
-    return false;
-  }
+  if (!movePendingRelay.value) return false;
 
   const destination = movePendingRelay.value;
   const via = [...moveCommittedWaypoints.value];
   const serial = ++previewRequestSerial;
+
+  if (selectedCharacterId.value !== null) {
+    const ws = state.value;
+    const mapChar = ws?.mapCharacters?.find((c) => c.id === selectedCharacterId.value);
+    if (!mapChar) return false;
+
+    try {
+      const preview = await previewCharacterPath(
+        selectedCharacterId.value,
+        destination.x,
+        destination.y,
+        { via },
+      );
+      if (serial !== previewRequestSerial) return false;
+      const points = normalizeRoute(preview.points);
+      if (points.length < 2) return false;
+      previewRoutePoints.value = points;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const unit = selectedUnit.value;
+  if (!unit || selectedUnitId.value === null) {
+    return false;
+  }
 
   logMovePath("api.request.via", {
     serial,
@@ -1006,6 +1200,7 @@ async function handleDirectiveConfirm(payload: { directive: UnitDirectiveValue }
     const unit = response.state.units.find((u) => u.id === selectedUnitId.value);
     const sameTile = unit && lord && unit.x === lord.x && unit.y === lord.y;
     info.value =
+      response.outcome === "CarrierDispatched" ||
       response.outcome === "MessengerDispatched"
         ? `方针已从当主所在格 (${lord?.x}, ${lord?.y}) 派出信使，到达后生效`
         : sameTile
@@ -1039,10 +1234,19 @@ async function handleMovePathClick(payload: {
   screenY: number;
 }) {
   const unit = selectedUnit.value;
+  const mapChar =
+    selectedCharacterId.value != null
+      ? state.value?.mapCharacters?.find((c) => c.id === selectedCharacterId.value)
+      : null;
+  const actorAt = mapChar
+    ? { x: mapChar.x, y: mapChar.y }
+    : unit
+      ? { x: unit.x, y: unit.y }
+      : null;
 
   logMovePath("click", {
     cell: { x: payload.x, y: payload.y },
-    unitAt: unit ? { x: unit.x, y: unit.y } : null,
+    unitAt: actorAt,
     pending: movePendingRelay.value,
     committed: [...moveCommittedWaypoints.value],
     previewBefore: formatPathPoints(previewRoutePoints.value),
@@ -1052,9 +1256,9 @@ async function handleMovePathClick(payload: {
   if (!isValidMovePathCell(payload.x, payload.y)) return;
 
   onSelectCell(payload);
-  if (stateId.value !== "moveTargetSelect") return;
+  if (stateId.value !== "moveTargetSelect" && stateId.value !== "characterMoveTargetSelect") return;
 
-  if (!unit) return;
+  if (!actorAt) return;
 
   const clicked = { x: payload.x, y: payload.y };
 
@@ -1110,7 +1314,7 @@ async function handleMovePathClick(payload: {
       moveCommittedWaypoints.value.pop();
     }
     movePendingRelay.value = previousRelay;
-    selectedCell.value = previousRelay ?? { x: unit.x, y: unit.y };
+    selectedCell.value = previousRelay ?? { x: actorAt.x, y: actorAt.y };
   } else {
     logMovePath("click.stateAfter", {
       pending: movePendingRelay.value,
@@ -1217,29 +1421,6 @@ const popupStyle = computed(() => {
   return { left: `${left}px`, top: `${top}px` };
 });
 
-const secondaryPopupStyle = computed(() => {
-  if (!secondaryMenuPopupMode.value || !menuAnchor.value) {
-    return { display: "none" };
-  }
-
-  const base = popupStyle.value;
-  if (base.display === "none") return base;
-
-  const parsePx = (value: string | undefined) => {
-    if (!value) return 0;
-    const n = Number.parseFloat(value);
-    return Number.isFinite(n) ? n : 0;
-  };
-
-  const left = parsePx(typeof base.left === "string" ? base.left : undefined);
-  const top = parsePx(typeof base.top === "string" ? base.top : undefined);
-
-  return {
-    left: `${left + MENU_POPUP_W + 12}px`,
-    top: `${top}px`,
-  };
-});
-
 /** 指令菜单 tooltip：菜单在左半屏时向右弹出，否则向左。 */
 const commandTooltipSide = computed<"left" | "right">(() => {
   if (!menuAnchor.value || !mapPanelRef.value) return "right";
@@ -1296,6 +1477,15 @@ function onIntelLayerPointerLeave() {
   }
 }
 
+function showUnavailableActionTip(reason: string) {
+  ElMessage({
+    message: reason,
+    type: "info",
+    duration: 2800,
+    showClose: true,
+  });
+}
+
 async function notifyActionBlocked(title: string, reason: string) {
   info.value = reason;
   await ElMessageBox.alert(reason, title, {
@@ -1333,10 +1523,87 @@ function handleBeginExpedition() {
   expeditionDialogVisible.value = true;
 }
 
+function handleBeginTaxRate() {
+  const sh = activeStrongholdForCommands.value;
+  if (!sh || !canAdjustTaxStronghold.value) {
+    void notifyActionBlocked("无法调整税率", taxRateTooltip.value);
+    return;
+  }
+  if (!canLordCommandActiveStronghold.value) {
+    void notifyActionBlocked("无法调整税率", LORD_AT_RESIDENCE_REQUIRED_TIP);
+    return;
+  }
+  taxRateDialogVisible.value = true;
+}
+
+function handleBeginRecruit() {
+  if (!canLordCommandActiveStronghold.value) {
+    void notifyActionBlocked("无法征兵", LORD_AT_RESIDENCE_REQUIRED_TIP);
+    return;
+  }
+  recruitDialogVisible.value = true;
+}
+
+async function handleRecruitConfirm(payload: { soldiers: number }) {
+  const sh = activeStrongholdForCommands.value;
+  if (!sh || !state.value) return;
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await recruitAtStronghold(sh.id, payload.soldiers);
+    info.value = `已在 ${sh.name} 征兵 ${payload.soldiers} 人`;
+    onCancel();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "征兵失败";
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleTaxRateConfirm(payload: {
+  pollTaxRate?: number;
+  agricultureTaxRate?: number;
+  commerceTaxRate?: number;
+  tariffTaxRate?: number;
+}) {
+  const sh = activeStrongholdForCommands.value ?? popupStronghold.value ?? selectedStronghold.value;
+  if (!sh || !state.value) return;
+
+  loading.value = true;
+  error.value = "";
+  try {
+    const response = await setStrongholdTaxRates(sh.id, payload);
+    state.value = response.state;
+    info.value =
+      response.outcome === "CarrierDispatched" ||
+      response.outcome === "MessengerDispatched"
+        ? `税令已从当主居城派出信使，抵达 ${sh.name} 后生效`
+        : `${sh.name} 税率已即时生效`;
+    if (response.outcome === "AppliedImmediately") {
+      appendEvents([{ category: "TaxRateApplied", message: `✅ ${sh.name} 税率已即时生效` }]);
+    } else {
+      appendEvents([{ category: "TaxRateDispatched", message: `📨 税令信使已出发，目标 ${sh.name}` }]);
+    }
+    onCancel();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "税率调整失败";
+    if (message.includes("LordNotAtResidence")) {
+      error.value = LORD_AT_RESIDENCE_REQUIRED_TIP;
+    } else if (message.includes("NotSelfForce")) {
+      error.value = "仅可调整本家非内藩据点税率";
+    } else {
+      error.value = message;
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
 async function handleBeginEspionage() {
   const sh = popupStronghold.value ?? selectedStronghold.value;
   if (!sh || !canEspionageStronghold.value) {
-    void notifyActionBlocked("无法谍报", "仅可对情报未明的非本家势力据点展开谍报");
+    void notifyActionBlocked("无法间谍", "仅可对情报未明的非本家势力据点展开间谍搜索");
     return;
   }
 
@@ -1349,13 +1616,83 @@ async function handleBeginEspionage() {
       scope: "Both",
       precision: "Fuzzy",
     });
-    info.value = `已对 ${sh.name} 完成谍报搜索`;
+    info.value = `已对 ${sh.name} 完成间谍搜索`;
     onCancel();
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "谍报失败";
+    error.value = e instanceof Error ? e.message : "间谍搜索失败";
   } finally {
     loading.value = false;
   }
+}
+
+function handleBeginAppointLord() {
+  if (!canLordCommandActiveStronghold.value) {
+    showUnavailableActionTip(LORD_COMMAND_STRONGHOLD_TIP);
+    return;
+  }
+  appointLordDialogVisible.value = true;
+}
+
+async function handleAppointLordConfirm(payload: {
+  strongholdId: number;
+  characterId: number;
+  appointType: "Lord" | "Mayor";
+  closeAfter: boolean;
+}) {
+  if (!state.value) return;
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await appointStrongholdLord(
+      payload.strongholdId,
+      payload.characterId,
+      payload.appointType,
+    );
+    const sh = state.value.strongholds.find((s) => s.id === payload.strongholdId);
+    if (payload.appointType === "Mayor") {
+      info.value = `已任命代官，将领正前往 ${sh?.name ?? "目标据点"}`;
+    } else {
+      const isDirect = payload.characterId === forceLordCharacterIdForState(state.value);
+      info.value = isDirect
+        ? `${sh?.name ?? "据点"} 已设为当主直辖`
+        : `已任命领主，将领正前往 ${sh?.name ?? "目标据点"}`;
+    }
+    if (payload.closeAfter) {
+      onCancel();
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "任命失败";
+    if (message.includes("LordNotAtResidence")) {
+      error.value = LORD_COMMAND_STRONGHOLD_TIP;
+    } else if (message.includes("CannotAppointLordToResidence")) {
+      error.value = "当主居城须保持直辖";
+    } else if (message.includes("CharacterNotAtResidence")) {
+      error.value = "将领须在当主居城方可任命";
+    } else if (message.includes("CharacterIsStrongholdLord")) {
+      error.value = "该将领已担任据点领主，不能兼任代官";
+    } else if (message.includes("CharacterIsForceLord")) {
+      error.value = "当主不能担任据点代官";
+    } else {
+      error.value = message;
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+function forceLordCharacterIdForState(ws: StrategyWorldState): number | null {
+  const residence = resolveLordResidenceStronghold(ws);
+  if (!residence) return null;
+  const lordName = ws.lord.name?.trim();
+  if (lordName) {
+    const byName = (ws.characters ?? []).find(
+      (c) => c.forceId === ws.playerForceId && c.name === lordName,
+    );
+    if (byName) return byName.id;
+  }
+  return (ws.characters ?? []).find(
+    (c) => c.forceId === ws.playerForceId && c.strongholdId === residence.id,
+  )?.id ?? null;
 }
 
 async function handleSplitDialogConfirm(payload: { subUnitIds: number[]; unitName?: string }) {
@@ -1469,6 +1806,128 @@ function handleSelectStronghold(payload: { strongholdId: number; screenX: number
   onSelectStronghold(payload);
 }
 
+function handleSelectCharacter(payload: { characterId: number; screenX: number; screenY: number }) {
+  closeForceCommandMenu();
+  logStrategyMapCoords("select-character", payload);
+  onSelectCharacter(payload);
+}
+
+function handleSelectCellEntities(payload: { x: number; y: number; screenX: number; screenY: number }) {
+  if (!state.value) return;
+  closeForceCommandMenu();
+  logStrategyMapCoords("select-cell-entities", payload);
+  const entities = collectMapCellEntityOptions(state.value, payload.x, payload.y, {
+    includeUnits: mapUnitSelectionEnabled.value,
+    includeCharacters: mapCharacterSelectionEnabled.value,
+    includeStrongholds: mapStrongholdSelectionEnabled.value,
+    includeConvoys: mapConvoySelectionEnabled.value,
+  });
+  if (entities.length <= 1) return;
+  onSelectCellEntities(payload, entities);
+}
+
+function handlePickCellEntity(entity: import("@/utils/mapCellEntityPicker").MapCellEntityOption) {
+  onPickCellEntity(entity);
+}
+
+function handleEntityPickerCancel() {
+  handlePopupCancel();
+}
+
+async function handleBeginLeaveStronghold() {
+  const characterId = selectedCharacterId.value ?? resolvePlayerLordCharacterId(state.value!);
+  if (!characterId || !state.value) return;
+
+  const sh = activeCharacterStronghold.value;
+  const force = isStrongholdBesieged(sh);
+  if (force) {
+    try {
+      await ElMessageBox.confirm(
+        `${sh?.name ?? "据点"} 正被围攻。强行出城将消耗 ${CHARACTER_GATE_AP_COST} AP，并可能负伤或被俘。是否继续？`,
+        "强行出城",
+        { type: "warning", confirmButtonText: "强行出城", cancelButtonText: "取消" },
+      );
+    } catch {
+      return;
+    }
+  }
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await leaveStrongholdAsCharacter(characterId, force);
+    info.value = force ? "当主已强行出城" : "当主已出城";
+    selectedCharacterId.value = characterId;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "出城失败";
+    if (message.includes("ApNotEnough")) {
+      error.value = `行动力不足（出入城需 ${CHARACTER_GATE_AP_COST} AP）`;
+    } else if (message.includes("StrongholdBlockaded")) {
+      error.value = "据点被围，需确认强行出城";
+    } else {
+      error.value = message;
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleBeginEnterStronghold() {
+  const ws = state.value;
+  const characterId = selectedCharacterId.value ?? (ws ? resolvePlayerLordCharacterId(ws) : null);
+  const sh = ws
+    ? resolveCharacterGateStronghold(
+        ws,
+        activeCharacterStronghold.value ?? selectedStronghold.value,
+      )
+    : null;
+  if (!characterId || !sh || !ws) {
+    void notifyActionBlocked("无法入城", "须与本家据点同格且当主在地图方可入城");
+    return;
+  }
+
+  if (!canEnterStrongholdAtCell(ws, sh)) {
+    void notifyActionBlocked("无法入城", "须与本家据点同格且当主在地图方可入城");
+    return;
+  }
+
+  const force = isStrongholdBesieged(sh);
+  if (force) {
+    try {
+      await ElMessageBox.confirm(
+        `${sh.name} 正被围攻。强行入城将消耗 ${CHARACTER_GATE_AP_COST} AP，并可能负伤或被俘。是否继续？`,
+        "强行入城",
+        { type: "warning", confirmButtonText: "强行入城", cancelButtonText: "取消" },
+      );
+    } catch {
+      return;
+    }
+  }
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await enterStrongholdAsCharacter(characterId, sh.id, force);
+    info.value = force ? `当主已强行进入 ${sh.name}` : `当主已进入 ${sh.name}`;
+    selectedCharacterId.value = characterId;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "入城失败";
+    if (message.includes("ApNotEnough")) {
+      error.value = `行动力不足（出入城需 ${CHARACTER_GATE_AP_COST} AP）`;
+    } else if (message.includes("StrongholdBlockaded")) {
+      error.value = "据点被围，需确认强行入城";
+    } else {
+      error.value = message;
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+function handleBeginVisit() {
+  void notifyActionBlocked("拜访", "拜访、登庸与计谋将在 RPG 模式中扩展");
+}
+
 function handleSelectConvoy(payload: { convoyId: number; screenX: number; screenY: number }) {
   closeForceCommandMenu();
   logStrategyMapCoords("select-convoy", payload);
@@ -1478,7 +1937,7 @@ function handleSelectConvoy(payload: { convoyId: number; screenX: number; screen
 async function handleSelectCell(payload: { x: number; y: number; screenX: number; screenY: number }) {
   logStrategyMapCoords("select-cell", { ...payload, stateId: stateId.value });
 
-  if (stateId.value === "moveTargetSelect") {
+  if (stateId.value === "moveTargetSelect" || stateId.value === "characterMoveTargetSelect") {
     await handleMovePathClick(payload);
     return;
   }
@@ -1545,15 +2004,40 @@ async function loadBattlePreview(target: StrategyMoveTarget) {
   }
 }
 
-function openIntelDialog() {
+function openMapIntel() {
   clearMapHoverState();
+  const mode = menuPopupMode.value;
+
+  if (mode === "characterCommand") {
+    const id =
+      selectedCharacterId.value ?? resolvePlayerLordCharacterId(state.value!);
+    if (id && state.value) {
+      const name =
+        state.value.characters?.find((c) => c.id === id)?.name
+        ?? state.value.lord.name
+        ?? "当主";
+      openIntelSystemFocused("person", id, `👤 ${name}`);
+      return;
+    }
+  }
+
+  if (mode === "strongholdCommand" || mode === "foreignStrongholdCommand") {
+    const sh =
+      selectedStronghold.value
+      ?? popupStronghold.value
+      ?? activeStrongholdForCommands.value;
+    if (sh) {
+      openIntelSystemFocused("stronghold", sh.id, `🏯 ${sh.name}`);
+      return;
+    }
+  }
+
+  openEntityIntelDialog();
+}
+
+function openEntityIntelDialog() {
   if (selectedUnit.value) {
     intelDialogTarget.value = { kind: "unit", unit: selectedUnit.value };
-    intelDialogVisible.value = true;
-    return;
-  }
-  if (selectedStronghold.value) {
-    intelDialogTarget.value = { kind: "stronghold", stronghold: selectedStronghold.value };
     intelDialogVisible.value = true;
     return;
   }
@@ -1561,6 +2045,19 @@ function openIntelDialog() {
     intelDialogTarget.value = { kind: "convoy", convoy: selectedConvoy.value };
     intelDialogVisible.value = true;
   }
+}
+
+function openIntelSystemFocused(
+  tab: string,
+  entityId: number | null = null,
+  title?: string,
+) {
+  intelSystemInitialTab.value = tab;
+  intelSystemInitialEntityId.value = entityId;
+  intelSystemInitialRealmFilter.value = "all";
+  intelSystemFocusMode.value = true;
+  intelSystemFocusTitle.value = title ?? "情报";
+  intelSystemVisible.value = true;
 }
 
 async function handleBattleConfirm(_payload: BattleConfirmPayload) {
@@ -1692,14 +2189,19 @@ function closeForceCommandMenu() {
 
 function openForceIntelFromMenu() {
   closeForceCommandMenu();
-  intelSystemInitialTab.value = "force";
-  intelSystemInitialRealmFilter.value = "realm";
-  intelSystemVisible.value = true;
+  const ws = state.value;
+  if (!ws) return;
+  const forceId = ws.playerForceId;
+  const forceName = ws.forces.find((f) => f.id === forceId)?.name ?? "势力";
+  openIntelSystemFocused("force", forceId, `${forceName} · 势力情报`);
 }
 
 function openIntelSystemDialog() {
   intelSystemInitialTab.value = "force";
+  intelSystemInitialEntityId.value = null;
   intelSystemInitialRealmFilter.value = "all";
+  intelSystemFocusMode.value = false;
+  intelSystemFocusTitle.value = "";
   intelSystemVisible.value = true;
 }
 
@@ -1744,9 +2246,12 @@ function isInsideForcePopup(target: EventTarget | null): boolean {
 function isInsideMapPopup(target: EventTarget | null): boolean {
   if (!(target instanceof Node)) return false;
   const menuEl = menuPopupRef.value?.$el as HTMLElement | undefined;
+  const pickerEl = cellEntityPickerRef.value?.$el as HTMLElement | undefined;
   const cornerEl = cornerPopupRef.value?.$el as HTMLElement | undefined;
   return Boolean(
-    (menuEl && menuEl.contains(target)) || (cornerEl && cornerEl.contains(target))
+    (menuEl && menuEl.contains(target))
+    || (pickerEl && pickerEl.contains(target))
+    || (cornerEl && cornerEl.contains(target))
   );
 }
 
@@ -1795,6 +2300,28 @@ function onIntelDialogVisibleChange(visible: boolean) {
 }
 
 async function executeMove(target: StrategyMoveTarget, via: MapPoint[] = []) {
+  if (selectedCharacterId.value !== null) {
+    loading.value = true;
+    error.value = "";
+    try {
+      state.value = await moveCharacter(
+        selectedCharacterId.value,
+        target.x,
+        target.y,
+        via,
+      );
+      onMoveSucceeded();
+      info.value = "当主开始移动";
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "移动指令失败";
+      onMoveFailed(target);
+    } finally {
+      loading.value = false;
+      await refreshMovementTrace();
+    }
+    return;
+  }
+
   if (selectedUnitId.value === null) return;
 
   loading.value = true;
@@ -1832,6 +2359,31 @@ async function ensureMapMaster(world?: StrategyWorldState | null) {
   mapMaster.value = await getStrategyMapMaster();
 }
 
+function syncLastGameStartSettingsFromWorldState(world: StrategyWorldState) {
+  if (!world.startOptions) return;
+  lastGameStartSettings.value = {
+    scenarioId: world.scenarioId,
+    difficulty: resolveDifficultyFromOptions(world.startOptions),
+    customStartOptions: { ...world.startOptions },
+  };
+}
+
+function resetMapSessionUi() {
+  selectedUnitId.value = null;
+  selectedStrongholdId.value = null;
+  selectedConvoyId.value = null;
+  selectedCell.value = null;
+  battleConfirmVisible.value = false;
+  battleResultVisible.value = false;
+  intelDialogVisible.value = false;
+  eventFeed.value = [];
+  pendingNotifications.value = [];
+  settlementDialogVisible.value = false;
+  settlementDetail.value = null;
+  mapInteraction.reset();
+  resetMovePath();
+}
+
 async function startGameWithSettings(settings: GameStartSettings) {
   lastGameStartSettings.value = settings;
   writeGameStartSettings(settings);
@@ -1850,19 +2402,7 @@ async function startGameWithSettings(settings: GameStartSettings) {
       customStartOptions:
         settings.difficulty === "Custom" ? settings.customStartOptions : undefined,
     });
-    selectedUnitId.value = null;
-    selectedStrongholdId.value = null;
-    selectedConvoyId.value = null;
-    selectedCell.value = null;
-    battleConfirmVisible.value = false;
-    battleResultVisible.value = false;
-    intelDialogVisible.value = false;
-    eventFeed.value = [];
-    pendingNotifications.value = [];
-    settlementDialogVisible.value = false;
-    settlementDetail.value = null;
-    mapInteraction.reset();
-    resetMovePath();
+    resetMapSessionUi();
     if (usingMockFallback.value) {
       info.value = "Live API 不可达，已自动使用 Mock 数据（见下方诊断面板）。";
     } else if (lastRequest.value?.source === "mock") {
@@ -1877,17 +2417,47 @@ async function startGameWithSettings(settings: GameStartSettings) {
   }
 }
 
+/** 刷新页面时恢复后端当前局（不重新 loadScenario、不弹开局设置）。 */
+async function resumeExistingGame() {
+  initialLoading.value = true;
+  initialLoadError.value = "";
+  initialLoadPhase.value = "map";
+  error.value = "";
+  info.value = "";
+
+  try {
+    mapMaster.value = await getStrategyMapMaster();
+    initialLoadPhase.value = "state";
+    const next = await getStrategyState();
+    await ensureMapMaster(next);
+    state.value = next;
+    syncLastGameStartSettingsFromWorldState(next);
+    resetMapSessionUi();
+    if (usingMockFallback.value) {
+      info.value = "Live API 不可达，已自动使用 Mock 数据（见下方诊断面板）。";
+    } else if (lastRequest.value?.source === "mock") {
+      info.value = "当前为 Mock 模式。";
+    }
+    initialLoading.value = false;
+    await refreshMovementTrace();
+  } catch (e) {
+    initialLoadPhase.value = "error";
+    initialLoadError.value = e instanceof Error ? e.message : "读取世界状态失败";
+    error.value = initialLoadError.value;
+    initialLoading.value = false;
+  }
+}
+
 function goToGameStartSettings() {
   void router.push({ name: "Home", query: { configure: "1" } });
 }
 
 async function bootstrapGame() {
-  const settings = lastGameStartSettings.value ?? readGameStartSettings();
-  if (!settings) {
-    goToGameStartSettings();
+  if (lastGameStartSettings.value) {
+    await startGameWithSettings(lastGameStartSettings.value);
     return;
   }
-  await startGameWithSettings(settings);
+  await resumeExistingGame();
 }
 
 async function fetchGameState() {
@@ -1974,12 +2544,42 @@ async function onAdvanceDay() {
   }
 }
 
-async function onSaveGame() {
+async function refreshSaveSlots() {
+  saveSlotsLoading.value = true;
+  try {
+    saveSlots.value = await listStrategySaveSlots();
+  } finally {
+    saveSlotsLoading.value = false;
+  }
+}
+
+async function openSaveSlotDialog() {
+  error.value = "";
+  saveSlotDialogVisible.value = true;
+  try {
+    await refreshSaveSlots();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "读取存档位失败";
+    saveSlotDialogVisible.value = false;
+  }
+}
+
+function resetMapSelectionAfterLoad() {
+  selectedUnitId.value = null;
+  selectedStrongholdId.value = null;
+  selectedConvoyId.value = null;
+  selectedCell.value = null;
+  mapInteraction.reset();
+}
+
+async function onSaveToSlot(slot: number) {
   loading.value = true;
   error.value = "";
   try {
-    await exportStrategySave();
-    info.value = "存档已写入浏览器 localStorage";
+    await saveStrategyToSlot(slot);
+    await refreshSaveSlots();
+    saveSlotDialogVisible.value = false;
+    info.value = `已存档至档位 ${slot}`;
   } catch (e) {
     error.value = e instanceof Error ? e.message : "存档失败";
   } finally {
@@ -1987,22 +2587,20 @@ async function onSaveGame() {
   }
 }
 
-async function onLoadSave() {
-  if (!hasLocalStrategySave()) {
-    error.value = "未找到本地存档";
+async function onLoadFromSlot(slot: number) {
+  const slotInfo = saveSlots.value.find((row) => row.slot === slot);
+  if (slotInfo && !slotInfo.occupied) {
+    error.value = `档位 ${slot} 为空，无法读档`;
     return;
   }
 
   loading.value = true;
   error.value = "";
   try {
-    state.value = await restoreStrategySave();
-    selectedUnitId.value = null;
-    selectedStrongholdId.value = null;
-    selectedConvoyId.value = null;
-    selectedCell.value = null;
-    mapInteraction.reset();
-    info.value = "已从本地存档恢复";
+    state.value = await loadStrategyFromSlot(slot);
+    resetMapSelectionAfterLoad();
+    saveSlotDialogVisible.value = false;
+    info.value = `已从档位 ${slot} 读档`;
   } catch (e) {
     error.value = e instanceof Error ? e.message : "读档失败";
   } finally {
@@ -2032,13 +2630,13 @@ onMounted(() => {
   window.addEventListener("resize", updateHoverIntelPosition);
   window.addEventListener("resize", updateMapTopOverlayHeight);
 
-  const settings = readGameStartSettings();
-  if (!settings) {
-    initialLoading.value = false;
-    goToGameStartSettings();
+  const pendingSettings = takeGameStartSettingsFromNavigation();
+  if (pendingSettings) {
+    void startGameWithSettings(pendingSettings);
     return;
   }
-  void startGameWithSettings(settings);
+
+  void resumeExistingGame();
 });
 
 onBeforeUnmount(() => {
@@ -2179,7 +2777,7 @@ watch(
         <h3>后勤</h3>
         <ul class="stronghold-list">
           <li>运输队：{{ state?.supplyConvoys.length ?? 0 }}</li>
-          <li>信使：{{ state?.messengers.length ?? 0 }}</li>
+          <li>在途文书：{{ state?.messageCarriers.length ?? 0 }}</li>
         </ul>
       </aside>
 
@@ -2198,6 +2796,7 @@ watch(
             :world-state="state"
             :map-master="mapMaster"
             :selected-unit-id="selectedUnitId"
+            :selected-character-id="selectedCharacterId"
             :selected-convoy-id="selectedConvoyId"
             :hover-unit-id="hoverUnitId"
             :hover-stronghold-id="hoverStrongholdId"
@@ -2206,15 +2805,18 @@ watch(
             :route-overlays="routeOverlays"
             :move-relay-markers="moveRelayMarkers"
             :map-unit-selection-enabled="mapUnitSelectionEnabled"
+            :map-character-selection-enabled="mapCharacterSelectionEnabled"
             :map-convoy-selection-enabled="mapConvoySelectionEnabled"
             :map-cell-selection-enabled="mapCellSelectionEnabled"
             :map-stronghold-selection-enabled="mapStrongholdSelectionEnabled"
             :map-hover-suppressed="intelDialogVisible"
             :map-color-mode="mapColorMode"
             @select-unit="handleSelectUnit"
+            @select-character="handleSelectCharacter"
             @select-stronghold="handleSelectStronghold"
             @select-convoy="handleSelectConvoy"
             @select-cell="handleSelectCell"
+            @select-cell-entities="handleSelectCellEntities"
             @hover-cell="handleHoverCell"
             @viewport-change="onViewportChange"
           />
@@ -2377,13 +2979,22 @@ watch(
             />
           </div>
 
+          <StrategyMapCellEntityPicker
+            v-if="entityPickerVisible && menuAnchor"
+            ref="cellEntityPickerRef"
+            class="map-popup-layer map-popup-layer--anchor"
+            :style="popupStyle"
+            :entities="cellEntityPickerOptions"
+            @pick="handlePickCellEntity"
+            @cancel="handleEntityPickerCancel"
+          />
           <StrategyMapPopup
             v-if="menuPopupMode && menuAnchor"
             ref="menuPopupRef"
             class="map-popup-layer map-popup-layer--anchor"
             :style="popupStyle"
             :mode="menuPopupMode"
-            :entity-name="popupEntityName"
+            :entity-name="primaryPopupEntityName"
             :x="menuAnchor.x"
             :y="menuAnchor.y"
             :unit="selectedUnit"
@@ -2392,38 +3003,39 @@ watch(
             :siege-stronghold-id="popupStronghold?.id ?? null"
             :can-expedition="canExpedition"
             :expedition-tooltip="expeditionTooltip"
-            :lord-at-residence="isLordAtOwnResidence"
-            :stronghold-commands-tooltip="LORD_AT_RESIDENCE_REQUIRED_TIP"
+            :lord-at-residence="canLordCommandActiveStronghold"
+            :stronghold-commands-tooltip="LORD_COMMAND_STRONGHOLD_TIP"
+            :can-adjust-tax="canAdjustTaxStronghold"
+            :tax-rate-tooltip="taxRateTooltip"
             :can-espionage="canEspionageStronghold"
+            :show-stronghold-directive="showStrongholdDirectiveButton"
+            :stronghold-directive-only="strongholdDirectiveOnlyMenu"
+            :can-unit-move="menuPopupMode === 'command' && selectedUnitDirectlyControlled"
+            :can-unit-siege="menuPopupMode === 'command' && selectedUnitDirectlyControlled"
+            :can-leave-stronghold="menuPopupMode === 'characterCommand' ? characterPopupProps.canLeaveStronghold : false"
+            :can-character-move="menuPopupMode === 'characterCommand' ? characterPopupProps.canCharacterMove : false"
+            :can-enter-stronghold="menuPopupMode === 'characterCommand' ? characterPopupProps.canEnterStronghold : false"
+            :can-visit-others="menuPopupMode === 'characterCommand' ? characterPopupProps.canVisitOthers : false"
+            :can-character-espionage="menuPopupMode === 'characterCommand' ? characterPopupProps.canCharacterEspionage : false"
+            :gate-ap-cost="CHARACTER_GATE_AP_COST"
+            :lord-ap="lordAp"
+            :is-stronghold-besieged="menuPopupBesieged"
             @begin-move="handleBeginMove"
             @begin-attack="handleBeginAttack"
             @begin-directive="handleBeginDirective"
             @begin-merge="handleBeginMerge"
             @begin-split="handleBeginSplit"
             @begin-expedition="handleBeginExpedition"
+            @begin-tax-rate="handleBeginTaxRate"
+            @begin-recruit="handleBeginRecruit"
             @begin-espionage="handleBeginEspionage"
+            @begin-appoint-lord="handleBeginAppointLord"
+            @begin-leave-stronghold="handleBeginLeaveStronghold"
+            @begin-enter-stronghold="handleBeginEnterStronghold"
+            @begin-visit="handleBeginVisit"
             @siege-assault="handleSiegeOrder('Assault')"
             @siege-encircle="handleSiegeOrder('Encircle')"
-            @show-intel="openIntelDialog"
-            @cancel="handlePopupCancel"
-          />
-          <StrategyMapPopup
-            v-if="secondaryMenuPopupMode && menuAnchor"
-            class="map-popup-layer map-popup-layer--anchor map-popup-layer--secondary"
-            :style="secondaryPopupStyle"
-            :mode="secondaryMenuPopupMode"
-            :entity-name="popupStronghold?.name"
-            :x="menuAnchor.x"
-            :y="menuAnchor.y"
-            is-stronghold
-            :can-expedition="canExpedition"
-            :expedition-tooltip="expeditionTooltip"
-            :lord-at-residence="isLordAtOwnResidence"
-            :stronghold-commands-tooltip="LORD_AT_RESIDENCE_REQUIRED_TIP"
-            :can-espionage="canEspionageStronghold"
-            @begin-expedition="handleBeginExpedition"
-            @begin-espionage="handleBeginEspionage"
-            @show-intel="openIntelDialog"
+            @show-intel="openMapIntel()"
             @cancel="handlePopupCancel"
           />
           <StrategyMapPopup
@@ -2493,7 +3105,9 @@ watch(
     <StrategyMessageDialog
       :visible="messageDialogVisible"
       :events="scopedEventFeed"
+      :player-force-id="state?.playerForceId"
       @update:visible="messageDialogVisible = $event"
+      @open-detail="handleNotificationOpen"
     />
     <StrategyDirectiveDialog
       v-if="state"
@@ -2519,18 +3133,53 @@ watch(
       @update:visible="expeditionDialogVisible = $event"
       @confirm="handleExpeditionConfirm"
     />
+    <StrategyTaxRateDialog
+      v-if="state"
+      :visible="taxRateDialogVisible"
+      :stronghold="activeStrongholdForCommands"
+      :world-state="state"
+      @update:visible="taxRateDialogVisible = $event"
+      @confirm="handleTaxRateConfirm"
+    />
+    <StrategyRecruitDialog
+      v-if="state"
+      :visible="recruitDialogVisible"
+      :stronghold="activeStrongholdForCommands"
+      :max-recruitable="maxRecruitableSoldiers"
+      @update:visible="recruitDialogVisible = $event"
+      @confirm="handleRecruitConfirm"
+    />
+    <StrategyAppointLordDialog
+      v-if="state"
+      :visible="appointLordDialogVisible"
+      :initial-stronghold="activeStrongholdForCommands"
+      :world-state="state"
+      @update:visible="appointLordDialogVisible = $event"
+      @confirm="handleAppointLordConfirm"
+    />
     <StrategyIntelSystemDialog
       :visible="intelSystemVisible"
       :world-state="state"
       :initial-tab="intelSystemInitialTab"
       :initial-realm-filter="intelSystemInitialRealmFilter"
+      :initial-selected-entity-id="intelSystemInitialEntityId"
+      :focus-mode="intelSystemFocusMode"
+      :focus-title="intelSystemFocusTitle"
       @update:visible="intelSystemVisible = $event"
     />
     <StrategySystemMenuDialog
       :visible="systemMenuVisible"
       @update:visible="systemMenuVisible = $event"
-      @save="onSaveGame"
-      @load="onLoadSave"
+      @open-save-slots="openSaveSlotDialog"
+      @open-load-slots="openSaveSlotDialog"
+    />
+    <StrategySaveSlotDialog
+      :visible="saveSlotDialogVisible"
+      :slots="saveSlots"
+      :loading="loading || saveSlotsLoading"
+      @update:visible="saveSlotDialogVisible = $event"
+      @save="onSaveToSlot"
+      @load="onLoadFromSlot"
     />
 
     <div
@@ -3053,6 +3702,10 @@ watch(
 
 .map-popup-layer--anchor {
   /* left/top 由 popupStyle 动态设置 */
+}
+
+.map-popup-layer--secondary {
+  z-index: 21;
 }
 
 .map-popup-layer--corner {

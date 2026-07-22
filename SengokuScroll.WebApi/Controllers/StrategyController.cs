@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using SengokuScroll.Common.Types;
 using SengokuScroll.Domain;
 using SengokuScroll.Strategy.Hosting;
+using SengokuScroll.Strategy.Persistence;
 using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Rules;
 using SengokuScroll.WebApi.Models;
@@ -13,7 +14,9 @@ namespace SengokuScroll.WebApi.Controllers;
 [ApiController]
 [Route("strategy")]
 [Route("api/strategy")]
-public class StrategyController(StrategySimulationHost simulationHost) : ControllerBase
+public class StrategyController(
+    StrategySimulationHost simulationHost,
+    StrategySaveSlotRepository saveSlotRepository) : ControllerBase
 {
     /// <summary>加载 JSON 剧本（如 mini_kanto）。</summary>
     [HttpPost("load")]
@@ -48,6 +51,35 @@ public class StrategyController(StrategySimulationHost simulationHost) : Control
     public IActionResult PreviewPath(int unitId, [FromBody] MoveUnitRequest request)
         => ToPreviewResult(simulationHost.PreviewUnitPath(
             unitId,
+            new Point2(request.X, request.Y),
+            request.FromX is int fromX && request.FromY is int fromY ? new Point2(fromX, fromY) : null,
+            ToViaPoints(request.Via)));
+
+    /// <summary>玩家当主自据点出城。</summary>
+    [HttpPost("characters/{characterId:int}/leave-stronghold")]
+    public IActionResult LeaveStronghold(int characterId, [FromBody] CharacterGateRequest? request)
+        => ToActionResult(simulationHost.OrderCharacterLeaveStronghold(characterId, request?.Force ?? false));
+
+    /// <summary>玩家当主寻路移动。</summary>
+    [HttpPost("characters/{characterId:int}/move")]
+    public IActionResult MoveCharacter(int characterId, [FromBody] MoveUnitRequest request)
+        => ToActionResult(simulationHost.OrderCharacterMove(
+            characterId,
+            new Point2(request.X, request.Y),
+            ToViaPoints(request.Via)));
+
+    /// <summary>玩家当主在同格据点入城。</summary>
+    [HttpPost("characters/{characterId:int}/enter-stronghold")]
+    public IActionResult EnterStronghold(int characterId, [FromBody] EnterStrongholdRequest request)
+        => ToActionResult(simulationHost.OrderCharacterEnterStronghold(
+            characterId,
+            request.StrongholdId,
+            request.Force));
+
+    [HttpPost("characters/{characterId:int}/preview-path")]
+    public IActionResult PreviewCharacterPath(int characterId, [FromBody] MoveUnitRequest request)
+        => ToPreviewResult(simulationHost.PreviewCharacterPath(
+            characterId,
             new Point2(request.X, request.Y),
             request.FromX is int fromX && request.FromY is int fromY ? new Point2(fromX, fromY) : null,
             ToViaPoints(request.Via)));
@@ -135,6 +167,50 @@ public class StrategyController(StrategySimulationHost simulationHost) : Control
             request.Scope,
             request.Precision));
 
+    /// <summary>调整据点税率；当主须在居城，仅直辖城可调整。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/set-tax-rate")]
+    public IActionResult SetStrongholdTaxRates(int strongholdId, [FromBody] SetStrongholdTaxRateRequest request)
+        => ToPolicyResult(simulationHost.SetStrongholdTaxRates(
+            strongholdId,
+            request.PollTaxRate,
+            request.AgricultureTaxRate,
+            request.CommerceTaxRate,
+            request.TariffTaxRate));
+
+    /// <summary>据点征兵。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/recruit")]
+    public IActionResult RecruitAtStronghold(int strongholdId, [FromBody] RecruitAtStrongholdRequest request)
+        => ToActionResult(simulationHost.RecruitAtStronghold(strongholdId, request.Soldiers));
+
+    /// <summary>任命据点领主/代官；领主任命中当主 Id 表示设为直辖。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/appoint-lord")]
+    public IActionResult AppointStrongholdLord(int strongholdId, [FromBody] AppointStrongholdLordRequest request)
+        => ToActionResult(simulationHost.AppointStrongholdLord(
+            strongholdId,
+            request.CharacterId,
+            request.AppointType));
+
+    /// <summary>外交：宣战/议和/同盟。</summary>
+    [HttpPost("diplomacy/relation")]
+    public IActionResult SetDiplomacyRelation([FromBody] SetDiplomacyRelationRequest request)
+        => ToActionResult(simulationHost.SetDiplomacyRelation(
+            request.TargetForceId,
+            request.Relation));
+
+    /// <summary>外交：支配/从属/释放/独立。</summary>
+    [HttpPost("diplomacy/vassalage")]
+    public IActionResult OrderDiplomacyVassalage([FromBody] DiplomacyVassalageRequest request)
+        => ToActionResult(simulationHost.OrderDiplomacyVassalage(
+            request.TargetForceId,
+            request.Action));
+
+    /// <summary>外政：任命/撤销内藩。</summary>
+    [HttpPost("realm/inner-vassal")]
+    public IActionResult OrderRealmInnerVassal([FromBody] RealmInnerVassalRequest request)
+        => ToActionResult(simulationHost.OrderRealmInnerVassal(
+            request.TargetForceId,
+            request.Action));
+
     /// <summary>获取当前世界状态。</summary>
     [HttpGet("state")]
     public IActionResult GetState()
@@ -174,6 +250,49 @@ public class StrategyController(StrategySimulationHost simulationHost) : Control
             return BadRequest(new ApiErrorResponse(parsed.Error?.Code ?? "Unknown"));
 
         return ToActionResult(simulationHost.RestoreSave(parsed.Value!));
+    }
+
+    /// <summary>列出 10 个存档位摘要。</summary>
+    [HttpGet("save-slots")]
+    public IActionResult ListSaveSlots()
+        => Ok(new StrategySaveSlotListResponse
+        {
+            Slots = saveSlotRepository.ListSlots().Select(MapSaveSlotSummary).ToList()
+        });
+
+    /// <summary>将当前仿真写入指定存档位（1–10）。</summary>
+    [HttpPut("save-slots/{slot:int}")]
+    public IActionResult SaveToSlot(int slot)
+    {
+        if (!IsValidSaveSlot(slot))
+            return BadRequest(new ApiErrorResponse("InvalidSaveSlot"));
+
+        var capture = simulationHost.CaptureSave();
+        if (!capture.IsSuccess)
+            return BadRequest(new ApiErrorResponse(capture.Error?.Code ?? "Unknown"));
+
+        var summary = saveSlotRepository.WriteSlot(slot, new StrategySaveSlotEnvelope
+        {
+            SavedAtUtc = DateTime.UtcNow,
+            LordName = simulationHost.LordName ?? "当主",
+            Save = capture.Value!
+        });
+
+        return Ok(new StrategySaveSlotWriteResponse { Slot = MapSaveSlotSummary(summary) });
+    }
+
+    /// <summary>从指定存档位恢复仿真。</summary>
+    [HttpPost("save-slots/{slot:int}/load")]
+    public IActionResult LoadFromSlot(int slot)
+    {
+        if (!IsValidSaveSlot(slot))
+            return BadRequest(new ApiErrorResponse("InvalidSaveSlot"));
+
+        var envelope = saveSlotRepository.ReadEnvelope(slot);
+        if (envelope?.Save is null)
+            return BadRequest(new ApiErrorResponse("SaveSlotEmpty"));
+
+        return ToActionResult(simulationHost.RestoreSave(envelope.Save));
     }
 
     /// <summary>获取移动诊断追踪（开发联调用）。</summary>
@@ -275,4 +394,18 @@ public class StrategyController(StrategySimulationHost simulationHost) : Control
 
     private static IReadOnlyList<Point2>? ToViaPoints(IReadOnlyList<MapPointRequest>? via)
         => via?.Select(p => new Point2(p.X, p.Y)).ToList();
+
+    private static bool IsValidSaveSlot(int slot)
+        => slot is >= 1 and <= StrategySaveSlotRepository.MaxSlots;
+
+    private static StrategySaveSlotSummaryDto MapSaveSlotSummary(StrategySaveSlotSummary summary)
+        => new()
+        {
+            Slot = summary.Slot,
+            Occupied = summary.Occupied,
+            SavedAtUtc = summary.SavedAtUtc?.ToString("O"),
+            ScenarioId = summary.ScenarioId,
+            LordName = summary.LordName,
+            DateLabel = summary.DateLabel
+        };
 }

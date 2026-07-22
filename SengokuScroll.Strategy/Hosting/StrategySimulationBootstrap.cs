@@ -23,7 +23,8 @@ public static class StrategySimulationBootstrap
     public static StrategySimulationScope CreateScope(
         GameWorld world,
         StrategyScenarioMeta scenarioMeta,
-        StrategyDayDebugOptions? dayDebugOptions = null)
+        StrategyDayDebugOptions? dayDebugOptions = null,
+        StrategyAiTraceOptions? aiTraceOptions = null)
     {
         var services = new ServiceCollection();
         var worldContext = new GameWorldContext(world);
@@ -35,6 +36,7 @@ public static class StrategySimulationBootstrap
             Enabled = false,
             WriteToFile = false
         }));
+        services.AddSingleton(Options.Create(aiTraceOptions ?? new StrategyAiTraceOptions()));
         services.AddSingleton<IStrategyDayDebugLog, StrategyDayDebugLog>();
         services.AddGameDomain();
         services.AddStrategyMode();

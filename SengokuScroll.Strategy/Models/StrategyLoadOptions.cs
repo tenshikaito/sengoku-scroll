@@ -8,6 +8,9 @@ public sealed record StrategyLoadOptions
 
     /// <summary>Custom 难度下的完整选项；非 Custom 时忽略。</summary>
     public GameStartOptions? CustomStartOptions { get; init; }
+
+    /// <summary>全势力由 AI 控制（仿真/观战模式）。</summary>
+    public bool AllForcesAiControlled { get; init; }
 }
 
 public static class GameStartOptionsMapper
@@ -19,6 +22,7 @@ public static class GameStartOptionsMapper
             IntelMode = options.IntelMode.ToString(),
             ControlMode = options.ControlMode.ToString(),
             AllySharedVision = options.AllySharedVision,
+            CharacterSharedVision = options.CharacterSharedVision,
             ShowAllyIntel = options.ShowAllyIntel,
             InstantEventMessages = options.InstantEventMessages
         };
@@ -39,6 +43,7 @@ public static class GameStartOptionsMapper
                 ? control
                 : StrategyControlMode.DirectiveOnly,
             AllySharedVision = dto.AllySharedVision,
+            CharacterSharedVision = dto.CharacterSharedVision,
             ShowAllyIntel = dto.ShowAllyIntel,
             InstantEventMessages = dto.InstantEventMessages
         };

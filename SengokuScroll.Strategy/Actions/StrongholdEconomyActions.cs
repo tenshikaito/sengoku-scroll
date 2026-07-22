@@ -42,10 +42,12 @@ public static class StrongholdEconomyActions
     public static (int PollTax, int CommerceTax, int TradeTax, int TariffTax) ApplyMonthlyMoneyTaxes(
         Stronghold stronghold,
         MerchantTaxLedger merchantTaxLedger,
-        TariffTaxLedger tariffTaxLedger)
+        TariffTaxLedger tariffTaxLedger,
+        Domain.GameData? gameData = null,
+        Data.Models.StrategyScenarioMeta? meta = null)
     {
-        var poll = EconomyCalculator.CalculateMonthlyPollTaxMoney(stronghold);
-        var commerce = EconomyCalculator.CalculateMonthlyCommerceBaseTaxMoney(stronghold);
+        var poll = EconomyCalculator.CalculateMonthlyPollTaxMoney(stronghold, gameData, meta);
+        var commerce = EconomyCalculator.CalculateMonthlyCommerceBaseTaxMoney(stronghold, gameData, meta);
         var trade = merchantTaxLedger.CollectForStronghold(stronghold.Id);
         var tariff = tariffTaxLedger.CollectForStronghold(stronghold.Id);
 

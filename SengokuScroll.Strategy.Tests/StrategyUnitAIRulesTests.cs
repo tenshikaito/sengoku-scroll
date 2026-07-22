@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SengokuScroll.Common.Types;
 using SengokuScroll.Strategy.Data;
+using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Rules;
 using SengokuScroll.Strategy.Tests.Fixtures;
@@ -25,6 +26,31 @@ public class StrategyUnitAIRulesTests
             Assert.NotEmpty(s.DefenseFacilities);
             Assert.Equal(s.Defense, s.DefenseFacilities.Sum(f => f.Defense));
         });
+    }
+
+    [Fact]
+    public void EvaluateDirective_AllForcesAiControlled_PromotesPlayerMoveToOccupy()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Maps", "mini_kanto.json");
+        var loaded = StrategyScenarioLoader.LoadFromFile(path);
+        var meta = new StrategyScenarioMeta
+        {
+            PlayerForceId = loaded.Meta.PlayerForceId,
+            AllForcesAiControlled = true
+        };
+        var playerUnit = loaded.World.GameData.Units.Values.First(u => u.ForceId == meta.PlayerForceId);
+        playerUnit.Directive = UnitDirective.Move;
+
+        var decision = StrategyUnitAIRules.EvaluateDirective(
+            playerUnit,
+            loaded.World.GameData,
+            meta.PlayerForceId,
+            loaded.World.GameMapMasterData,
+            meta);
+
+        Assert.Equal(UnitDirective.Occupy, playerUnit.Directive);
+        Assert.True(decision.Changed);
+        Assert.Equal("PromoteOccupy", decision.Code);
     }
 
     [Fact]

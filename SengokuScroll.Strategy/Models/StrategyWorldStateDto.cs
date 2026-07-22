@@ -40,7 +40,7 @@ public sealed record StrategyWorldStateDto
 
     public required IReadOnlyList<StrategySupplyConvoyStateDto> SupplyConvoys { get; init; }
 
-    public required IReadOnlyList<StrategyMessengerStateDto> Messengers { get; init; }
+    public required IReadOnlyList<StrategyMessageCarrierStateDto> MessageCarriers { get; init; }
 
     /// <summary>将领摘要（统计本势力将领数等）。</summary>
     public required IReadOnlyList<StrategyCharacterSummaryDto> Characters { get; init; }
@@ -171,6 +171,16 @@ public sealed record StrategyForceStateDto
     public int? SuccessorId { get; init; }
 }
 
+/// <summary>角色人际关系条目。</summary>
+public sealed record StrategyCharacterRelationDto
+{
+    public required string RelationType { get; init; }
+
+    public required int CharacterId { get; init; }
+
+    public required string CharacterName { get; init; }
+}
+
 /// <summary>将领摘要（供前端统计与出征编组）。</summary>
 public sealed record StrategyCharacterSummaryDto
 {
@@ -230,15 +240,20 @@ public sealed record StrategyCharacterSummaryDto
 
     /// <summary>忠诚度 0–100（暂以情义属性映射）。</summary>
     public required int Loyalty { get; init; }
+
+    /// <summary>人际关系（父母、配偶、师徒、仇敌等）。</summary>
+    public required IReadOnlyList<StrategyCharacterRelationDto> Relations { get; init; }
 }
 
-/// <summary>地图上独立行动的将领（溃逃、回城途中等）。</summary>
+/// <summary>地图上独立行动的将领（溃逃、NPC 等）；匿名显示时不暴露身份。</summary>
 public sealed record StrategyMapCharacterStateDto
 {
     public required int Id { get; init; }
 
+    /// <summary>匿名模式下为空。</summary>
     public required string Name { get; init; }
 
+    /// <summary>匿名模式下为 0。</summary>
     public required int ForceId { get; init; }
 
     public required int X { get; init; }
@@ -246,6 +261,16 @@ public sealed record StrategyMapCharacterStateDto
     public required int Y { get; init; }
 
     public required bool MapVisible { get; init; }
+
+    /// <summary>true 时前端以统一路人色绘制，不展示姓名与势力。</summary>
+    public required bool IsAnonymous { get; init; }
+
+    /// <summary>玩家可直接操控（当主在地图时）。</summary>
+    public bool IsPlayerControlled { get; init; }
+
+    public IReadOnlyList<StrategyMapPointDto> Route { get; init; } = [];
+
+    public int Ap { get; init; }
 }
 
 /// <summary>谍报情报摘要（前端判断展示精度与过期）。</summary>
@@ -423,6 +448,9 @@ public sealed record StrategyStrongholdStateDto
 
     /// <summary>治安（0–100）。</summary>
     public required int Stability { get; init; }
+
+    /// <summary>行政效率 0–100（含距居城距离损耗与本地腐败）。</summary>
+    public required int AdministrativeEfficiency { get; init; }
 
     /// <summary>民心（0–100，取自民间 Actor）。</summary>
     public required int PopularFeelings { get; init; }
@@ -853,7 +881,7 @@ public sealed record StrategyPolicyChangeResponseDto
 {
     public required StrategyWorldStateDto State { get; init; }
 
-    /// <summary>AppliedImmediately | MessengerDispatched</summary>
+    /// <summary>AppliedImmediately | CarrierDispatched</summary>
     public required string Outcome { get; init; }
 }
 
@@ -889,6 +917,15 @@ public sealed record StrategyLordStateDto
 
     /// <summary>当主居城名（势力君主名义上的居城据点）。</summary>
     public string? ResidenceStrongholdName { get; init; }
+
+    /// <summary>当主角色 Id（大战略玩家操控实体）。</summary>
+    public int? CharacterId { get; init; }
+
+    /// <summary>Map | Stronghold | Unit</summary>
+    public string? LocationType { get; init; }
+
+    /// <summary>当主当前行动力。</summary>
+    public int Ap { get; init; }
 }
 
 /// <summary>运输队摘要（非军事单位，情报字段与 <see cref="StrategyUnitStateDto"/> 对齐）。</summary>
@@ -957,7 +994,7 @@ public sealed record StrategySupplyConvoyStateDto
 }
 
 /// <summary>信使摘要（非军事单位，情报字段与兵队对齐；编制为 NPC 传令兵/护卫，无总将）。</summary>
-public sealed record StrategyMessengerStateDto
+public sealed record StrategyMessageCarrierStateDto
 {
     public required int Id { get; init; }
 
@@ -986,6 +1023,9 @@ public sealed record StrategyMessengerStateDto
     public required string Status { get; init; }
 
     public required string PayloadType { get; init; }
+
+    /// <summary>UnitEscort | Character — 决定势力迷雾下是否贡献视野。</summary>
+    public required string CarrierKind { get; init; }
 
     public required string Directive { get; init; }
 
@@ -1034,6 +1074,8 @@ public sealed record StrategyVisibilityDto
 
     public required bool AllySharedVision { get; init; }
 
+    public required bool CharacterSharedVision { get; init; }
+
     public required bool ShowAllyIntel { get; init; }
 
     public required int MapWidth { get; init; }
@@ -1058,6 +1100,8 @@ public sealed record GameStartOptionsDto
     public required string ControlMode { get; init; }
 
     public required bool AllySharedVision { get; init; }
+
+    public required bool CharacterSharedVision { get; init; }
 
     public required bool ShowAllyIntel { get; init; }
 
@@ -1096,6 +1140,11 @@ public static class StrategyWorldStateMapper
         var lordResidenceName = world.GameData.Strongholds.TryGetValue(lordResidenceId, out var residenceSh)
             ? residenceSh.Name
             : null;
+        var lordCharacterId = StrategyStrongholdLordHelper.ResolveForceLordCharacterId(
+            meta.PlayerForceId,
+            meta,
+            world.GameData);
+        world.GameData.Characters.TryGetValue(lordCharacterId, out var lordCharacter);
 
         return new StrategyWorldStateDto
         {
@@ -1109,7 +1158,10 @@ public static class StrategyWorldStateMapper
                 UnitId = meta.LordUnitId,
                 X = lordLocation.X,
                 Y = lordLocation.Y,
-                ResidenceStrongholdName = lordResidenceName
+                ResidenceStrongholdName = lordResidenceName,
+                CharacterId = lordCharacterId > 0 ? lordCharacterId : null,
+                LocationType = lordCharacter?.LocationType.ToString(),
+                Ap = lordCharacter?.Ap ?? 0
             },
             Map = new StrategyMapStateDto
             {
@@ -1178,14 +1230,13 @@ public static class StrategyWorldStateMapper
                         c.Location.X, c.Location.Y, c.ForceId, meta, world.GameData, visibilityState))
                 .Select(c => MapConvoy(c, world.GameData))
                 .OrderBy(c => c.Id)],
-            Messengers = [.. world.GameData.Messengers.Values
+            MessageCarriers = [.. world.GameData.MessageCarriers.Values
                 .Where(m => visibilityState is null
-                    || StrategyFogDtoRules.IsMapMobileEntityVisible(
-                        m.Location.X, m.Location.Y, m.ForceId, meta, world.GameData, visibilityState))
-                .Select(m => MapMessenger(m, world.GameData))
+                    || StrategyFogDtoRules.IsMessageCarrierMapVisible(m, meta, visibilityState))
+                .Select(m => MapMessageCarrier(m, world.GameData))
                 .OrderBy(m => m.Id)],
             Characters = [.. world.GameData.Characters.Values
-                .Select(c => MapCharacter(c, world.GameData.GameDate))
+                .Select(c => MapCharacter(c, world.GameData.GameDate, world.GameData.Characters))
                 .OrderBy(c => c.Id)],
             MapCharacters = MapMapCharacters(world, meta, visibilityState),
             EspionageIntel = MapEspionageIntel(espionageLedger),
@@ -1483,6 +1534,10 @@ public static class StrategyWorldStateMapper
         ForceVisibilityState? visibilityState)
     {
         var options = meta.StartOptions;
+        var lordCharacterId = StrategyStrongholdLordHelper.ResolveForceLordCharacterId(
+            meta.PlayerForceId,
+            meta,
+            world.GameData);
         return [.. world.GameData.Characters.Values
             .Where(c => !c.IsDead && c.LocationType == Character.CharacterLocationType.Map)
             .Select(c =>
@@ -1497,21 +1552,41 @@ public static class StrategyWorldStateMapper
                         world.GameData,
                         visibilityState);
 
+                var isPlayerLord = c.Id == lordCharacterId;
+
                 return new StrategyMapCharacterStateDto
                 {
                     Id = c.Id,
-                    Name = c.Name,
-                    ForceId = c.ForceId,
+                    Name = isPlayerLord ? c.Name : string.Empty,
+                    ForceId = isPlayerLord ? c.ForceId : 0,
                     X = c.Location.X,
                     Y = c.Location.Y,
-                    MapVisible = mapVisible
+                    MapVisible = mapVisible,
+                    IsAnonymous = !isPlayerLord,
+                    IsPlayerControlled = isPlayerLord,
+                    Route = isPlayerLord ? BuildCharacterRoute(c) : [],
+                    Ap = isPlayerLord ? c.Ap : 0
                 };
             })
             .Where(c => c.MapVisible)
             .OrderBy(c => c.Id)];
     }
 
-    private static StrategyCharacterSummaryDto MapCharacter(Character c, GameDate gameDate)
+    private static List<StrategyMapPointDto> BuildCharacterRoute(Character c)
+    {
+        var route = new List<StrategyMapPointDto>
+        {
+            new() { X = c.Location.X, Y = c.Location.Y }
+        };
+        foreach (var point in c.ActionTarget.RoutePoints)
+            route.Add(new StrategyMapPointDto { X = point.X, Y = point.Y });
+        return route;
+    }
+
+    private static StrategyCharacterSummaryDto MapCharacter(
+        Character c,
+        GameDate gameDate,
+        IReadOnlyDictionary<int, Character> characters)
     {
         var age = Math.Max(0, gameDate.Year - c.Birthday.Year);
         if (gameDate.Month < c.Birthday.Month
@@ -1577,7 +1652,8 @@ public static class StrategyWorldStateMapper
             IsSick = c.IsSick,
             BirthType = c.Birth.ToString(),
             TaskRemainingDays = null,
-            Loyalty = c.Personality.Friendship
+            Loyalty = c.Personality.Friendship,
+            Relations = CharacterRelationsHelper.BuildRelations(c, characters)
         };
     }
 
@@ -1601,9 +1677,9 @@ public static class StrategyWorldStateMapper
             .OrderBy(d => d.TargetForceId)];
     }
 
-    private static StrategyMessengerStateDto MapMessenger(Messenger m, GameData gameData)
+    private static StrategyMessageCarrierStateDto MapMessageCarrier(MessageCarrier m, GameData gameData)
     {
-        gameData.Units.TryGetValue(m.TargetUnitId, out var targetUnit);
+        gameData.Units.TryGetValue(m.Payload.TargetUnitId, out var targetUnit);
         gameData.Strongholds.TryGetValue(m.SourceStrongholdId, out var origin);
 
         var route = new List<StrategyMapPointDto>
@@ -1613,16 +1689,16 @@ public static class StrategyWorldStateMapper
         foreach (var point in m.RoutePoints)
             route.Add(new StrategyMapPointDto { X = point.X, Y = point.Y });
 
-        var directive = m.PayloadType switch
+        var directive = m.Payload.Type switch
         {
-            MessengerPayloadType.PolicyChange => "PolicyChange",
-            MessengerPayloadType.BattleReport => "BattleReport",
-            MessengerPayloadType.FalseIntelligence => "FalseIntelligence",
-            MessengerPayloadType.StrategicOrder => "StrategicOrder",
-            _ => m.PayloadType.ToString()
+            MessagePayloadType.PolicyChange => "PolicyChange",
+            MessagePayloadType.BattleReport => "BattleReport",
+            MessagePayloadType.FalseIntelligence => "FalseIntelligence",
+            MessagePayloadType.StrategicOrder => "StrategicOrder",
+            _ => m.Payload.Type.ToString()
         };
 
-        return new StrategyMessengerStateDto
+        return new StrategyMessageCarrierStateDto
         {
             Id = m.Id,
             Name = m.Name,
@@ -1633,10 +1709,11 @@ public static class StrategyWorldStateMapper
             Soldiers = m.CourierCount + m.EscortSoldierCount,
             CourierCount = m.CourierCount,
             EscortSoldierCount = m.EscortSoldierCount,
+            CarrierKind = m.CarrierKind.ToString(),
             Ap = Math.Max(m.RoutePoints.Count, 1),
             Movement = LogisticsConstants.MessengerDailyAp,
             Status = m.Status.ToString(),
-            PayloadType = m.PayloadType.ToString(),
+            PayloadType = m.Payload.Type.ToString(),
             Directive = directive,
             Route = route,
             Morale = 80,
@@ -1644,11 +1721,11 @@ public static class StrategyWorldStateMapper
             CultureName = "日本",
             ReligionName = "神道教",
             Money = 0,
-            TargetUnitId = m.TargetUnitId,
+            TargetUnitId = m.Payload.TargetUnitId,
             TargetUnitName = targetUnit?.Name,
             OriginStrongholdId = m.SourceStrongholdId,
             OriginStrongholdName = origin?.Name,
-            PendingDirective = m.PendingDirective?.ToString()
+            PendingDirective = m.Payload.PendingDirective?.ToString()
         };
     }
 
@@ -2057,8 +2134,9 @@ public static class StrategyWorldStateMapper
         var isDirectRule = StrategyStrongholdLordHelper.IsDirectRule(s);
         var isLordResidence = StrategyStrongholdLordHelper.IsGovernanceResidence(s, meta, gameData);
 
-        var mayor = overlay?.MayorName;
-        if (string.IsNullOrWhiteSpace(mayor) && s.LeaderId > 0
+        // 业务：代官以运行时 LeaderId 为准；LeaderId=0 即无代官，不用剧本 overlay 静态名
+        string? mayor = null;
+        if (s.LeaderId > 0
             && gameData.Characters.TryGetValue(s.LeaderId, out var mayorCharacter))
         {
             mayor = mayorCharacter.Name;
@@ -2081,6 +2159,10 @@ public static class StrategyWorldStateMapper
             Food = s.ForceActor.Food,
             Population = s.Population,
             Stability = s.Stability,
+            AdministrativeEfficiency = AdministrationCalculator.CalculateAdministrativeEfficiencyPercent(
+                s,
+                gameData,
+                meta),
             PopularFeelings = s.CivilianActor.PopularFeelings,
             IsLordResidence = isLordResidence,
             LordId = s.LordId,

@@ -193,11 +193,24 @@ export const STRONGHOLD_LIST_COLUMN_PRESETS: Record<
   ]),
 };
 
+/** 任命对话框：据点列表（窄列，minWidth 以便铺满容器）。 */
+export const APPOINT_STRONGHOLD_COLUMNS: IntelTableColumnDef[] = [
+  { prop: "name", label: "名称", minWidth: 80 },
+  { prop: "appointedLord", label: "领主", minWidth: 72 },
+  { prop: "mayorName", label: "代官", minWidth: 72 },
+];
+
 export const STRONGHOLD_DEFENSE_COLUMNS: IntelTableColumnDef[] = [
   { prop: "category", label: "类别", width: 72 },
   { prop: "name", labelKey: "ui.intel.column.facilityName", label: "设施", minWidth: 96 },
   { prop: "level", label: "等级", width: 56, align: "center" },
   { prop: "defense", label: "城防", width: 72, align: "right" },
+];
+
+export const PERSON_RELATION_COLUMNS: IntelTableColumnDef[] = [
+  { prop: "relationType", label: "关系", width: 72 },
+  { prop: "characterName", label: "姓名", minWidth: 96 },
+  { prop: "characterId", label: "ID", width: 56, align: "center" },
 ];
 
 const PERSON_ALL: IntelTableColumnDef[] = [

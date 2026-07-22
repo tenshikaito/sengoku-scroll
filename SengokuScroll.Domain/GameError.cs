@@ -42,6 +42,9 @@ public sealed class GameError(string code, params object[] data)
         /// 没有据点
         /// </summary>
         public static GameError StrongholdNotFound { get; } = new(nameof(StrongholdNotFound));
+
+        /// <summary>当主居城不可任命外臣领主，须保持直辖。</summary>
+        public static GameError CannotAppointLordToResidence { get; } = new(nameof(CannotAppointLordToResidence));
     }
 
     public static class CharacterError
@@ -75,6 +78,9 @@ public sealed class GameError(string code, params object[] data)
         /// 不能移动到指定位置
         /// </summary>
         public static GameError CannotMoveToTile { get; } = new(nameof(CannotMoveToTile));
+
+        /// <summary>据点被封锁/包围，须确认强行出入。</summary>
+        public static GameError StrongholdBlockaded { get; } = new(nameof(StrongholdBlockaded));
     }
 
     public static class DiplomacyError
@@ -115,5 +121,23 @@ public sealed class GameError(string code, params object[] data)
         /// 当前势力无效
         /// </summary>
         public static GameError InvalidForce { get; } = new(nameof(InvalidForce));
+    }
+
+    public static class DomesticError
+    {
+        /// <summary>当主不在居城，无法下达据点内政指令。</summary>
+        public static GameError LordNotAtResidence { get; } = new(nameof(LordNotAtResidence));
+
+        /// <summary>已任命领主领地，税率由领主自决，当主不可干涉。</summary>
+        public static GameError AppointedLordTerritory { get; } = new(nameof(AppointedLordTerritory));
+
+        /// <summary>将领不在当主居城，无法任命为领主。</summary>
+        public static GameError CharacterNotAtResidence { get; } = new(nameof(CharacterNotAtResidence));
+
+        /// <summary>该将领已担任据点领主，不能兼任代官。</summary>
+        public static GameError CharacterIsStrongholdLord { get; } = new(nameof(CharacterIsStrongholdLord));
+
+        /// <summary>当主不能担任据点代官。</summary>
+        public static GameError CharacterIsForceLord { get; } = new(nameof(CharacterIsForceLord));
     }
 }

@@ -1,4 +1,4 @@
-import type { StrategyWorldState, StrategyLoadRequest } from "./strategyTypes";
+import type { StrategyWorldState, StrategyLoadRequest, StrategySaveSlotSummary } from "./strategyTypes";
 import type {
   StrategyBattlePreview,
   StrategyInstantBattleResponse,
@@ -35,6 +35,9 @@ import {
 } from "./strategyMock";
 
 const STRATEGY_SAVE_STORAGE_KEY = "sengoku_scroll_strategy_save_v1";
+const STRATEGY_SAVE_SLOT_KEY_PREFIX = "sengoku_scroll_strategy_save_slot_";
+const STRATEGY_SAVE_SLOT_META_PREFIX = "sengoku_scroll_strategy_save_slot_meta_";
+const SAVE_SLOT_COUNT = 10;
 
 async function fetchLive<T>(
   method: string,
@@ -372,6 +375,66 @@ export const recordEspionageIntel = (payload: {
     }
   );
 
+export const setStrongholdTaxRates = (
+  strongholdId: number,
+  payload: {
+    pollTaxRate?: number;
+    agricultureTaxRate?: number;
+    commerceTaxRate?: number;
+    tariffTaxRate?: number;
+  }
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/set-tax-rate`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/set-tax-rate`, payload).then(
+        (raw) => {
+          const body = raw as Record<string, unknown>;
+          return {
+            state: normalizeStrategyWorldState(body.state ?? body.State),
+            outcome: String(body.outcome ?? body.Outcome ?? ""),
+          };
+        }
+      ),
+    () => {
+      throw new Error("Mock 模式不支持调整税率");
+    }
+  );
+
+export const recruitAtStronghold = (strongholdId: number, soldiers: number) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/recruit`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/recruit`, { soldiers }).then(
+        normalizeStrategyWorldState
+      ),
+    () => {
+      throw new Error("Mock 模式不支持征兵");
+    }
+  );
+
+export type AppointOfficialKind = "Lord" | "Mayor";
+
+export const appointStrongholdLord = (
+  strongholdId: number,
+  characterId: number,
+  appointType: AppointOfficialKind = "Lord",
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/appoint-lord`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/appoint-lord`, {
+        characterId,
+        appointType,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持任命");
+    }
+  );
+
 export const moveUnit = (
   unitId: number,
   x: number,
@@ -389,6 +452,77 @@ export const moveUnit = (
       }).then(normalizeStrategyWorldState),
     () => normalizeStrategyWorldState(mockMoveUnit(unitId, x, y, via))
   );
+
+export const leaveStrongholdAsCharacter = (characterId: number, force = false) =>
+  request(
+    "POST",
+    `/characters/${characterId}/leave-stronghold`,
+    () =>
+      fetchLive<unknown>("POST", `/characters/${characterId}/leave-stronghold`, { force }).then(
+        normalizeStrategyWorldState,
+      ),
+    () => {
+      throw new Error("Mock 模式不支持出城");
+    },
+  );
+
+export const moveCharacter = (
+  characterId: number,
+  x: number,
+  y: number,
+  via?: MapPoint[],
+) =>
+  request(
+    "POST",
+    `/characters/${characterId}/move`,
+    () =>
+      fetchLive<unknown>("POST", `/characters/${characterId}/move`, {
+        x,
+        y,
+        via: via?.map((p) => ({ x: p.x, y: p.y })),
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持角色移动");
+    },
+  );
+
+export const enterStrongholdAsCharacter = (characterId: number, strongholdId: number, force = false) =>
+  request(
+    "POST",
+    `/characters/${characterId}/enter-stronghold`,
+    () =>
+      fetchLive<unknown>("POST", `/characters/${characterId}/enter-stronghold`, {
+        strongholdId,
+        force,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持入城");
+    },
+  );
+
+export const previewCharacterPath = (
+  characterId: number,
+  x: number,
+  y: number,
+  options?: { from?: MapPoint; via?: MapPoint[] },
+) => {
+  const body = {
+    x,
+    y,
+    fromX: options?.from?.x,
+    fromY: options?.from?.y,
+    via: options?.via?.map((p) => ({ x: p.x, y: p.y })),
+  };
+
+  return request(
+    "POST",
+    `/characters/${characterId}/preview-path`,
+    () => fetchLive<StrategyPathPreview>("POST", `/characters/${characterId}/preview-path`, body),
+    () => {
+      throw new Error("Mock 模式不支持角色路径预览");
+    },
+  );
+};
 
 export const previewUnitPath = (
   unitId: number,
@@ -596,6 +730,99 @@ export const restoreStrategySave = (json?: string) =>
 
 export function hasLocalStrategySave(): boolean {
   return Boolean(localStorage.getItem(STRATEGY_SAVE_STORAGE_KEY));
+}
+
+function saveSlotStorageKey(slot: number): string {
+  return `${STRATEGY_SAVE_SLOT_KEY_PREFIX}${String(slot).padStart(2, "0")}`;
+}
+
+function saveSlotMetaStorageKey(slot: number): string {
+  return `${STRATEGY_SAVE_SLOT_META_PREFIX}${String(slot).padStart(2, "0")}`;
+}
+
+function normalizeSaveSlotSummary(raw: Record<string, unknown>): StrategySaveSlotSummary {
+  return {
+    slot: Number(raw.slot ?? raw.Slot ?? 0),
+    occupied: Boolean(raw.occupied ?? raw.Occupied),
+    savedAtUtc: (raw.savedAtUtc ?? raw.SavedAtUtc ?? null) as string | null,
+    scenarioId: (raw.scenarioId ?? raw.ScenarioId ?? null) as string | null,
+    lordName: (raw.lordName ?? raw.LordName ?? null) as string | null,
+    dateLabel: (raw.dateLabel ?? raw.DateLabel ?? null) as string | null,
+  };
+}
+
+function readMockSaveSlots(): StrategySaveSlotSummary[] {
+  const slots: StrategySaveSlotSummary[] = [];
+  for (let slot = 1; slot <= SAVE_SLOT_COUNT; slot++) {
+    const metaRaw = localStorage.getItem(saveSlotMetaStorageKey(slot));
+    if (!metaRaw) {
+      slots.push({ slot, occupied: false });
+      continue;
+    }
+    try {
+      slots.push(normalizeSaveSlotSummary(JSON.parse(metaRaw) as Record<string, unknown>));
+    } catch {
+      slots.push({ slot, occupied: false });
+    }
+  }
+  return slots;
+}
+
+function writeMockSaveSlot(slot: number, json: string, summary: StrategySaveSlotSummary): void {
+  localStorage.setItem(saveSlotStorageKey(slot), json);
+  localStorage.setItem(saveSlotMetaStorageKey(slot), JSON.stringify(summary));
+}
+
+/** 列出 10 个存档位摘要。 */
+export async function listStrategySaveSlots(): Promise<StrategySaveSlotSummary[]> {
+  const mode = getApiMode();
+  if (mode === "mock") {
+    return readMockSaveSlots();
+  }
+
+  const payload = await fetchLive<{ slots?: unknown[]; Slots?: unknown[] }>("GET", "/save-slots");
+  const rows = payload.slots ?? payload.Slots ?? [];
+  return rows.map((row) => normalizeSaveSlotSummary(row as Record<string, unknown>));
+}
+
+/** 将当前仿真写入指定存档位。 */
+export async function saveStrategyToSlot(slot: number): Promise<StrategySaveSlotSummary> {
+  const mode = getApiMode();
+  if (mode === "mock") {
+    const json = await exportStrategySave();
+    const state = normalizeStrategyWorldState(mockGetState());
+    const summary: StrategySaveSlotSummary = {
+      slot,
+      occupied: true,
+      savedAtUtc: new Date().toISOString(),
+      scenarioId: state.scenarioId,
+      lordName: state.lord?.name ?? "当主",
+      dateLabel: `${state.date.year}年${state.date.month}月${state.date.day}日`,
+    };
+    writeMockSaveSlot(slot, json, summary);
+    return summary;
+  }
+
+  const payload = await fetchLive<{ slot?: Record<string, unknown>; Slot?: Record<string, unknown> }>(
+    "PUT",
+    `/save-slots/${slot}`
+  );
+  const row = payload.slot ?? payload.Slot ?? {};
+  return normalizeSaveSlotSummary(row);
+}
+
+/** 从指定存档位恢复仿真。 */
+export async function loadStrategyFromSlot(slot: number): Promise<StrategyWorldState> {
+  const mode = getApiMode();
+  if (mode === "mock") {
+    const raw = localStorage.getItem(saveSlotStorageKey(slot));
+    if (!raw) throw new Error("该档位无存档");
+    return restoreStrategySave(raw);
+  }
+
+  return normalizeStrategyWorldState(
+    await fetchLive<unknown>("POST", `/save-slots/${slot}/load`)
+  );
 }
 
 export type { StrategyApiMode };

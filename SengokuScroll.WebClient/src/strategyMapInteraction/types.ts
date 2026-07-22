@@ -1,5 +1,7 @@
 import type { AnchorSide, PanelRect } from "@/utils/mapCellAnchor";
 
+import type { MapCellEntityOption } from "@/utils/mapCellEntityPicker";
+
 /** Popup 锚点（格点 + 屏幕坐标）。 */
 export interface StrategyMenuAnchor {
   x: number;
@@ -46,12 +48,31 @@ export interface MapSelectConvoyPayload {
   screenY: number;
 }
 
+export interface MapSelectCharacterPayload {
+  characterId: number;
+  screenX: number;
+  screenY: number;
+}
+
+export interface MapSelectCharacterStrongholdPayload extends MapSelectCharacterPayload {
+  strongholdId: number;
+}
+
+export interface MapSelectCellEntitiesPayload {
+  x: number;
+  y: number;
+  screenX: number;
+  screenY: number;
+}
+
 export type MapHoverCellPayload = { x: number; y: number; screenX: number; screenY: number } | null;
 
 export type StrategyMapPopupMode =
   | "none"
+  | "entityPicker"
   | "command"
   | "foreignCommand"
+  | "characterCommand"
   | "strongholdCommand"
   | "foreignStrongholdCommand"
   | "convoyCommand"
@@ -71,6 +92,9 @@ export interface StrategyMapInteractionContext {
   getSelectedConvoyId(): number | null;
   setSelectedConvoyId(convoyId: number | null): void;
 
+  getSelectedCharacterId(): number | null;
+  setSelectedCharacterId(characterId: number | null): void;
+
   getSelectedCell(): { x: number; y: number } | null;
   setSelectedCell(cell: { x: number; y: number } | null): void;
 
@@ -86,6 +110,8 @@ export interface StrategyMapInteractionContext {
   setHoverCell(cell: MapHoverCellPayload): void;
 
   resolveUnitLocation(unitId: number): { x: number; y: number } | null;
+
+  resolveCharacterLocation(characterId: number): { x: number; y: number } | null;
 
   isSelectableUnit(unitId: number): boolean;
 
@@ -116,11 +142,23 @@ export interface StrategyMapInteractionContext {
 
   isPlayerConvoy(convoyId: number): boolean;
 
+  resolvePlayerLordCharacterId(): number | null;
+
+  isPlayerCharacterAtCell(x: number, y: number): boolean;
+
+  isLordInStrongholdAt(strongholdId: number): boolean;
+
+  isValidCharacterMovePathCell(x: number, y: number): boolean;
+
   resolveConvoyLocation(convoyId: number): { x: number; y: number } | null;
 
   resolveStrongholdLocation(strongholdId: number): { x: number; y: number } | null;
 
   resolveStrongholdAtCell(x: number, y: number): number | null;
+
+  getCellEntityOptions(): readonly MapCellEntityOption[];
+
+  setCellEntityOptions(options: readonly MapCellEntityOption[]): void;
 
   transitionTo(state: import("./StrategyMapInteractionState").StrategyMapInteractionState): void;
 }
@@ -133,8 +171,8 @@ export interface StrategyMapInteractionStateSnapshot {
   mapCellSelectionEnabled: boolean;
   mapRightClickEnabled: boolean;
   popupMode: StrategyMapPopupMode;
-  /** 同格第二套命令菜单（单位 + 据点）。 */
-  secondaryPopupMode?: StrategyMapPopupMode | null;
+  /** 同格多实体选择列表。 */
+  cellEntityOptions?: readonly MapCellEntityOption[];
   menuAnchor: StrategyMenuAnchor | null;
   moveTarget: { x: number; y: number } | null;
 }

@@ -82,15 +82,26 @@ public static class UnitCommanderEscapeHelper
         commander.ForceStatus = CharacterForceStatus.Idle;
         commander.LocationType = CharacterLocationType.Stronghold;
         commander.LocationStrongholdId = stronghold.Id;
-        commander.StrongholdId = stronghold.Id;
         commander.Location = stronghold.Location;
 
-        if (StrategyStrongholdLordHelper.IsForceLordResidence(stronghold, meta, gameData)
-            && StrategyStrongholdLordHelper.ResolveForceLordCharacterId(
-                stronghold.ForceId, meta, gameData) == commander.Id)
+        var forceLordId = StrategyStrongholdLordHelper.ResolveForceLordCharacterId(
+            stronghold.ForceId,
+            meta,
+            gameData);
+        var residenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
+            stronghold.ForceId,
+            gameData,
+            meta);
+
+        if (commander.Id == forceLordId)
         {
-            // 业务：当主回居城时同步 EnsureLordResidence，供 DTO 居城标记
-            StrategyStrongholdLordHelper.EnsureLordResidence(stronghold, commander);
+            // 业务：当主出访不改写名义居城 StrongholdId；回居城时再同步
+            if (stronghold.Id == residenceId)
+                StrategyStrongholdLordHelper.EnsureLordResidence(stronghold, commander);
+        }
+        else
+        {
+            commander.StrongholdId = stronghold.Id;
         }
     }
 
@@ -99,18 +110,29 @@ public static class UnitCommanderEscapeHelper
         GameData gameData,
         StrategyScenarioMeta meta)
     {
-        // 业务：优先回所属据点（StrongholdId），其次当主居城，最后势力最大城
+        var forceLordId = StrategyStrongholdLordHelper.ResolveForceLordCharacterId(
+            commander.ForceId,
+            meta,
+            gameData);
+        var residenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
+            commander.ForceId,
+            gameData,
+            meta);
+
+        if (commander.Id == forceLordId
+            && residenceId > 0
+            && gameData.Strongholds.TryGetValue(residenceId, out var lordResidence))
+        {
+            return lordResidence;
+        }
+
+        // 业务：非当主将领优先回所属据点（StrongholdId），其次当主居城，最后势力最大城
         if (commander.StrongholdId > 0
             && gameData.Strongholds.TryGetValue(commander.StrongholdId, out var affiliated)
             && affiliated.ForceId == commander.ForceId)
         {
             return affiliated;
         }
-
-        var residenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
-            commander.ForceId,
-            gameData,
-            meta);
 
         if (residenceId > 0 && gameData.Strongholds.TryGetValue(residenceId, out var residence))
             return residence;

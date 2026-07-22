@@ -5,6 +5,9 @@ public static class StrategyTroopSightRanges
 {
     public const int Default = 2;
 
+    /// <summary>运输队等非战斗地图单位视野半径。</summary>
+    public const int Convoy = 1;
+
     public static int Resolve(int typeId) => Default;
 }
 

@@ -35,6 +35,7 @@ import {
   strongholdHoverFieldValue,
   UNKNOWN_INTEL,
 } from "@/utils/strategyIntelDisplay";
+import { formatStrongholdCityGenerals } from "@/utils/strategyIntelSystemData";
 
 export interface IntelFieldRow {
   label: string;
@@ -59,6 +60,7 @@ function dash(value: string | null | undefined): string {
 }
 
 function forceName(worldState: StrategyWorldState, forceId: number): string {
+  if (forceId === 0) return "—";
   return worldState.forces.find((f) => f.id === forceId)?.name ?? "未知势力";
 }
 
@@ -220,7 +222,7 @@ export function unitDetailIntelRows(
   const stronghold =
     worldState.strongholds.find((s) => s.x === unit.x && s.y === unit.y) ?? null;
   const battlefield = findBattlefieldById(worldState, unit.battlefieldId);
-  const pending = pendingPolicyText(worldState.messengers, unit.id);
+  const pending = pendingPolicyText(worldState.messageCarriers, unit.id);
 
   const rows: IntelFieldRow[] = [
     { label: "势力", value: forceName(worldState, unit.forceId) },
@@ -313,6 +315,12 @@ function strongholdCoreIntelRows(
     {
       label: "代官",
       value: obscurePersonnel ? UNKNOWN_INTEL : (stronghold.mayorName?.trim() || "—"),
+    },
+    {
+      label: "现任",
+      value: obscurePersonnel
+        ? UNKNOWN_INTEL
+        : formatStrongholdCityGenerals(worldState, stronghold.id),
     },
     { label: "类型", value: resolveStrongholdTypeLabel(stronghold, worldState) },
     {

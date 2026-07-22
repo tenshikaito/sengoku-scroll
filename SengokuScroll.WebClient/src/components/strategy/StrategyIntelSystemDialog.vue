@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import type { StrategyWorldState } from "@/api/strategy";
 import StrategyIntelForcePane from "./intel/StrategyIntelForcePane.vue";
 import StrategyIntelMasterDataPane from "./intel/StrategyIntelMasterDataPane.vue";
@@ -17,6 +17,12 @@ const props = defineProps<{
   initialTab?: string;
   /** 打开时默认选中的势力范围过滤（all | realm | homeOnly）。 */
   initialRealmFilter?: IntelRealmFilterMode;
+  /** 打开时预选实体 Id（据点/人物/势力）。 */
+  initialSelectedEntityId?: number | null;
+  /** 聚焦模式：仅显示当前实体的详情二级 Tab，隐藏总览列表与顶栏 Tab。 */
+  focusMode?: boolean;
+  /** 聚焦模式对话框标题。 */
+  focusTitle?: string;
 }>();
 
 const emit = defineEmits<{
@@ -31,6 +37,11 @@ function normalizeTab(tab: string | undefined): string {
 const activeTab = ref(normalizeTab(props.initialTab));
 const realmFilter = ref<IntelRealmFilterMode>("all");
 
+const dialogTitle = computed(() => {
+  if (props.focusMode && props.focusTitle) return props.focusTitle;
+  return "情报";
+});
+
 watch(
   () => props.visible,
   (open) => {
@@ -38,20 +49,6 @@ watch(
       activeTab.value = normalizeTab(props.initialTab);
       realmFilter.value = props.initialRealmFilter ?? "all";
     }
-  }
-);
-
-watch(
-  () => props.initialRealmFilter,
-  (mode) => {
-    if (mode && props.visible) realmFilter.value = mode;
-  }
-);
-
-watch(
-  () => props.initialTab,
-  (tab) => {
-    if (tab) activeTab.value = normalizeTab(tab);
   }
 );
 
@@ -63,15 +60,15 @@ function close() {
 <template>
   <el-dialog
     :model-value="visible"
-    title="情报"
-    width="min(920px, 96vw)"
+    :title="dialogTitle"
+    :width="focusMode ? 'min(640px, 92vw)' : 'min(920px, 96vw)'"
     append-to-body
     destroy-on-close
     class="intel-system-dialog strategy-dialog-centered-footer"
     @update:model-value="emit('update:visible', $event)"
   >
     <template v-if="worldState">
-      <div class="intel-filter-bar">
+      <div v-if="!focusMode" class="intel-filter-bar">
         <el-radio-group v-model="realmFilter" size="small" class="intel-realm-filter">
           <el-radio-button
             v-for="option in INTEL_REALM_FILTER_OPTIONS"
@@ -83,7 +80,31 @@ function close() {
         </el-radio-group>
       </div>
 
-      <el-tabs v-model="activeTab" class="intel-tabs">
+      <template v-if="focusMode">
+        <StrategyIntelForcePane
+          v-if="activeTab === 'force'"
+          :world-state="worldState"
+          :realm-filter="realmFilter"
+          :initial-selected-id="initialSelectedEntityId"
+          detail-only
+        />
+        <StrategyIntelStrongholdPane
+          v-else-if="activeTab === 'stronghold'"
+          :world-state="worldState"
+          :realm-filter="realmFilter"
+          :initial-selected-id="initialSelectedEntityId"
+          detail-only
+        />
+        <StrategyIntelPersonPane
+          v-else-if="activeTab === 'person'"
+          :world-state="worldState"
+          :realm-filter="realmFilter"
+          :initial-selected-id="initialSelectedEntityId"
+          detail-only
+        />
+      </template>
+
+      <el-tabs v-else v-model="activeTab" class="intel-tabs">
         <el-tab-pane label="势力" name="force">
           <StrategyIntelForcePane :world-state="worldState" :realm-filter="realmFilter" />
         </el-tab-pane>
@@ -92,11 +113,16 @@ function close() {
           <StrategyIntelStrongholdPane
             :world-state="worldState"
             :realm-filter="realmFilter"
+            :initial-selected-id="initialSelectedEntityId"
           />
         </el-tab-pane>
 
         <el-tab-pane label="人物" name="person">
-          <StrategyIntelPersonPane :world-state="worldState" :realm-filter="realmFilter" />
+          <StrategyIntelPersonPane
+            :world-state="worldState"
+            :realm-filter="realmFilter"
+            :initial-selected-id="initialSelectedEntityId"
+          />
         </el-tab-pane>
 
         <el-tab-pane label="Master Data" name="masterData">
@@ -121,18 +147,9 @@ function close() {
   margin-bottom: 10px;
 }
 
-.filter-hint {
-  display: none;
-}
-
 .intel-realm-filter :deep(.el-radio-button__inner) {
   font-size: 0.82rem;
   padding: 6px 10px;
-}
-
-.filter-hint {
-  font-size: 0.78rem;
-  color: #64748b;
 }
 
 .intel-tabs :deep(.el-tabs__header) {
