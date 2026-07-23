@@ -63,6 +63,9 @@ public class Diplomacy
     /// <summary>尚未运完的贡赋欠钱（文）。</summary>
     public int ArrearsMoney { get; set; }
 
+    /// <summary>本方对该目标势力的看法条目。</summary>
+    public List<EntityEffect> ViewEffects { get; set; } = [];
+
     public enum DiplomacyStrategy : byte
     {
         /// <summary>

@@ -6,19 +6,39 @@ import StrategyIntelSystemTable from "../StrategyIntelSystemTable.vue";
 import {
   DIPLOMACY_BRIEF_COLUMNS,
   FORCE_LIST_COLUMN_PRESETS,
+  FORCE_PERSON_COLUMNS,
+  FORCE_STRONGHOLD_COLUMNS,
+  FORCE_TECHNOLOGY_COLUMNS,
+  STANCE_EFFECT_COLUMNS,
+  STRONGHOLD_TECHNOLOGY_COLUMNS,
   type ForceListPreset,
 } from "@/utils/strategyIntelSystemColumns";
 import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
 import {
   diplomacyForForceRows,
-  entityEffectsIntelRows,
+  filterDiplomacyRowsByCategory,
+  forceEffectsIntelRows,
+  filterDiplomacyRowsByScope,
+  filterForceRowsByCategory,
   forceCultureDetailRows,
   forceDetailIntelRows,
+  forceHasInnerVassals,
   forceIntelListRows,
   forceIntroText,
+  forceOurViewEffectRows,
+  forcePersonTableRows,
   forceReligionDetailRows,
+  forceStrongholdTableRows,
+  forceTechnologyTableRows,
+  forceTheirViewEffectRows,
+  INTEL_DIPLOMACY_SCOPE_FILTER_OPTIONS,
+  INTEL_FORCE_CATEGORY_FILTER_OPTIONS,
+  isForceRealmRoot,
+  showForceStanceEffectTabsForForce,
+  type IntelDiplomacyScopeFilter,
+  type IntelForceCategoryFilter,
 } from "@/utils/strategyIntelSystemData";
-import { diplomacyRowClassName as diplomacyToneRowClassName } from "@/intelDisplay/IntelDisplayBehaviors";
+import "@/styles/intelCircleRadios.css";
 
 const props = defineProps<{
   worldState: StrategyWorldState;
@@ -27,17 +47,52 @@ const props = defineProps<{
   initialSelectedId?: number | null;
   /** 仅显示详情二级 Tab（隐藏列表）。 */
   detailOnly?: boolean;
+  /** 调试模式：显示全部人物与隐藏属性。 */
+  intelDebugMode?: boolean;
 }>();
 
 const listPreset = ref<ForceListPreset>("status");
-const detailTab = ref<"basic" | "diplomacy" | "culture" | "religion" | "effects" | "intro">(
-  "basic"
-);
+const categoryFilter = ref<IntelForceCategoryFilter>("all");
+const diplomacyScopeFilter = ref<IntelDiplomacyScopeFilter>("all");
+const diplomacyCategoryFilter = ref<IntelForceCategoryFilter>("all");
+const includeInnerVassals = ref(false);
+const detailTab = ref<
+  | "basic"
+  | "strongholds"
+  | "persons"
+  | "diplomacy"
+  | "culture"
+  | "religion"
+  | "technology"
+  | "effects"
+  | "ourView"
+  | "theirView"
+  | "intro"
+>("basic");
 const selectedForceId = ref<number | null>(null);
+
+const detailScopeOptions = computed(() => ({
+  includeInnerVassals: includeInnerVassals.value,
+}));
+
+const showIncludeInnerVassalsOption = computed(() => {
+  if (selectedForceId.value == null) return false;
+  const force = props.worldState.forces.find((item) => item.id === selectedForceId.value);
+  if (!force || force.category === "Merchant" || force.category === "Religion") return false;
+  return isForceRealmRoot(props.worldState, selectedForceId.value) &&
+    forceHasInnerVassals(props.worldState, selectedForceId.value);
+});
+
+const showForceStanceEffectTabs = computed(() =>
+  showForceStanceEffectTabsForForce(props.worldState, selectedForceId.value),
+);
 
 const listColumns = computed(() => FORCE_LIST_COLUMN_PRESETS[listPreset.value]);
 const forceRows = computed(() =>
-  forceIntelListRows(props.worldState, { realmFilter: props.realmFilter })
+  filterForceRowsByCategory(
+    forceIntelListRows(props.worldState, { realmFilter: props.realmFilter }),
+    categoryFilter.value
+  )
 );
 const listRows = computed(
   () => forceRows.value as unknown as Array<Record<string, unknown>>
@@ -46,6 +101,29 @@ const listRows = computed(
 const basicRows = computed(() =>
   selectedForceId.value != null
     ? forceDetailIntelRows(props.worldState, selectedForceId.value)
+    : []
+);
+
+const strongholdRows = computed(() =>
+  selectedForceId.value != null
+    ? forceStrongholdTableRows(
+        props.worldState,
+        selectedForceId.value,
+        detailScopeOptions.value
+      )
+    : []
+);
+
+const personRows = computed(() =>
+  selectedForceId.value != null
+    ? forcePersonTableRows(
+        props.worldState,
+        selectedForceId.value,
+        {
+          ...detailScopeOptions.value,
+          intelDebugMode: props.intelDebugMode,
+        }
+      )
     : []
 );
 
@@ -61,14 +139,66 @@ const religionRows = computed(() =>
     : []
 );
 
-const effectsRows = computed(() => entityEffectsIntelRows());
+const technologyColumns = computed(() =>
+  showIncludeInnerVassalsOption.value && includeInnerVassals.value
+    ? FORCE_TECHNOLOGY_COLUMNS
+    : STRONGHOLD_TECHNOLOGY_COLUMNS
+);
 
-const diplomacyRows = computed(() =>
+const technologyRows = computed(() =>
   selectedForceId.value != null
-    ? diplomacyForForceRows(props.worldState, selectedForceId.value)
+    ? forceTechnologyTableRows(props.worldState, selectedForceId.value, {
+        ...detailScopeOptions.value,
+        showForceColumn:
+          showIncludeInnerVassalsOption.value && includeInnerVassals.value,
+      })
     : []
 );
 
+const effectsRows = computed(() =>
+  selectedForceId.value != null
+    ? forceEffectsIntelRows(props.worldState, selectedForceId.value)
+    : []
+);
+
+const ourViewEffectListRows = computed(
+  () => ourViewEffectRows.value as unknown as Array<Record<string, unknown>>
+);
+
+const theirViewEffectListRows = computed(
+  () => theirViewEffectRows.value as unknown as Array<Record<string, unknown>>
+);
+
+const ourViewEffectRows = computed(() =>
+  selectedForceId.value != null
+    ? forceOurViewEffectRows(props.worldState, selectedForceId.value)
+    : []
+);
+
+const theirViewEffectRows = computed(() =>
+  selectedForceId.value != null
+    ? forceTheirViewEffectRows(props.worldState, selectedForceId.value)
+    : []
+);
+
+const diplomacyRows = computed(() => {
+  if (selectedForceId.value == null) return [];
+  const rows = diplomacyForForceRows(props.worldState, selectedForceId.value);
+  return filterDiplomacyRowsByCategory(
+    filterDiplomacyRowsByScope(rows, diplomacyScopeFilter.value),
+    diplomacyCategoryFilter.value
+  );
+});
+
+const strongholdListRows = computed(
+  () => strongholdRows.value as unknown as Array<Record<string, unknown>>
+);
+const personListRows = computed(
+  () => personRows.value as unknown as Array<Record<string, unknown>>
+);
+const technologyListRows = computed(
+  () => technologyRows.value as unknown as Array<Record<string, unknown>>
+);
 const diplomacyListRows = computed(
   () => diplomacyRows.value as unknown as Array<Record<string, unknown>>
 );
@@ -79,13 +209,41 @@ const introText = computed(() =>
     : "请在上方列表选择势力。"
 );
 
-const diplomacyHint = computed(() => {
+const showDiplomacyScopeFilter = computed(() => {
+  if (selectedForceId.value == null) return false;
   const row = forceRows.value.find((item) => item.id === selectedForceId.value);
-  if (!row) return "";
-  if (row.isOwnRealm) {
-    return "封地势力掌握的外交关系一览（含内藩）。";
+  if (!row || row.forceType !== "武家" || row.status === "内藩") return false;
+  return row.isOwnRealm && isForceRealmRoot(props.worldState, row.id);
+});
+
+function defaultDetailTabForForce(forceId: number): "basic" | "persons" {
+  const force = props.worldState.forces.find((item) => item.id === forceId);
+  if (force?.category === "Merchant" || force?.category === "Religion") return "persons";
+  return "basic";
+}
+
+function onSelectRow(row: Record<string, unknown> | null) {
+  if (!row) {
+    syncDefaultSelection();
+    return;
   }
-  return "他势力外交情报尚未掌握，仅显示与自势力关系。";
+  const nextId = Number(row.id);
+  if (selectedForceId.value !== nextId) {
+    includeInnerVassals.value = false;
+  }
+  selectedForceId.value = nextId;
+}
+
+watch(showForceStanceEffectTabs, (visible) => {
+  if (!visible && (detailTab.value === "ourView" || detailTab.value === "theirView")) {
+    detailTab.value = "basic";
+  }
+});
+
+watch(selectedForceId, (forceId) => {
+  if (forceId == null || !showIncludeInnerVassalsOption.value) {
+    includeInnerVassals.value = false;
+  }
 });
 
 function defaultForceId(): number | null {
@@ -112,33 +270,36 @@ watch(
   (id) => {
     if (id == null) return;
     selectedForceId.value = id;
-    detailTab.value = "basic";
+    detailTab.value = defaultDetailTabForForce(id);
   },
   { immediate: true }
 );
 
 watch(
-  () => [props.worldState, props.realmFilter] as const,
+  () => [props.worldState, props.realmFilter, categoryFilter.value] as const,
   () => syncDefaultSelection(),
   { immediate: true }
 );
 
-function diplomacyRowClassName(row: Record<string, unknown>): string {
-  return diplomacyToneRowClassName(String(row.diplomacyTone ?? ""));
-}
-
-function onSelectRow(row: Record<string, unknown> | null) {
-  if (!row) {
-    syncDefaultSelection();
-    return;
-  }
-  selectedForceId.value = Number(row.id);
-}
 </script>
 
 <template>
   <div class="intel-pane" :class="{ 'intel-pane--detail-only': detailOnly }">
     <template v-if="!detailOnly">
+      <el-radio-group
+        v-model="categoryFilter"
+        class="force-filter-bar intel-circle-radios"
+        aria-label="势力类型筛选"
+      >
+        <el-radio
+          v-for="option in INTEL_FORCE_CATEGORY_FILTER_OPTIONS"
+          :key="option.value"
+          :value="option.value"
+        >
+          {{ option.label }}
+        </el-radio>
+      </el-radio-group>
+
       <el-tabs v-model="listPreset" class="layer-tabs layer-tabs--list">
         <el-tab-pane label="状态" name="status" />
         <el-tab-pane label="军备" name="military" />
@@ -156,25 +317,87 @@ function onSelectRow(row: Record<string, unknown> | null) {
     <div class="detail-section" :class="{ 'detail-section--solo': detailOnly }">
       <el-tabs v-model="detailTab" class="layer-tabs layer-tabs--detail">
         <el-tab-pane label="基本" name="basic" />
+        <el-tab-pane label="据点" name="strongholds" />
+        <el-tab-pane label="现任" name="persons" />
         <el-tab-pane label="外交" name="diplomacy" />
         <el-tab-pane label="文化" name="culture" />
         <el-tab-pane label="信仰" name="religion" />
+        <el-tab-pane label="技术" name="technology" />
         <el-tab-pane label="影响" name="effects" />
+        <el-tab-pane v-if="showForceStanceEffectTabs" label="本家看法" name="ourView" />
+        <el-tab-pane v-if="showForceStanceEffectTabs" label="对本家的看法" name="theirView" />
         <el-tab-pane label="介绍" name="intro" />
       </el-tabs>
+
+      <div
+        v-if="showIncludeInnerVassalsOption && ['strongholds', 'persons', 'technology'].includes(detailTab)"
+        class="intel-detail-scope-bar"
+      >
+        <el-checkbox v-model="includeInnerVassals">包含内藩</el-checkbox>
+      </div>
 
       <div v-if="detailTab === 'basic'" class="detail-body">
         <StrategyIntelBasicDescriptions v-if="basicRows.length" :rows="basicRows" />
         <p v-else class="placeholder">请选择势力。</p>
       </div>
 
+      <div v-else-if="detailTab === 'strongholds'" class="detail-body">
+        <StrategyIntelSystemTable
+          :rows="strongholdListRows"
+          :columns="FORCE_STRONGHOLD_COLUMNS"
+          :highlight-current="false"
+          empty-text="暂无据点数据"
+          :max-height="240"
+        />
+      </div>
+
+      <div v-else-if="detailTab === 'persons'" class="detail-body">
+        <StrategyIntelSystemTable
+          :rows="personListRows"
+          :columns="FORCE_PERSON_COLUMNS"
+          :highlight-current="false"
+          empty-text="暂无现任"
+          :max-height="240"
+        />
+      </div>
+
       <div v-else-if="detailTab === 'diplomacy'" class="detail-body">
-        <p v-if="diplomacyHint" class="detail-hint">{{ diplomacyHint }}</p>
+        <div v-if="showDiplomacyScopeFilter" class="diplomacy-filter-section">
+          <span class="diplomacy-filter-label">关系范围</span>
+          <el-radio-group
+            v-model="diplomacyScopeFilter"
+            class="intel-circle-radios diplomacy-filter-bar"
+            aria-label="外交关系筛选"
+          >
+            <el-radio
+              v-for="option in INTEL_DIPLOMACY_SCOPE_FILTER_OPTIONS"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </el-radio>
+          </el-radio-group>
+        </div>
+        <div class="diplomacy-filter-section">
+          <span class="diplomacy-filter-label">势力类型</span>
+          <el-radio-group
+            v-model="diplomacyCategoryFilter"
+            class="intel-circle-radios diplomacy-filter-bar"
+            aria-label="外交势力类型筛选"
+          >
+            <el-radio
+              v-for="option in INTEL_FORCE_CATEGORY_FILTER_OPTIONS"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </el-radio>
+          </el-radio-group>
+        </div>
         <StrategyIntelSystemTable
           :rows="diplomacyListRows"
           :columns="DIPLOMACY_BRIEF_COLUMNS"
           :highlight-current="false"
-          :row-class-name="diplomacyRowClassName"
           empty-text="暂无外交情报"
           :max-height="200"
         />
@@ -190,8 +413,44 @@ function onSelectRow(row: Record<string, unknown> | null) {
         <p v-else class="placeholder">请选择势力。</p>
       </div>
 
+      <div v-else-if="detailTab === 'technology'" class="detail-body">
+        <StrategyIntelSystemTable
+          :rows="technologyListRows"
+          :columns="technologyColumns"
+          :highlight-current="false"
+          empty-text="暂无技术数据"
+          :max-height="200"
+        />
+      </div>
+
       <div v-else-if="detailTab === 'effects'" class="detail-body">
         <StrategyIntelBasicDescriptions :rows="effectsRows" />
+      </div>
+
+      <div v-else-if="detailTab === 'ourView'" class="detail-body">
+        <StrategyIntelSystemTable
+          v-if="selectedForceId != null"
+          :rows="ourViewEffectListRows"
+          :columns="STANCE_EFFECT_COLUMNS"
+          :highlight-current="false"
+          empty-text="暂无本家对该势力的看法记录"
+          :max-height="220"
+          fill-width
+        />
+        <p v-else class="placeholder">请选择势力。</p>
+      </div>
+
+      <div v-else-if="detailTab === 'theirView'" class="detail-body">
+        <StrategyIntelSystemTable
+          v-if="selectedForceId != null"
+          :rows="theirViewEffectListRows"
+          :columns="STANCE_EFFECT_COLUMNS"
+          :highlight-current="false"
+          empty-text="暂无该势力对本家的看法记录"
+          :max-height="220"
+          fill-width
+        />
+        <p v-else class="placeholder">请选择势力。</p>
       </div>
 
       <div v-else class="detail-body">
@@ -206,6 +465,29 @@ function onSelectRow(row: Record<string, unknown> | null) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.force-filter-bar {
+  margin-bottom: 2px;
+}
+
+.diplomacy-filter-section {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.diplomacy-filter-label {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  font-size: 0.82rem;
+  color: #475569;
+}
+
+.diplomacy-filter-bar {
+  margin-bottom: 0;
 }
 
 .layer-tabs :deep(.el-tabs__header) {
@@ -230,12 +512,6 @@ function onSelectRow(row: Record<string, unknown> | null) {
   min-height: 120px;
 }
 
-.detail-hint {
-  margin: 0 0 8px;
-  font-size: 0.8rem;
-  color: #64748b;
-}
-
 .intro-text {
   margin: 0;
   font-size: 0.88rem;
@@ -247,17 +523,5 @@ function onSelectRow(row: Record<string, unknown> | null) {
   margin: 0;
   font-size: 0.85rem;
   color: #64748b;
-}
-
-:deep(.dip-allied td.el-table__cell) {
-  color: #16a34a;
-}
-
-:deep(.dip-enemy td.el-table__cell) {
-  color: #dc2626;
-}
-
-:deep(.dip-neutral td.el-table__cell) {
-  color: #ea580c;
 }
 </style>

@@ -6,6 +6,7 @@ import {
 } from "@/utils/strategyCharacterPersonality";
 import { resolveIntelTabLabel } from "@/i18n/intelColumns";
 import { listPresetTabsForMainTab as listPresetTabsFromBehaviors } from "@/intelDisplay/IntelDisplayBehaviors";
+import { organizationRoleLabels } from "@/intelDisplay/OrganizationRoleLabelBehavior";
 
 export interface IntelTableColumnDef {
   prop: string;
@@ -19,6 +20,10 @@ export interface IntelTableColumnDef {
   devOnly?: boolean;
   /** 高/中/低档位着色（情报遮蔽）。 */
   band?: boolean;
+  /** 数值偏低（&lt;40 或「低」）时标红，偏高保持默认字色。 */
+  lowRedStat?: boolean;
+  /** 从行数据读取 tone 字段，用于单元格着色（如外交状态列）。 */
+  toneField?: string;
 }
 
 export type ForceListPreset = "status" | "military";
@@ -83,6 +88,7 @@ const PERSONALITY_DEV_COLUMNS: IntelTableColumnDef[] = [
 const FORCE_ALL: IntelTableColumnDef[] = [
   { prop: "name", label: "名称", minWidth: 88 },
   { prop: "lordName", label: "当主", minWidth: 80 },
+  { prop: "forceType", label: "类型", width: 56, align: "center" },
   { prop: "residenceName", label: "居城", minWidth: 88 },
   { prop: "cultureName", label: "文化", width: 72 },
   { prop: "religionName", label: "信仰", width: 72 },
@@ -94,14 +100,15 @@ const FORCE_ALL: IntelTableColumnDef[] = [
   { prop: "soldiers", label: "兵力", width: 96, align: "right" },
   { prop: "money", label: "金钱", width: 96, align: "right" },
   { prop: "food", label: "粮食", width: 96, align: "right" },
-  { prop: "prestige", label: "威望", width: 56, align: "center", band: true },
-  { prop: "orthodoxy", label: "正统", width: 56, align: "center", band: true },
+  { prop: "prestige", label: "威望", width: 56, align: "center", lowRedStat: true },
+  { prop: "orthodoxy", label: "正统", width: 56, align: "center", lowRedStat: true },
 ];
 
 export const FORCE_LIST_COLUMN_PRESETS: Record<ForceListPreset, IntelTableColumnDef[]> = {
   status: pickColumns(FORCE_ALL, [
     "name",
     "lordName",
+    "forceType",
     "cultureName",
     "religionName",
     "residenceName",
@@ -151,6 +158,12 @@ const STRONGHOLD_ALL: IntelTableColumnDef[] = [
   { prop: "morale", label: "士气", width: 56, align: "center" },
   { prop: "training", label: "训练", width: 56, align: "center" },
   { prop: "wounded", label: "伤兵", width: 72, align: "right" },
+  { prop: "cropPattern", label: "作型", width: 72, align: "center" },
+  { prop: "labor", label: "劳力", width: 88, align: "right" },
+  { prop: "cropProgress", label: "农事", width: 96, align: "center" },
+  { prop: "militiaPool", label: "农兵", width: 88, align: "right" },
+  { prop: "standingProfessional", label: "专业队", width: 88, align: "right" },
+  { prop: "standingWounded", label: "伤兵", width: 72, align: "right" },
 ];
 
 export const STRONGHOLD_LIST_COLUMN_PRESETS: Record<
@@ -167,6 +180,8 @@ export const STRONGHOLD_LIST_COLUMN_PRESETS: Record<
     "scale",
     "cityGenerals",
     "population",
+    "cultureName",
+    "religionName",
     "isEncircle",
     "isFictional",
   ]),
@@ -176,8 +191,8 @@ export const STRONGHOLD_LIST_COLUMN_PRESETS: Record<
     "food",
     "stability",
     "popularFeelings",
-    "cultureName",
-    "religionName",
+    "labor",
+    "cropProgress",
     "pollTaxRate",
     "agricultureTaxRate",
     "commerceTaxRate",
@@ -187,6 +202,7 @@ export const STRONGHOLD_LIST_COLUMN_PRESETS: Record<
   military: pickColumns(STRONGHOLD_ALL, [
     "name",
     "garrisonTotal",
+    "militiaPool",
     "morale",
     "training",
     "wounded",
@@ -208,14 +224,87 @@ export const STRONGHOLD_DEFENSE_COLUMNS: IntelTableColumnDef[] = [
   { prop: "defense", label: "城防", width: 72, align: "right" },
 ];
 
+
+export const STRONGHOLD_STANDING_GARRISON_COLUMNS: IntelTableColumnDef[] = [
+  { prop: "unitName", label: "名称", minWidth: 88 },
+  { prop: "typeName", label: "兵种", width: 72 },
+  { prop: "roleLabel", label: "类别", width: 72, align: "center" },
+  { prop: "isMounted", label: "骑马", width: 56, align: "center" },
+  { prop: "soldiers", label: "兵力", width: 80, align: "right" },
+  { prop: "morale", label: "士气", width: 56, align: "center" },
+  { prop: "training", label: "训练", width: 56, align: "center" },
+  { prop: "maintenance", label: "维持费", width: 88, align: "right" },
+];
+
+export const STRONGHOLD_CROP_CYCLE_COLUMNS: IntelTableColumnDef[] = [
+  { prop: "name", label: "季作", width: 72 },
+  { prop: "period", label: "期间", minWidth: 120 },
+  { prop: "progress", label: "进度", width: 88, align: "center" },
+  { prop: "estimatedYield", label: "预估产量", width: 96, align: "right" },
+];
+
+export function cityActorTableColumns(
+  kind: "Merchant" | "Religion",
+): IntelTableColumnDef[] {
+  const labels = organizationRoleLabels(kind);
+  return [
+    { prop: "name", label: "名称", minWidth: 120 },
+    { prop: "primaryLeaderName", label: labels.primary, minWidth: 88 },
+    { prop: "secondaryLeaderName", label: labels.secondary, minWidth: 88 },
+    { prop: "tertiaryLeaderName", label: labels.tertiary, minWidth: 88 },
+    { prop: "branchLabel", label: "分支", width: 56, align: "center" },
+    { prop: "characterCount", label: "人数", width: 56, align: "center" },
+  ];
+}
+
+export const STRONGHOLD_FACTION_PRODUCTION_COLUMNS: IntelTableColumnDef[] = [
+  { prop: "content", label: "生产内容", minWidth: 96 },
+  { prop: "startTime", label: "开始", width: 72, align: "center" },
+  { prop: "endTime", label: "结束", width: 72, align: "center" },
+  { prop: "efficiency", label: "效率", width: 72, align: "center" },
+  { prop: "status", label: "状态", width: 72, align: "center" },
+];
+
+export const STRONGHOLD_TECHNOLOGY_COLUMNS: IntelTableColumnDef[] = [
+  { prop: "name", label: "技术", minWidth: 88 },
+  { prop: "category", label: "类别", width: 72, align: "center" },
+  { prop: "status", label: "掌握", width: 72, align: "center" },
+  { prop: "condition", label: "有效", minWidth: 120 },
+];
+
+export const FORCE_TECHNOLOGY_COLUMNS: IntelTableColumnDef[] = [
+  { prop: "name", label: "技术", minWidth: 88 },
+  { prop: "category", label: "类别", width: 72, align: "center" },
+  { prop: "status", label: "掌握", width: 72, align: "center" },
+  { prop: "forceName", label: "势力", minWidth: 80 },
+  { prop: "condition", label: "有效", minWidth: 120 },
+];
+
+export const PERSON_TASK_COLUMNS: IntelTableColumnDef[] = [
+  { prop: "taskType", label: "类型", width: 56, align: "center" },
+  { prop: "name", label: "名称", minWidth: 88 },
+  { prop: "target", label: "目标", minWidth: 96 },
+  { prop: "status", label: "状态", width: 72, align: "center" },
+  { prop: "remaining", label: "剩余", width: 72, align: "center" },
+];
+
 export const PERSON_RELATION_COLUMNS: IntelTableColumnDef[] = [
-  { prop: "relationType", label: "关系", width: 72 },
   { prop: "characterName", label: "姓名", minWidth: 96 },
-  { prop: "characterId", label: "ID", width: 56, align: "center" },
+  { prop: "relationType", label: "关系", width: 72 },
+  { prop: "relationTone", label: "亲疏", width: 72, align: "center" },
+];
+
+/** 本家/对方看法 · 影响条目表。 */
+export const STANCE_EFFECT_COLUMNS: IntelTableColumnDef[] = [
+  { prop: "name", label: "名称", minWidth: 112 },
+  { prop: "effectTarget", label: "影响", width: 88 },
+  { prop: "magnitude", label: "程度", width: 108, align: "center" },
+  { prop: "description", label: "说明", minWidth: 180 },
 ];
 
 const PERSON_ALL: IntelTableColumnDef[] = [
   { prop: "name", labelKey: "ui.intel.column.personName", label: "姓名", minWidth: 88 },
+  { prop: "personType", label: "身份", width: 72, align: "center" },
   { prop: "forceName", label: "势力", minWidth: 80 },
   { prop: "strongholdName", label: "据点", minWidth: 96 },
   { prop: "isFamily", label: "一门", width: 52, align: "center" },
@@ -291,13 +380,13 @@ export const PERSON_LIST_COLUMN_PRESETS: Record<PersonListPreset, IntelTableColu
     "name",
     "forceName",
     "strongholdName",
+    "personType",
     "leadership",
     "power",
     "politics",
     "strategy",
     "charm",
     "healthStatus",
-    "loyalty",
   ]),
   office: pickColumns(PERSON_ALL, ["name", "role", "superior", "yearsInForce", "age", "isFamily"]),
   order: pickColumns(PERSON_ALL, [
@@ -321,12 +410,40 @@ export const PERSON_LIST_COLUMN_PRESETS: Record<PersonListPreset, IntelTableColu
   ability2: pickColumns(PERSON_ALL, ["name", ...PERSON_SKILL_DETAIL_KEYS_PART2]),
 };
 
+/** 据点 · 城中势力人物表（与人物 Tab 状态列一致）。 */
+export const STRONGHOLD_FACTION_PERSON_COLUMNS: IntelTableColumnDef[] =
+  PERSON_LIST_COLUMN_PRESETS.status;
+
+/** 势力详情 · 据点表。 */
+export const FORCE_STRONGHOLD_COLUMNS: IntelTableColumnDef[] = pickColumns(STRONGHOLD_ALL, [
+  "name",
+  "forceName",
+  "lordName",
+  "category",
+  "scale",
+  "population",
+  "garrisonTotal",
+  "isLordResidence",
+]);
+
+/** 势力详情 · 现任人物表。 */
+export const FORCE_PERSON_COLUMNS: IntelTableColumnDef[] = pickColumns(PERSON_ALL, [
+  "name",
+  "forceName",
+  "strongholdName",
+  "personType",
+  "role",
+  "leadership",
+  "power",
+  "politics",
+]);
+
 export const DIPLOMACY_BRIEF_COLUMNS: IntelTableColumnDef[] = [
   { prop: "forceName", label: "势力", minWidth: 96 },
   { prop: "lordName", label: "当主", minWidth: 80 },
   { prop: "relation", label: "关系", width: 56, align: "center" },
   { prop: "trust", label: "信赖", width: 56, align: "center" },
-  { prop: "diplomacyStatus", label: "状态", width: 64 },
+  { prop: "diplomacyStatus", label: "状态", width: 64, toneField: "diplomacyTone" },
   { prop: "politicalStatus", label: "地位", width: 64 },
   { prop: "arrearsMoney", label: "欠钱", width: 88, align: "right" },
   { prop: "arrearsFood", label: "欠粮", width: 88, align: "right" },

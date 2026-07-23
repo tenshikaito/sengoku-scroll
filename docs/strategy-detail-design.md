@@ -575,6 +575,37 @@ InstantEventFlow
 | `InstantEventMessages` | UI 摘要提前；信使/Message 权威不变 |
 | `POST espionage-intel` | 登记谍报（忍者任务玩法 📋） |
 
+### 6.5c 实体看法 / 影响 / 任务（2026-07 实装）
+
+> 与 §6.5b **谍报 intel**（非自势力数值 masking）不同：本节为 Domain 实体上的 **ViewEffects / ActiveEffects / IntelTasks**，经 DTO 直出情报 UI。
+
+| 组件 | 职责 |
+|------|------|
+| `IntelEntityBootstrapHelper` | 剧本加载后：ServiceDate、IntelTasks、亲属关系基线、兵力/维护/技术缓存、**演示看法 seed** |
+| `CharacterRelationshipBootstrapHelper` | 父母/配偶/仇敌等默认 Relationship、Trust |
+| `CharacterRelationsHelper` | DTO Relations（亲属图 + 五档亲疏，供人际关系 Tab） |
+| `CharacterIntelTasksHelper` | 运行时派生 activeTasks；与 Character.IntelTasks 双轨 |
+| `EntityEffectHelper` | Magnitude 汇总、Loyalty 有效值、三套 formatter |
+| `StrategyWorldStateDto` | MapDiplomacyViewEffects / MapCharacterViewEffects / MapEntityEffects |
+| `StrategyWorldSaveService` | Relationships.ViewEffects、IntelTasks、Diplomacy.ViewEffects 存档 |
+| `strategyIntelSystemData.ts` | 情报 Tab 行数据；DTO 为空时 mock fallback（待移除） |
+
+**势力看法 Tab 规则：**
+
+- 选中 **本家根势力** → 隐藏「本家看法」「对本家的看法」
+- 选中 **内藩** → 显示 Tab，数据来自 `diplomacies[isInnerVassal]`
+- 外交看法 TargetStat：`Diplomacy` / `Relationship` → UI「外交关系」
+
+**人物看法 Tab 规则：**
+
+- 选中 **当主本人** → 隐藏「本人看法」「对本人的看法」
+- 视角固定为 **玩家当主** ↔ 列表选中角色
+- 角色看法 TargetStat：`Relationship`→亲疏、`Trust`→信赖、`PersonalOpinion`→个人观感；**不含外交关系**
+
+**演示 seed（mini_kanto）：** 桶狭间、世仇（势力）；骏河继承之争、杀害本家当主（角色）。待事件系统接管后删除 `SeedDemo*Views`。
+
+详见 [`shared-detail-design.md` §1.2.1a](./shared-detail-design.md) 与 [`strategy-ui-design.md` §7.2 / §9.9](./strategy-ui-design.md)。
+
 ### 6.6 自动战斗的多人同步
 
 ```

@@ -168,6 +168,9 @@ public sealed class StrategyScenarioDefinition
 
     /// <summary>开局显式外交关系（双向写入；省略则仅应用默认规则）。</summary>
     public List<StrategyDiplomacyDefinition> Diplomacies { get; init; } = [];
+
+    /// <summary>剧本级规则选项（行政效率损耗等）。</summary>
+    public StrategyScenarioGameOptions GameOptions { get; init; } = new();
 }
 
 /// <summary>剧本开局外交配置。</summary>

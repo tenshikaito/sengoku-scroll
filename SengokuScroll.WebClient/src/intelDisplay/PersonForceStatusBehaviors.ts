@@ -1,4 +1,6 @@
 import type { StrategyCharacterSummaryState, StrategyStrongholdState, StrategyWorldState } from "@/api/strategyTypes";
+import { organizationRoleLabelAtIndex } from "@/intelDisplay/OrganizationRoleLabelBehavior";
+import { findCharacterCityActor } from "@/utils/personCityActorLookup";
 import { personLocationLabel } from "@/intelDisplay/PersonLocationBehavior";
 
 export abstract class PersonForceStatusCommandTargetBehavior {
@@ -50,17 +52,29 @@ export function personCommandTarget(
 }
 
 export abstract class PersonRoleLabelBehavior {
-  abstract   matches(
-    _worldState: StrategyWorldState,
+  abstract matches(
+    worldState: StrategyWorldState,
     character: StrategyCharacterSummaryState,
     stronghold?: StrategyStrongholdState,
   ): boolean;
 
-  abstract readonly label: string;
+  resolveLabel(
+    _worldState: StrategyWorldState,
+    _character: StrategyCharacterSummaryState,
+    _stronghold?: StrategyStrongholdState,
+  ): string {
+    return this.defaultLabel;
+  }
+
+  protected get defaultLabel(): string {
+    return "—";
+  }
 }
 
 class PlayerLordPersonRoleBehavior extends PersonRoleLabelBehavior {
-  readonly label = "当主";
+  protected override get defaultLabel(): string {
+    return "当主";
+  }
 
   matches(worldState: StrategyWorldState, character: StrategyCharacterSummaryState): boolean {
     const name = character.name?.trim();
@@ -73,8 +87,6 @@ class PlayerLordPersonRoleBehavior extends PersonRoleLabelBehavior {
 }
 
 class StrongholdLordPersonRoleBehavior extends PersonRoleLabelBehavior {
-  readonly label = "领主";
-
   matches(_worldState: StrategyWorldState, character: StrategyCharacterSummaryState, stronghold?: StrategyStrongholdState): boolean {
     if (!stronghold) return false;
     const name = character.name?.trim();
@@ -84,13 +96,15 @@ class StrongholdLordPersonRoleBehavior extends PersonRoleLabelBehavior {
     );
   }
 
-  resolveLabel(stronghold?: StrategyStrongholdState): string {
+  override resolveLabel(_worldState: StrategyWorldState, _character: StrategyCharacterSummaryState, stronghold?: StrategyStrongholdState): string {
     return stronghold?.isLordResidence ? "当主" : "领主";
   }
 }
 
 class MayorPersonRoleBehavior extends PersonRoleLabelBehavior {
-  readonly label = "代官";
+  protected override get defaultLabel(): string {
+    return "代官";
+  }
 
   matches(_worldState: StrategyWorldState, character: StrategyCharacterSummaryState, stronghold?: StrategyStrongholdState): boolean {
     const name = character.name?.trim();
@@ -98,8 +112,26 @@ class MayorPersonRoleBehavior extends PersonRoleLabelBehavior {
   }
 }
 
+class OrganizationCityActorPersonRoleBehavior extends PersonRoleLabelBehavior {
+  matches(worldState: StrategyWorldState, character: StrategyCharacterSummaryState): boolean {
+    const actor = findCharacterCityActor(worldState, character);
+    return actor?.kind === "Merchant" || actor?.kind === "Religion";
+  }
+
+  override resolveLabel(worldState: StrategyWorldState, character: StrategyCharacterSummaryState): string {
+    const actor = findCharacterCityActor(worldState, character);
+    if (!actor || (actor.kind !== "Merchant" && actor.kind !== "Religion")) return "—";
+    const ids = actor.characterIds ?? [];
+    const index = ids.indexOf(character.id);
+    if (index >= 0) return organizationRoleLabelAtIndex(actor.kind, index);
+    return organizationRoleLabelAtIndex(actor.kind, 0);
+  }
+}
+
 class UnitLocationPersonRoleBehavior extends PersonRoleLabelBehavior {
-  readonly label = "将";
+  protected override get defaultLabel(): string {
+    return "将";
+  }
 
   matches(_worldState: StrategyWorldState, character: StrategyCharacterSummaryState): boolean {
     return character.locationType === "Unit";
@@ -107,7 +139,9 @@ class UnitLocationPersonRoleBehavior extends PersonRoleLabelBehavior {
 }
 
 class PrisonerPersonRoleBehavior extends PersonRoleLabelBehavior {
-  readonly label = "俘虏";
+  protected override get defaultLabel(): string {
+    return "俘虏";
+  }
 
   matches(_worldState: StrategyWorldState, character: StrategyCharacterSummaryState): boolean {
     return character.forceStatus === "Prisoner";
@@ -115,10 +149,14 @@ class PrisonerPersonRoleBehavior extends PersonRoleLabelBehavior {
 }
 
 class TaskPersonRoleBehavior extends PersonRoleLabelBehavior {
-  readonly label = "奉行";
+  protected override get defaultLabel(): string {
+    return "奉行";
+  }
 
-  matches(_worldState: StrategyWorldState, character: StrategyCharacterSummaryState): boolean {
-    return character.forceStatus === "Task";
+  matches(worldState: StrategyWorldState, character: StrategyCharacterSummaryState): boolean {
+    if (character.forceStatus !== "Task") return false;
+    const actor = findCharacterCityActor(worldState, character);
+    return actor?.kind !== "Merchant" && actor?.kind !== "Religion";
   }
 }
 
@@ -126,6 +164,7 @@ const PERSON_ROLE_BEHAVIORS: PersonRoleLabelBehavior[] = [
   new PlayerLordPersonRoleBehavior(),
   new StrongholdLordPersonRoleBehavior(),
   new MayorPersonRoleBehavior(),
+  new OrganizationCityActorPersonRoleBehavior(),
   new UnitLocationPersonRoleBehavior(),
   new PrisonerPersonRoleBehavior(),
   new TaskPersonRoleBehavior(),
@@ -143,10 +182,7 @@ export function personRoleLabel(
 
   for (const behavior of PERSON_ROLE_BEHAVIORS) {
     if (!behavior.matches(worldState, character, stronghold)) continue;
-    if (behavior instanceof StrongholdLordPersonRoleBehavior) {
-      return behavior.resolveLabel(stronghold);
-    }
-    return behavior.label;
+    return behavior.resolveLabel(worldState, character, stronghold);
   }
 
   return "—";

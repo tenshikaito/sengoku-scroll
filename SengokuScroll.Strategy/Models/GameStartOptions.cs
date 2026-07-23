@@ -61,6 +61,9 @@ public sealed record GameStartOptions
     /// </summary>
     public required bool InstantEventMessages { get; init; }
 
+    /// <summary>情报调试：显示全部人物与隐藏属性（后期可通过暗门控制）。</summary>
+    public required bool IntelDebugMode { get; init; }
+
     public static GameStartOptions ForDifficulty(StrategyDifficulty difficulty)
         => GameStartOptionsPresets.Resolve(difficulty, customOverride: null);
 }

@@ -1,8 +1,13 @@
-﻿namespace SengokuScroll.Domain.Entities;
+﻿using SengokuScroll.Domain.Entities.Types;
 
-/// <summary>势力（大名/朝廷）：政体、战略战术、省份与外交关系的顶层实体。</summary>
+namespace SengokuScroll.Domain.Entities;
+
+/// <summary>势力（大名/朝廷/商家/寺社）：政体、战略战术、省份与外交关系的顶层实体。</summary>
 public class Force : StrongholdActor
 {
+    /// <summary>武家 | 商家 | 寺社。</summary>
+    public ForceCategory Category { get; set; } = ForceCategory.Military;
+
     /// <summary>
     /// 政体
     /// </summary>
@@ -69,6 +74,27 @@ public class Force : StrongholdActor
 
     /// <summary>势力内直辖→居城贡赋欠钱（文；M4-d）。</summary>
     public int InternalArrearsMoney { get; set; }
+
+    /// <summary>当主角色 Id（冗余缓存；与剧本/运行时登记一致）。</summary>
+    public int? LordCharacterId { get; set; }
+
+    /// <summary>势力介绍（情报 · 介绍 Tab）。</summary>
+    public string? Introduction { get; set; }
+
+    /// <summary>势力总兵力缓存（地图部队 + 封地驻军）。</summary>
+    public int TotalSoldiers { get; set; }
+
+    /// <summary>势力驻军（封地 SubUnit 常备；缓存）。</summary>
+    public int GarrisonSoldiers { get; set; }
+
+    /// <summary>势力农兵池（封地未编组足轻；占位，规则待定）。</summary>
+    public int MilitiaSoldiers { get; set; }
+
+    /// <summary>已掌握/研究中的技术。</summary>
+    public List<EntityTechnology> Technologies { get; set; } = [];
+
+    /// <summary>当前增减益。</summary>
+    public List<EntityEffect> ActiveEffects { get; set; } = [];
 
     public enum ForceStatus : byte
     {

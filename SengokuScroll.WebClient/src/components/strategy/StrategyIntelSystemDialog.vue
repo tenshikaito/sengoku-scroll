@@ -9,6 +9,10 @@ import {
   INTEL_REALM_FILTER_OPTIONS,
   type IntelRealmFilterMode,
 } from "@/utils/intelRealmFilter";
+import {
+  isIntelDebugCheckboxVisible,
+} from "@/utils/strategyIntelVisibility";
+import "@/styles/intelCircleRadios.css";
 
 const props = defineProps<{
   visible: boolean;
@@ -36,6 +40,11 @@ function normalizeTab(tab: string | undefined): string {
 
 const activeTab = ref(normalizeTab(props.initialTab));
 const realmFilter = ref<IntelRealmFilterMode>("all");
+const intelDebugMode = ref(false);
+
+const showIntelDebugCheckbox = computed(
+  () => (props.worldState ? isIntelDebugCheckboxVisible(props.worldState) : false),
+);
 
 const dialogTitle = computed(() => {
   if (props.focusMode && props.focusTitle) return props.focusTitle;
@@ -48,6 +57,7 @@ watch(
     if (open) {
       activeTab.value = normalizeTab(props.initialTab);
       realmFilter.value = props.initialRealmFilter ?? "all";
+      intelDebugMode.value = false;
     }
   }
 );
@@ -69,15 +79,22 @@ function close() {
   >
     <template v-if="worldState">
       <div v-if="!focusMode" class="intel-filter-bar">
-        <el-radio-group v-model="realmFilter" size="small" class="intel-realm-filter">
-          <el-radio-button
+        <el-radio-group v-model="realmFilter" class="intel-realm-filter intel-circle-radios">
+          <el-radio
             v-for="option in INTEL_REALM_FILTER_OPTIONS"
             :key="option.value"
             :value="option.value"
           >
             {{ option.label }}
-          </el-radio-button>
+          </el-radio>
         </el-radio-group>
+        <el-checkbox
+          v-if="showIntelDebugCheckbox"
+          v-model="intelDebugMode"
+          class="intel-debug-checkbox"
+        >
+          调试模式
+        </el-checkbox>
       </div>
 
       <template v-if="focusMode">
@@ -86,6 +103,7 @@ function close() {
           :world-state="worldState"
           :realm-filter="realmFilter"
           :initial-selected-id="initialSelectedEntityId"
+          :intel-debug-mode="intelDebugMode"
           detail-only
         />
         <StrategyIntelStrongholdPane
@@ -100,13 +118,18 @@ function close() {
           :world-state="worldState"
           :realm-filter="realmFilter"
           :initial-selected-id="initialSelectedEntityId"
+          :intel-debug-mode="intelDebugMode"
           detail-only
         />
       </template>
 
       <el-tabs v-else v-model="activeTab" class="intel-tabs">
         <el-tab-pane label="势力" name="force">
-          <StrategyIntelForcePane :world-state="worldState" :realm-filter="realmFilter" />
+          <StrategyIntelForcePane
+            :world-state="worldState"
+            :realm-filter="realmFilter"
+            :intel-debug-mode="intelDebugMode"
+          />
         </el-tab-pane>
 
         <el-tab-pane label="据点" name="stronghold">
@@ -122,6 +145,7 @@ function close() {
             :world-state="worldState"
             :realm-filter="realmFilter"
             :initial-selected-id="initialSelectedEntityId"
+            :intel-debug-mode="intelDebugMode"
           />
         </el-tab-pane>
 
@@ -143,13 +167,17 @@ function close() {
 .intel-filter-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 10px;
 }
 
-.intel-realm-filter :deep(.el-radio-button__inner) {
-  font-size: 0.82rem;
-  padding: 6px 10px;
+.intel-realm-filter {
+  margin-bottom: 0;
+}
+
+.intel-debug-checkbox {
+  flex-shrink: 0;
 }
 
 .intel-tabs :deep(.el-tabs__header) {

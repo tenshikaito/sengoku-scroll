@@ -22,11 +22,7 @@ public static class StrongholdCaptureActions
         stronghold.ForceActor.ForceId = newForceId;
         stronghold.CivilianActor.ForceId = newForceId;
 
-        foreach (var merchant in stronghold.MerchantActors)
-            merchant.ForceId = newForceId;
-
-        foreach (var religion in stronghold.ReligionActors)
-            religion.ForceId = newForceId;
+        // 商家/寺社店 Actor 仍归属各自组织势力，不随领内易手变更。
 
         StrongholdDefenseRules.ApplySiegeDamage(stronghold, siegeDamage);
         stronghold.Defense = (byte)Math.Min(

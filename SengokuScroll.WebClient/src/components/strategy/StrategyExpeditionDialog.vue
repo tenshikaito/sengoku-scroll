@@ -6,13 +6,6 @@ import type {
   StrategyStrongholdState,
 } from "@/api/strategyTypes";
 
-const TROOP_OPTIONS = [
-  { typeId: 1, typeName: "足轻" },
-  { typeId: 2, typeName: "弓兵" },
-  { typeId: 3, typeName: "骑兵" },
-  { typeId: 4, typeName: "铁炮" },
-] as const;
-
 const props = defineProps<{
   visible: boolean;
   stronghold: StrategyStrongholdState | null;
@@ -31,7 +24,26 @@ const emit = defineEmits<{
 
 const unitName = ref("");
 const commanderId = ref<number | null>(null);
-const troopCounts = ref<Record<number, number>>({ 1: 0, 2: 0, 3: 0, 4: 0 });
+const troopCounts = ref<Record<number, number>>({});
+
+const troopOptions = computed(() => {
+  const pools = props.stronghold?.garrisonTroopPools ?? [];
+  if (pools.length > 0) {
+    return pools.map((pool) => ({
+      typeId: pool.typeId,
+      typeName: pool.typeName,
+      max: Math.max(0, pool.soldiers),
+    }));
+  }
+
+  return [
+    {
+      typeId: 1,
+      typeName: "足轻",
+      max: Math.max(0, props.stronghold?.garrisonSoldiers ?? 0),
+    },
+  ];
+});
 
 const availableCommanders = computed(() =>
   props.characters.filter(
@@ -45,30 +57,72 @@ const availableCommanders = computed(() =>
 );
 
 const totalSoldiers = computed(() =>
-  Object.values(troopCounts.value).reduce((sum, n) => sum + Math.max(0, n), 0)
+  troopOptions.value.reduce(
+    (sum, opt) => sum + Math.max(0, troopCounts.value[opt.typeId] ?? 0),
+    0
+  )
 );
 
-const garrisonRemaining = computed(() =>
-  props.stronghold ? Math.max(0, props.stronghold.garrisonSoldiers - totalSoldiers.value) : 0
-);
+const poolRemaining = computed(() => {
+  const remaining: Record<number, number> = {};
+  for (const opt of troopOptions.value) {
+    remaining[opt.typeId] = Math.max(0, opt.max - Math.max(0, troopCounts.value[opt.typeId] ?? 0));
+  }
+  return remaining;
+});
 
-const canConfirm = computed(
-  () =>
-    props.stronghold != null &&
-    commanderId.value != null &&
-    totalSoldiers.value > 0 &&
-    totalSoldiers.value <= (props.stronghold?.garrisonSoldiers ?? 0)
-);
+const laborHint = computed(() => {
+  const sh = props.stronghold;
+  if (!sh || sh.laborCapacity == null) return null;
+  const available = sh.laborAvailable ?? sh.laborCapacity;
+  const ratio = sh.laborRatioPercent ?? 100;
+  const away = sh.militiaAway ?? 0;
+  const pattern = cropPatternLabel(sh.effectiveCropPattern);
+  const progress = [
+    `早稻 ${sh.earlyCropProgressPercent ?? 0}%`,
+    sh.effectiveCropPattern !== "Single" ? `晚稻 ${sh.lateCropProgressPercent ?? 0}%` : null,
+    sh.effectiveCropPattern === "Triple" ? `第三季 ${sh.thirdCropProgressPercent ?? 0}%` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return `作型 ${pattern} · 劳力 ${available.toLocaleString()}/${sh.laborCapacity.toLocaleString()}（${ratio}%） · 外派农兵 ${away.toLocaleString()} · ${progress}`;
+});
+
+const canConfirm = computed(() => {
+  if (props.stronghold == null || commanderId.value == null || totalSoldiers.value <= 0) {
+    return false;
+  }
+
+  return troopOptions.value.every((opt) => {
+    const count = Math.max(0, troopCounts.value[opt.typeId] ?? 0);
+    return count <= opt.max;
+  });
+});
 
 watch(
-  () => [props.visible, props.stronghold?.id] as const,
+  () => [props.visible, props.stronghold?.id, props.stronghold?.garrisonTroopPools] as const,
   ([visible]) => {
     if (!visible || !props.stronghold) return;
     unitName.value = `${props.stronghold.name}出征队`;
-    troopCounts.value = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    const nextCounts: Record<number, number> = {};
+    for (const opt of troopOptions.value) {
+      nextCounts[opt.typeId] = 0;
+    }
+    troopCounts.value = nextCounts;
     commanderId.value = availableCommanders.value[0]?.id ?? null;
   }
 );
+
+function cropPatternLabel(pattern: string | undefined): string {
+  switch (pattern) {
+    case "Double":
+      return "二季作";
+    case "Triple":
+      return "三季作";
+    default:
+      return "单季作";
+  }
+}
 
 function close() {
   emit("update:visible", false);
@@ -77,7 +131,7 @@ function close() {
 function submit() {
   if (!canConfirm.value || commanderId.value == null) return;
 
-  const composition = TROOP_OPTIONS.flatMap((opt) => {
+  const composition = troopOptions.value.flatMap((opt) => {
     const soldiers = Math.max(0, troopCounts.value[opt.typeId] ?? 0);
     if (soldiers <= 0) return [];
     return [
@@ -102,15 +156,16 @@ function submit() {
   <el-dialog
     :model-value="visible"
     :title="stronghold ? `出征 — ${stronghold.name}` : '出征'"
-    width="480px"
+    width="520px"
     append-to-body
     class="strategy-dialog-centered-footer"
     @update:model-value="emit('update:visible', $event)"
   >
     <p v-if="stronghold" class="hint">
-      城内驻军 {{ stronghold.garrisonSoldiers.toLocaleString() }} 兵 · 已分配
-      {{ totalSoldiers.toLocaleString() }} · 剩余 {{ garrisonRemaining.toLocaleString() }}
+      已分配 {{ totalSoldiers.toLocaleString() }} 兵 · 农兵池
+      {{ (stronghold.militiaSoldiers ?? stronghold.garrisonSoldiers).toLocaleString() }}
     </p>
+    <p v-if="laborHint" class="hint agri">{{ laborHint }}</p>
 
     <div class="field">
       <label>部队名称</label>
@@ -131,19 +186,30 @@ function submit() {
     </div>
 
     <div class="field">
-      <label>兵种分配</label>
+      <label>兵种分配（驻城池）</label>
       <div class="troop-grid">
-        <div v-for="opt in TROOP_OPTIONS" :key="opt.typeId" class="troop-row">
+        <div v-for="opt in troopOptions" :key="opt.typeId" class="troop-row">
           <span>{{ opt.typeName }}</span>
-          <el-input-number
-            v-model="troopCounts[opt.typeId]"
-            :min="0"
-            :max="stronghold?.garrisonSoldiers ?? 0"
-            :step="100"
-            controls-position="right"
-          />
+          <div class="troop-input">
+            <el-input-number
+              v-model="troopCounts[opt.typeId]"
+              :min="0"
+              :max="opt.max"
+              :step="100"
+              controls-position="right"
+            />
+            <span class="pool-cap">/ {{ opt.max.toLocaleString() }}</span>
+          </div>
         </div>
       </div>
+      <p class="hint">
+        池内剩余：
+        {{
+          troopOptions
+            .map((opt) => `${opt.typeName} ${poolRemaining[opt.typeId]?.toLocaleString() ?? 0}`)
+            .join(" · ")
+        }}
+      </p>
     </div>
 
     <template #footer>
@@ -158,6 +224,10 @@ function submit() {
   font-size: 0.82rem;
   color: #94a3b8;
   margin: 0 0 12px;
+}
+
+.hint.agri {
+  color: #86efac;
 }
 
 .hint.warn {
@@ -186,5 +256,17 @@ function submit() {
   grid-template-columns: 64px 1fr;
   gap: 10px;
   align-items: center;
+}
+
+.troop-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pool-cap {
+  font-size: 0.78rem;
+  color: #64748b;
+  white-space: nowrap;
 }
 </style>

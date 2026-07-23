@@ -39,6 +39,7 @@ export function resolveOptionsFromWorldState(
     showAllyIntel: start?.showAllyIntel ?? vis?.showAllyIntel ?? false,
     instantEventMessages:
       start?.instantEventMessages ?? vis?.instantEventMessages ?? false,
+    intelDebugMode: start?.intelDebugMode ?? true,
     difficulty: worldState.difficulty,
   };
 }

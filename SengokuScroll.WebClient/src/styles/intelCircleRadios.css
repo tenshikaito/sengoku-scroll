@@ -1,0 +1,27 @@
+.intel-circle-radios {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+
+.intel-circle-radios .el-radio {
+  margin-right: 0;
+  height: auto;
+}
+
+.intel-circle-radios .el-radio__label {
+  font-size: 0.82rem;
+  padding-left: 6px;
+}
+
+.intel-detail-scope-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.intel-detail-scope-bar :deep(.el-checkbox__label) {
+  font-size: 0.82rem;
+}

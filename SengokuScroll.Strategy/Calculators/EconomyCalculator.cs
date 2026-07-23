@@ -129,6 +129,53 @@ public static class EconomyCalculator
     public static int CalculateStrongholdMonthlyMaintenanceMoney(Stronghold stronghold)
         => Math.Max(800, stronghold.Population / 5);
 
+    /// <summary>驻城专业队（UnitId=0 非足轻）月度维护费。</summary>
+    public static int CalculateGarrisonProfessionalMaintenanceMoney(Stronghold stronghold, GameData gameData)
+    {
+        var total = 0;
+
+        foreach (var subId in stronghold.ForceActor.SubUnitIds)
+        {
+            if (!gameData.SubUnits.TryGetValue(subId, out var sub)
+                || sub.UnitId != 0
+                || sub.Soldier <= 0
+                || sub.TypeId == StrategyTroopTypes.Ashigaru)
+                continue;
+
+            total += CalculateGarrisonSubUnitMaintenanceMoney(sub);
+        }
+
+        return total;
+    }
+
+    /// <summary>单个驻城 SubUnit 月维持费（文）。</summary>
+    public static int CalculateGarrisonSubUnitMaintenanceMoney(SubUnit sub)
+    {
+        if (sub.Soldier <= 0)
+            return 0;
+
+        if (sub.TypeId == StrategyTroopTypes.Ashigaru)
+            return 0;
+
+        var baseCost = Math.Max(
+            50,
+            sub.Soldier * GarrisonConstants.ProfessionalMaintenanceMoneyPerSoldier);
+
+        var mountedMultiplier = sub.IsMounted && sub.TypeId != StrategyTroopTypes.Cavalry ? 15_000 : 10_000;
+
+        return sub.TypeId switch
+        {
+            StrategyTroopTypes.Cavalry => baseCost * GarrisonConstants.CavalryMaintenanceMultiplier,
+            StrategyTroopTypes.Matchlock => baseCost * GarrisonConstants.MatchlockMaintenanceMultiplier
+                                          * (sub.IsMounted ? mountedMultiplier : 10_000)
+                                          / EconomyConstants.BasisPointsPer100Percent,
+            StrategyTroopTypes.Archer => baseCost * GarrisonConstants.ArcherMaintenanceMultiplierBp
+                                         * (sub.IsMounted ? mountedMultiplier : 10_000)
+                                         / EconomyConstants.BasisPointsPer100Percent,
+            _ => baseCost
+        };
+    }
+
     /// <summary>势力月度俸禄支出（文）。</summary>
     public static int CalculateForceMonthlySalaryExpense(Force force, GameData gameData)
         => gameData.Characters

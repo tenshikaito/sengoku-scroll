@@ -20,9 +20,10 @@ public class StrategyWorldStateMapperTests
         Assert.Equal(6, dto.Forces.Count);
         Assert.Equal(12, dto.Strongholds.Count);
         Assert.Equal(3, dto.Units.Count);
-        Assert.Equal(3, dto.Diplomacies.Count);
+        Assert.Equal(4, dto.Diplomacies.Count);
         Assert.Contains(dto.Diplomacies, d => d.TargetForceId == 2 && d.Relation == "Enemy");
         Assert.Contains(dto.Diplomacies, d => d.TargetForceId == 4 && d.Relation == "Enemy");
+        Assert.Contains(dto.Diplomacies, d => d.IsInnerVassal);
         Assert.All(dto.Units, u => Assert.True(u.Soldiers > 0));
 
         var odaUnit = dto.Units.First(u => u.Id == 1);
@@ -36,6 +37,11 @@ public class StrategyWorldStateMapperTests
         Assert.Equal("织田信长", ozu.LordName);
         Assert.True(ozu.IsLordResidence);
         Assert.Equal("林秀贞", ozu.MayorName);
+        Assert.Equal(24_000, ozu.LaborCapacity);
+        Assert.Equal(24_000, ozu.LaborAvailable);
+        Assert.Equal(100, ozu.LaborRatioPercent);
+        Assert.NotEmpty(ozu.GarrisonTroopPools);
+        Assert.True(ozu.GarrisonTroopPools.Any(p => p.TypeId == 1 && p.Soldiers > 0));
 
         var inuyama = dto.Strongholds.First(s => s.Id == 2);
         Assert.Equal(6, inuyama.LordId);

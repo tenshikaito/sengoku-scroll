@@ -170,6 +170,39 @@ public sealed record StrategyForceStateDto
 
     /// <summary>继承人角色 Id；无则 null。</summary>
     public int? SuccessorId { get; init; }
+
+    /// <summary>Military | Merchant | Religion。</summary>
+    public required string Category { get; init; }
+
+    /// <summary>当主角色 Id。</summary>
+    public int? LordCharacterId { get; init; }
+
+    /// <summary>当主显示名。</summary>
+    public required string LordName { get; init; }
+
+    /// <summary>势力文化显示名。</summary>
+    public required string CultureName { get; init; }
+
+    /// <summary>势力信仰显示名。</summary>
+    public required string ReligionName { get; init; }
+
+    /// <summary>势力总兵力（缓存）。</summary>
+    public required int TotalSoldiers { get; init; }
+
+    /// <summary>势力驻军（封地常备 SubUnit 合计）。</summary>
+    public required int GarrisonSoldiers { get; init; }
+
+    /// <summary>势力农兵池（占位；规则待定）。</summary>
+    public required int MilitiaSoldiers { get; init; }
+
+    /// <summary>已掌握/研究中的技术（合并 Master Data）。</summary>
+    public required IReadOnlyList<StrategyEntityTechnologyDto> Technologies { get; init; }
+
+    /// <summary>势力介绍。</summary>
+    public string? Introduction { get; init; }
+
+    /// <summary>当前增减益。</summary>
+    public required IReadOnlyList<StrategyEntityEffectDto> ActiveEffects { get; init; }
 }
 
 /// <summary>角色人际关系条目。</summary>
@@ -177,9 +210,55 @@ public sealed record StrategyCharacterRelationDto
 {
     public required string RelationType { get; init; }
 
+    /// <summary>亲疏：亲密 / 友好 / 普通 / 险恶 / 仇视。</summary>
+    public required string RelationTone { get; init; }
+
     public required int CharacterId { get; init; }
 
     public required string CharacterName { get; init; }
+}
+
+/// <summary>增减益 / 看法条目（影响 Tab 共用）。</summary>
+public sealed record StrategyEntityEffectDto
+{
+    public required int Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public required string EffectTarget { get; init; }
+
+    public required string Magnitude { get; init; }
+
+    public required string Description { get; init; }
+}
+
+/// <summary>实体已掌握/研究中的技术（DTO 合并 Master Data）。</summary>
+public sealed record StrategyEntityTechnologyDto
+{
+    public required int Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public required string Category { get; init; }
+
+    /// <summary>0=研究中；1=已完成。</summary>
+    public required int Status { get; init; }
+
+    public string? Target { get; init; }
+
+    public int? Effectivity { get; init; }
+}
+
+/// <summary>角色对另一角色的关系（含看法）。</summary>
+public sealed record StrategyCharacterRelationshipDto
+{
+    public required int TargetCharacterId { get; init; }
+
+    public required int Relationship { get; init; }
+
+    public required int Trust { get; init; }
+
+    public required IReadOnlyList<StrategyEntityEffectDto> ViewEffects { get; init; }
 }
 
 /// <summary>将领摘要（供前端统计与出征编组）。</summary>
@@ -192,6 +271,9 @@ public sealed record StrategyCharacterSummaryDto
     public required string Name { get; init; }
 
     public required int StrongholdId { get; init; }
+
+    /// <summary>所属/驻在据点名称（全图解析；不受迷雾 DTO 过滤）。</summary>
+    public required string StrongholdName { get; init; }
 
     /// <summary>直属上司角色 Id；0 表示无。</summary>
     public required int LeaderId { get; init; }
@@ -239,6 +321,9 @@ public sealed record StrategyCharacterSummaryDto
     /// <summary>任务剩余天数（任务中时有效；未实装时为 null）。</summary>
     public int? TaskRemainingDays { get; init; }
 
+    /// <summary>当前进行中的任务（可多项）。</summary>
+    public required IReadOnlyList<StrategyCharacterTaskDto> ActiveTasks { get; init; }
+
     /// <summary>忠诚度 0–100（暂以情义属性映射）。</summary>
     public required int Loyalty { get; init; }
 
@@ -247,6 +332,30 @@ public sealed record StrategyCharacterSummaryDto
 
     /// <summary>人际关系（父母、配偶、师徒、仇敌等）。</summary>
     public required IReadOnlyList<StrategyCharacterRelationDto> Relations { get; init; }
+
+    /// <summary>角色间关系（含看法；参照外交）。</summary>
+    public required IReadOnlyList<StrategyCharacterRelationshipDto> CharacterRelationships { get; init; }
+
+    /// <summary>人物介绍（来自 Description）。</summary>
+    public string? Introduction { get; init; }
+
+    /// <summary>当前增减益。</summary>
+    public required IReadOnlyList<StrategyEntityEffectDto> ActiveEffects { get; init; }
+}
+
+/// <summary>人物当前任务（情报 · 任务 Tab）。</summary>
+public sealed record StrategyCharacterTaskDto
+{
+    /// <summary>Personal / Life / Force / PartTime。</summary>
+    public required string TaskCategory { get; init; }
+
+    public required string Name { get; init; }
+
+    public required string Target { get; init; }
+
+    public required string Status { get; init; }
+
+    public required string Remaining { get; init; }
 }
 
 /// <summary>地图上独立行动的将领（溃逃、NPC 等）；匿名显示时不暴露身份。</summary>
@@ -425,6 +534,15 @@ public sealed record StrategyDiplomacyStateDto
 
     /// <summary>贡赋欠钱（文）。</summary>
     public required int ArrearsMoney { get; init; }
+
+    /// <summary>本家对该势力的看法。</summary>
+    public required IReadOnlyList<StrategyEntityEffectDto> OurViewEffects { get; init; }
+
+    /// <summary>该势力对本家的看法。</summary>
+    public required IReadOnlyList<StrategyEntityEffectDto> TheirViewEffects { get; init; }
+
+    /// <summary>是否为内藩（展示用；关系值仍可读 Diplomacy）。</summary>
+    public bool IsInnerVassal { get; init; }
 }
 
 /// <summary>据点摘要。</summary>
@@ -453,7 +571,7 @@ public sealed record StrategyStrongholdStateDto
     /// <summary>治安（0–100）。</summary>
     public required int Stability { get; init; }
 
-    /// <summary>行政效率 0–100（含距居城距离损耗与本地腐败）。</summary>
+    /// <summary>行政效率 0–100（100 − 距居城最短可移动路径 × 每格损耗%；内藩/居城为 100）。</summary>
     public required int AdministrativeEfficiency { get; init; }
 
     /// <summary>民心（0–100，取自民间 Actor）。</summary>
@@ -486,8 +604,62 @@ public sealed record StrategyStrongholdStateDto
 
     public required int Money { get; init; }
 
-    /// <summary>城内驻军士兵数（非地图单位）。</summary>
+    /// <summary>城内驻军士兵数（SubUnit 常备，不含农兵池）。</summary>
     public required int GarrisonSoldiers { get; init; }
+
+    /// <summary>可征农兵池（足轻；占位，规则待定）。</summary>
+    public required int MilitiaSoldiers { get; init; }
+
+    /// <summary>总兵力（驻军 + 农兵池）。</summary>
+    public required int TotalSoldiers { get; init; }
+
+    /// <summary>已掌握/研究中的技术（合并 Master Data）。</summary>
+    public required IReadOnlyList<StrategyEntityTechnologyDto> Technologies { get; init; }
+
+    /// <summary>务农劳力上限。</summary>
+    public required int LaborCapacity { get; init; }
+
+    /// <summary>当前可用劳力。</summary>
+    public required int LaborAvailable { get; init; }
+
+    /// <summary>外派农兵占用劳力。</summary>
+    public required int MilitiaAway { get; init; }
+
+    /// <summary>劳力可用比（0–100）。</summary>
+    public required int LaborRatioPercent { get; init; }
+
+    /// <summary>有效作型：Single | Double | Triple。</summary>
+    public required string EffectiveCropPattern { get; init; }
+
+    /// <summary>早稻/单季进度（0–100）。</summary>
+    public required int EarlyCropProgressPercent { get; init; }
+
+    /// <summary>晚稻进度（0–100）。</summary>
+    public required int LateCropProgressPercent { get; init; }
+
+    /// <summary>第三季作进度（0–100）。</summary>
+    public required int ThirdCropProgressPercent { get; init; }
+
+    /// <summary>驻城可出征兵种池。</summary>
+    public required IReadOnlyList<StrategyGarrisonTroopPoolDto> GarrisonTroopPools { get; init; }
+
+    /// <summary>驻城常备军 SubUnit 明细（含农兵池）。</summary>
+    public required IReadOnlyList<StrategyGarrisonStandingUnitDto> StandingGarrisonUnits { get; init; }
+
+    /// <summary>农业季作进度表。</summary>
+    public required IReadOnlyList<StrategyCropCycleStateDto> CropCycles { get; init; }
+
+    /// <summary>农业潜力（市民年产，合）。</summary>
+    public required int AgricultureProductionPotential { get; init; }
+
+    /// <summary>掌握二季作技术。</summary>
+    public required bool KnowsDoubleCrop { get; init; }
+
+    /// <summary>掌握三季作技术。</summary>
+    public required bool KnowsTripleCrop { get; init; }
+
+    /// <summary>据点城内势力（商户、寺社等 Actor）。</summary>
+    public required IReadOnlyList<StrategyStrongholdCityActorStateDto> CityActors { get; init; }
 
     /// <summary>城内伤兵数。</summary>
     public required int GarrisonWounded { get; init; }
@@ -536,6 +708,113 @@ public sealed record StrategyStrongholdStateDto
     public string? EspionageFoodBand { get; init; }
 
     public string? EspionageMoneyBand { get; init; }
+
+    /// <summary>据点规模 1–30。</summary>
+    public required int Scale { get; init; }
+
+    /// <summary>月度维持费（据点类型 + 城防设施）。</summary>
+    public required int Maintenance { get; init; }
+
+    /// <summary>据点介绍。</summary>
+    public string? Introduction { get; init; }
+
+    /// <summary>当前增减益。</summary>
+    public required IReadOnlyList<StrategyEntityEffectDto> ActiveEffects { get; init; }
+}
+
+/// <summary>驻城可出征兵种池条目。</summary>
+public sealed record StrategyGarrisonTroopPoolDto
+{
+    public required int TypeId { get; init; }
+
+    public required string TypeName { get; init; }
+
+    public required int Soldiers { get; init; }
+}
+
+/// <summary>驻城常备军条目（ForceActor 下属 SubUnit / 未编组农兵池）。</summary>
+public sealed record StrategyGarrisonStandingUnitDto
+{
+    public required int SubUnitId { get; init; }
+
+    /// <summary>队名（不含「队」字）。</summary>
+    public required string UnitName { get; init; }
+
+    public required int TypeId { get; init; }
+
+    public required string TypeName { get; init; }
+
+    public required bool IsMounted { get; init; }
+
+    public required int Soldiers { get; init; }
+
+    /// <summary>Militia | Samurai</summary>
+    public required string Role { get; init; }
+
+    public required byte Morale { get; init; }
+
+    public required byte Training { get; init; }
+
+    /// <summary>月维持费（文）。</summary>
+    public required int MaintenanceMoney { get; init; }
+}
+
+/// <summary>一季作的农事与收穫预估。</summary>
+public sealed record StrategyCropCycleStateDto
+{
+    public required int CycleIndex { get; init; }
+
+    public required string Name { get; init; }
+
+    public required int StartMonth { get; init; }
+
+    public required int StartDay { get; init; }
+
+    public required int EndMonth { get; init; }
+
+    public required int EndDay { get; init; }
+
+    public required int ProgressPercent { get; init; }
+
+    public required int ProgressCapPercent { get; init; }
+
+    public required int PotentialYieldGo { get; init; }
+
+    public required int EstimatedYieldGo { get; init; }
+}
+
+/// <summary>据点城内势力 Actor（商户、寺社等）。</summary>
+public sealed record StrategyStrongholdCityActorStateDto
+{
+    public required int Id { get; init; }
+
+    public required string Name { get; init; }
+
+    /// <summary>Government | Merchant | Religion | Kokujin | Civilian</summary>
+    public required string Kind { get; init; }
+
+    public required int Money { get; init; }
+
+    public required int Food { get; init; }
+
+    public required int LuxuryGoods { get; init; }
+
+    public required int CommerceProduction { get; init; }
+
+    public required int AgricultureProduction { get; init; }
+
+    public required int CharacterCount { get; init; }
+
+    public required IReadOnlyList<int> CharacterIds { get; init; }
+
+    /// <summary>势力代表（当主/住持/老板等）。</summary>
+    public required string LeaderName { get; init; }
+
+    /// <summary>本店 | 分店 | —</summary>
+    public required string BranchLabel { get; init; }
+
+    /// <summary>Actor 所属势力 Id（商家/寺社为组织势力；官府为领内武家）。</summary>
+    public required int ForceId { get; init; }
 }
 
 /// <summary>经济设施摘要（M4-d）。</summary>
@@ -1116,6 +1395,8 @@ public sealed record GameStartOptionsDto
     public required bool ShowAllyIntel { get; init; }
 
     public required bool InstantEventMessages { get; init; }
+
+    public bool? IntelDebugMode { get; init; }
 }
 
 /// <summary>存档中的探索态。</summary>
@@ -1186,40 +1467,13 @@ public static class StrategyWorldStateMapper
                 Month = date.Month,
                 Day = date.Day
             },
-            Forces = [.. world.GameData.Forces.Values
-                .Select(f =>
-                {
-                    var realmRootId = TributeRoutingHelper.ResolveRealmRootForceId(f.Id, world.GameData);
-                    return new StrategyForceStateDto
-                    {
-                        Id = f.Id,
-                        Name = f.Name,
-                        Food = f.Food,
-                        Money = f.Money,
-                        Status = f.Status.ToString(),
-                        SuzerainForceId = f.SuzerainForceId,
-                        StrongholdCount = world.GameData.Strongholds.Values.Count(s =>
-                            TributeRoutingHelper.ResolveRealmRootForceId(s.ForceId, world.GameData) == realmRootId),
-                        CharacterCount = world.GameData.Characters.Values.Count(c =>
-                            TributeRoutingHelper.ResolveRealmRootForceId(c.ForceId, world.GameData) == realmRootId),
-                        Prestige = f.Prestige,
-                        Orthodoxy = f.Orthodoxy,
-                        LordResidenceStrongholdId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
-                            f.Id,
-                            world.GameData,
-                            meta),
-                        InternalArrearsFoodGo = f.InternalArrearsFoodGo,
-                        InternalArrearsMoney = f.InternalArrearsMoney,
-                        SuccessorId = f.Successor
-                    };
-                })
-                .OrderBy(f => f.Id)],
+            Forces = [.. BuildForceStateDtos(world, meta)],
             Strongholds = visibilityState is null
                 ? [.. world.GameData.Strongholds.Values
-                    .Select(s => MapStronghold(s, meta, world.GameData, world.GameMasterData))
+                    .Select(s => MapStronghold(s, meta, world))
                     .OrderBy(s => s.Id)]
                 : [.. world.GameData.Strongholds.Values
-                    .Select(s => MapStronghold(s, meta, world.GameData, world.GameMasterData))
+                    .Select(s => MapStronghold(s, meta, world))
                     .Select(dto => StrategyFogDtoRules.ApplyStrongholdFog(
                         dto, meta, world.GameData, visibilityState, tileMap.Width))
                     .Where(dto => dto is not null)
@@ -1247,7 +1501,13 @@ public static class StrategyWorldStateMapper
                 .Select(m => MapMessageCarrier(m, world.GameData))
                 .OrderBy(m => m.Id)],
             Characters = [.. world.GameData.Characters.Values
-                .Select(c => MapCharacter(c, world.GameData.GameDate, world.GameData.Characters))
+                .Select(c => MapCharacter(
+                    c,
+                    world.GameData,
+                    world.GameMasterData,
+                    meta,
+                    world.GameData.Characters,
+                    world.GameData.Strongholds))
                 .OrderBy(c => c.Id)],
             MapCharacters = MapMapCharacters(world, meta, visibilityState),
             EspionageIntel = MapEspionageIntel(espionageLedger),
@@ -1256,6 +1516,75 @@ public static class StrategyWorldStateMapper
             Visibility = visibilityLedger?.BuildDto(world, meta),
             StartOptions = StrategyFogDtoRules.ToOptionsDto(options)
         };
+    }
+
+    private static IEnumerable<StrategyForceStateDto> BuildForceStateDtos(
+        GameWorld world,
+        StrategyScenarioMeta meta)
+    {
+        foreach (var force in world.GameData.Forces.Values)
+        {
+            if (OrganizationForceHelper.IsOrganizationForce(force))
+                OrganizationForceHelper.AccumulateShopTreasury(world.GameData, force);
+        }
+
+        return world.GameData.Forces.Values
+            .Select(f =>
+            {
+                var isOrganization = OrganizationForceHelper.IsOrganizationForce(f);
+                var realmRootId = isOrganization
+                    ? f.Id
+                    : TributeRoutingHelper.ResolveRealmRootForceId(f.Id, world.GameData);
+                var military = ForceIntelHelper.CalculateMilitaryBreakdown(f.Id, world.GameData);
+                return new StrategyForceStateDto
+                {
+                    Id = f.Id,
+                    Name = f.Name,
+                    Food = f.Food,
+                    Money = f.Money,
+                    Status = f.Status.ToString(),
+                    SuzerainForceId = f.SuzerainForceId,
+                    StrongholdCount = isOrganization
+                        ? OrganizationForceHelper.CountShops(world.GameData, f.Id)
+                        : world.GameData.Strongholds.Values.Count(s =>
+                            TributeRoutingHelper.ResolveRealmRootForceId(s.ForceId, world.GameData) == realmRootId),
+                    CharacterCount = isOrganization
+                        ? OrganizationForceHelper.CountCharacters(world.GameData, f.Id)
+                        : world.GameData.Characters.Values.Count(c =>
+                            TributeRoutingHelper.ResolveRealmRootForceId(c.ForceId, world.GameData) == realmRootId),
+                    Prestige = f.Prestige,
+                    Orthodoxy = f.Orthodoxy,
+                    LordResidenceStrongholdId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
+                        f.Id,
+                        world.GameData,
+                        meta),
+                    InternalArrearsFoodGo = f.InternalArrearsFoodGo,
+                    InternalArrearsMoney = f.InternalArrearsMoney,
+                    SuccessorId = f.Successor,
+                    Category = f.Category.ToString(),
+                    LordCharacterId = ForceIntelHelper.ResolveLordCharacterId(f.Id, world.GameData, meta),
+                    LordName = ForceIntelHelper.ResolveLordName(f, world.GameData, meta),
+                    CultureName = ForceIntelHelper.ResolveCultureName(
+                        f,
+                        world.GameData,
+                        world.GameMasterData,
+                        meta),
+                    ReligionName = ForceIntelHelper.ResolveReligionName(
+                        f,
+                        world.GameData,
+                        world.GameMasterData,
+                        meta),
+                    TotalSoldiers = f.TotalSoldiers > 0 ? f.TotalSoldiers : military.Total,
+                    GarrisonSoldiers = f.GarrisonSoldiers > 0 ? f.GarrisonSoldiers : military.Garrison,
+                    MilitiaSoldiers = f.MilitiaSoldiers > 0 ? f.MilitiaSoldiers : military.Militia,
+                    Technologies = TechnologyIntelHelper.MapEntityTechnologies(
+                        f.Technologies,
+                        world.GameMasterData),
+                    Introduction = string.IsNullOrWhiteSpace(f.Introduction) ? null : f.Introduction.Trim(),
+                    ActiveEffects = MapEntityEffects(f.ActiveEffects),
+                };
+            })
+            .OrderBy(f => f.Id);
     }
 
     public static StrategyMapMasterDto ToMapMasterDto(GameWorld world, string scenarioId)
@@ -1592,9 +1921,13 @@ public static class StrategyWorldStateMapper
 
     private static StrategyCharacterSummaryDto MapCharacter(
         Character c,
-        GameDate gameDate,
-        IReadOnlyDictionary<int, Character> characters)
+        GameData gameData,
+        GameMasterData masterData,
+        StrategyScenarioMeta meta,
+        IReadOnlyDictionary<int, Character> characters,
+        IReadOnlyDictionary<int, Stronghold> strongholds)
     {
+        var gameDate = gameData.GameDate;
         var age = Math.Max(0, gameDate.Year - c.Birthday.Year);
         if (gameDate.Month < c.Birthday.Month
             || (gameDate.Month == c.Birthday.Month && gameDate.Day < c.Birthday.Day))
@@ -1610,6 +1943,7 @@ public static class StrategyWorldStateMapper
             StrongholdId = c.LocationType == Character.CharacterLocationType.Stronghold
                 ? c.LocationStrongholdId
                 : c.StrongholdId,
+            StrongholdName = CharacterIntelDisplayHelper.ResolveHomeStrongholdName(c, gameData, meta),
             LeaderId = c.LeaderId,
             LocationType = c.LocationType.ToString(),
             ForceStatus = c.ForceStatus.ToString(),
@@ -1618,9 +1952,9 @@ public static class StrategyWorldStateMapper
             Politics = c.Politics,
             Strategy = c.Strategy,
             Charm = c.Charm,
-            CultureName = "日本",
-            ReligionName = "神道教",
-            YearsInForce = 0,
+            CultureName = CultureReligionDisplayHelper.ResolveCultureName(masterData, c.CultureId),
+            ReligionName = CultureReligionDisplayHelper.ResolveReligionName(masterData, c.RegligionId),
+            YearsInForce = ForceIntelHelper.ResolveYearsInForce(c, gameDate),
             Sex = c.Sex.ToString(),
             Age = age,
             Personality = new StrategyCharacterPersonalityDto
@@ -1659,11 +1993,52 @@ public static class StrategyWorldStateMapper
             IsSick = c.IsSick,
             BirthType = c.Birth.ToString(),
             TaskRemainingDays = c.RecruitTask?.DeadlineDaysRemaining,
-            Loyalty = c.Personality.Friendship,
+            ActiveTasks = CharacterIntelTasksHelper.BuildIntelTasks(c, gameData, meta, strongholds),
+            Loyalty = EntityEffectHelper.ResolveEffectiveLoyalty(c),
             Money = c.Money,
-            Relations = CharacterRelationsHelper.BuildRelations(c, characters)
+            Relations = CharacterRelationsHelper.BuildRelations(c, characters),
+            CharacterRelationships = MapCharacterRelationships(c),
+            Introduction = string.IsNullOrWhiteSpace(c.Description) ? null : c.Description.Trim(),
+            ActiveEffects = MapEntityEffects(c.ActiveEffects),
         };
     }
+
+    /// <summary>角色间关系 + 看法条目 → DTO（ViewEffects 使用亲疏/信赖/个人观感文案）。</summary>
+    private static IReadOnlyList<StrategyCharacterRelationshipDto> MapCharacterRelationships(Character character)
+        => [.. character.Relationships
+            .Select(r => new StrategyCharacterRelationshipDto
+            {
+                TargetCharacterId = r.TargetCharacterId,
+                Relationship = r.Relationship,
+                Trust = r.Trust,
+                ViewEffects = MapCharacterViewEffects(r.ViewEffects),
+            })
+            .OrderBy(r => r.TargetCharacterId)];
+
+    /// <summary>影响 Tab：ActiveEffects 等通用条目。</summary>
+    private static IReadOnlyList<StrategyEntityEffectDto> MapEntityEffects(IEnumerable<EntityEffect> effects)
+        => MapEntityEffects(effects, EntityEffectHelper.FormatTargetStat);
+
+    /// <summary>势力详情 · 本家/对方看法 Tab。</summary>
+    private static IReadOnlyList<StrategyEntityEffectDto> MapDiplomacyViewEffects(IEnumerable<EntityEffect> effects)
+        => MapEntityEffects(effects, EntityEffectHelper.FormatDiplomacyViewTargetStat);
+
+    /// <summary>人物详情 · 本人/对本人看法 Tab（不含外交关系文案）。</summary>
+    private static IReadOnlyList<StrategyEntityEffectDto> MapCharacterViewEffects(IEnumerable<EntityEffect> effects)
+        => MapEntityEffects(effects, EntityEffectHelper.FormatCharacterViewTargetStat);
+
+    /// <summary>EntityEffect → DTO；formatTarget 决定「影响」列中文案。</summary>
+    private static IReadOnlyList<StrategyEntityEffectDto> MapEntityEffects(
+        IEnumerable<EntityEffect> effects,
+        Func<EffectTargetStat, string> formatTarget)
+        => [.. effects.Select(e => new StrategyEntityEffectDto
+        {
+            Id = e.Id,
+            Name = e.Name,
+            EffectTarget = formatTarget(e.TargetStat),
+            Magnitude = EntityEffectHelper.FormatDuration(e.Duration, e.Magnitude),
+            Description = e.Description?.Trim() ?? string.Empty,
+        })];
 
     private static IReadOnlyList<StrategyDiplomacyStateDto> MapPlayerDiplomacies(
         int playerForceId,
@@ -1672,17 +2047,52 @@ public static class StrategyWorldStateMapper
         if (!gameData.Forces.TryGetValue(playerForceId, out var playerForce))
             return [];
 
-        return [.. playerForce.Diplomacies
-            .Select(d => new StrategyDiplomacyStateDto
+        var rows = new List<StrategyDiplomacyStateDto>();
+
+        foreach (var dip in playerForce.Diplomacies)
+        {
+            gameData.Forces.TryGetValue(dip.TargetForceId, out var targetForce);
+            var theirDip = targetForce?.Diplomacies.FirstOrDefault(d => d.TargetForceId == playerForceId);
+            rows.Add(new StrategyDiplomacyStateDto
             {
-                TargetForceId = d.TargetForceId,
-                Relation = d.Relation.ToString(),
-                Relationship = d.Relationship,
-                Trust = d.Trust,
-                ArrearsFoodGo = d.ArrearsFoodGo,
-                ArrearsMoney = d.ArrearsMoney
-            })
-            .OrderBy(d => d.TargetForceId)];
+                TargetForceId = dip.TargetForceId,
+                Relation = dip.Relation.ToString(),
+                Relationship = dip.Relationship,
+                Trust = dip.Trust,
+                ArrearsFoodGo = dip.ArrearsFoodGo,
+                ArrearsMoney = dip.ArrearsMoney,
+                OurViewEffects = MapDiplomacyViewEffects(dip.ViewEffects),
+                TheirViewEffects = MapDiplomacyViewEffects(theirDip?.ViewEffects ?? []),
+                IsInnerVassal = false,
+            });
+        }
+
+        foreach (var force in gameData.Forces.Values)
+        {
+            if (force.Id == playerForceId)
+                continue;
+
+            if (force.Status != Force.ForceStatus.InnerVassal || force.SuzerainForceId != playerForceId)
+                continue;
+
+            if (rows.Any(r => r.TargetForceId == force.Id))
+                continue;
+
+            rows.Add(new StrategyDiplomacyStateDto
+            {
+                TargetForceId = force.Id,
+                Relation = Diplomacy.DiplomacyRelation.Allied.ToString(),
+                Relationship = 80,
+                Trust = 85,
+                ArrearsFoodGo = force.InternalArrearsFoodGo,
+                ArrearsMoney = force.InternalArrearsMoney,
+                OurViewEffects = [],
+                TheirViewEffects = [],
+                IsInnerVassal = true,
+            });
+        }
+
+        return [.. rows.OrderBy(d => d.TargetForceId)];
     }
 
     private static StrategyMessageCarrierStateDto MapMessageCarrier(MessageCarrier m, GameData gameData)
@@ -2119,9 +2529,11 @@ public static class StrategyWorldStateMapper
     private static StrategyStrongholdStateDto MapStronghold(
         Stronghold s,
         StrategyScenarioMeta meta,
-        GameData gameData,
-        GameMasterData masterData)
+        GameWorld world)
     {
+        var gameData = world.GameData;
+        var masterData = world.GameMasterData;
+
         meta.Intel.Strongholds.TryGetValue(s.Id, out var overlay);
 
         var lordName = StrategyStrongholdLordHelper.ResolveStrongholdLordName(s, meta, gameData);
@@ -2141,6 +2553,39 @@ public static class StrategyWorldStateMapper
         var typeId = s.TypeId != 0 ? s.TypeId : (byte)1;
         masterData.StrongholdTypes.TryGetValue(typeId, out var strongholdType);
 
+        var agriculture = s.Agriculture ??= new StrongholdAgricultureState();
+        var regionId = RegionLocationHelper.ResolveRegionId(world, s.Location);
+        var regionPattern = AgricultureCropRules.ResolveRegionCropPattern(meta.RegionHarvestProfiles, regionId);
+        var laborCapacity = AgricultureLaborRules.CalculateLaborCapacity(s);
+        var militiaAway = AgricultureLaborRules.CountMilitiaAway(s, gameData);
+        var laborAvailable = AgricultureLaborRules.CalculateLaborAvailable(s, gameData);
+        var laborRatioPercent = AgricultureLaborRules.CalculateLaborRatioBp(s, gameData) / 100;
+        var effectiveCropPattern = AgricultureCropRules.ResolveEffectiveCropPattern(s, regionPattern);
+        var troopPools = StrongholdMilitaryBootstrapHelper.ListGarrisonTroopPools(s, gameData)
+            .Select(p => new StrategyGarrisonTroopPoolDto
+            {
+                TypeId = p.TypeId,
+                TypeName = p.TypeName,
+                Soldiers = p.Soldiers
+            })
+            .ToList();
+        var standingUnits = StrongholdIntelDtoHelper.MapStandingGarrison(s, gameData);
+        var cropCycles = StrongholdIntelDtoHelper.MapCropCycles(
+            s,
+            effectiveCropPattern,
+            meta.RegionHarvestProfiles,
+            regionId);
+        var cityActors = StrongholdIntelDtoHelper.MapCityActors(s, lordName, gameData, meta);
+        StrongholdMilitaryStatsHelper.Recalculate(s, gameData);
+        StrongholdMaintenanceHelper.Sync(s, masterData);
+
+        var militia = StrongholdMilitaryStatsHelper.GetMilitiaSoldiers(s);
+        var garrison = s.ForceActor.GarrisonSoldiers > 0
+            ? s.ForceActor.GarrisonSoldiers
+            : StrongholdMilitaryStatsHelper.CalculateProfessionalGarrisonSoldiers(s, gameData);
+        var totalSoldiers = militia + garrison;
+        TechnologyIntelHelper.SyncStrongholdTechnologiesFromAgriculture(s);
+
         return new StrategyStrongholdStateDto
         {
             Id = s.Id,
@@ -2156,7 +2601,8 @@ public static class StrategyWorldStateMapper
             AdministrativeEfficiency = AdministrationCalculator.CalculateAdministrativeEfficiencyPercent(
                 s,
                 gameData,
-                meta),
+                meta,
+                world),
             PopularFeelings = s.CivilianActor.PopularFeelings,
             IsLordResidence = isLordResidence,
             LordId = s.LordId,
@@ -2169,7 +2615,27 @@ public static class StrategyWorldStateMapper
             CultureName = overlay?.CultureName ?? "日本",
             ReligionName = overlay?.ReligionName ?? "神道教",
             Money = s.ForceActor.Money,
-            GarrisonSoldiers = s.ForceActor.Soldier,
+            GarrisonSoldiers = garrison,
+            MilitiaSoldiers = militia,
+            TotalSoldiers = totalSoldiers,
+            Technologies = TechnologyIntelHelper.MapEntityTechnologies(
+                s.Technologies,
+                masterData),
+            LaborCapacity = laborCapacity,
+            LaborAvailable = laborAvailable,
+            MilitiaAway = militiaAway,
+            LaborRatioPercent = laborRatioPercent,
+            EffectiveCropPattern = effectiveCropPattern,
+            EarlyCropProgressPercent = agriculture.EarlyCycleProgressBp / 100,
+            LateCropProgressPercent = agriculture.LateCycleProgressBp / 100,
+            ThirdCropProgressPercent = agriculture.ThirdCycleProgressBp / 100,
+            GarrisonTroopPools = troopPools,
+            StandingGarrisonUnits = standingUnits,
+            CropCycles = cropCycles,
+            AgricultureProductionPotential = s.CivilianActor.AgricultureProduction,
+            KnowsDoubleCrop = agriculture.KnowsDoubleCrop,
+            KnowsTripleCrop = agriculture.KnowsTripleCrop,
+            CityActors = cityActors,
             GarrisonWounded = s.ForceActor.Patient,
             PollTaxRate = s.PollTaxRate,
             AgricultureTaxRate = s.AgricultureTaxRate,
@@ -2181,7 +2647,13 @@ public static class StrategyWorldStateMapper
             DefenseFacilities = facilities,
             LuxuryGoods = s.ForceActor.LuxuryGoods,
             EconomyFacilities = MapEconomyFacilities(s),
-            SiegeThreat = StrategyWorldStateDtoSiegeThreatResolver.Resolve(s, gameData)
+            SiegeThreat = StrategyWorldStateDtoSiegeThreatResolver.Resolve(s, gameData),
+            Scale = s.Scale,
+            Maintenance = s.Maintenance,
+            Introduction = string.IsNullOrWhiteSpace(s.Introduction)
+                ? (string.IsNullOrWhiteSpace(s.Description) ? null : s.Description.Trim())
+                : s.Introduction.Trim(),
+            ActiveEffects = MapEntityEffects(s.ActiveEffects),
         };
     }
 

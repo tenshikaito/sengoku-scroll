@@ -1,4 +1,4 @@
-/** 情报系统中仅开发阶段显示的字段。 */
-export function isIntelDevFieldsVisible(): boolean {
-  return import.meta.env.DEV;
+/** 情报系统中由对话框 checkbox 控制的隐藏字段。 */
+export function isIntelDevFieldsVisible(intelDebugMode = false): boolean {
+  return intelDebugMode === true;
 }

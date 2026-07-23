@@ -146,7 +146,8 @@ public static class StrategyTestWorldBuilder
                 EconomyFacilityConstants.MarketFacilityTypeId,
                 EconomyFacilityConstants.LuxuryWorkshopTypeId
             ],
-            HasCoreForceIds = [forceId]
+            HasCoreForceIds = [forceId],
+            Agriculture = new StrongholdAgricultureState()
         };
 
     /// <summary>创建市民 Actor（含默认月产能）。</summary>
@@ -175,7 +176,8 @@ public static class StrategyTestWorldBuilder
         int id,
         int forceId,
         int strongholdId,
-        int food = 0)
+        int food = 0,
+        int garrisonSoldiers = 0)
         => new()
         {
             Id = id,
@@ -185,7 +187,8 @@ public static class StrategyTestWorldBuilder
             StrongholdId = strongholdId,
             CharacterIds = [],
             SubUnitIds = [],
-            Food = food
+            Food = food,
+            Soldier = garrisonSoldiers > 0 ? garrisonSoldiers : 500
         };
 
     /// <summary>创建最小字段集的测试势力。</summary>

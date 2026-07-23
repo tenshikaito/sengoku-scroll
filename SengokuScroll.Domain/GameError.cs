@@ -51,6 +51,9 @@ public sealed class GameError(string code, params object[] data)
 
         /// <summary>征兵资源不足（人口等）。</summary>
         public static GameError InsufficientRecruitResources { get; } = new(nameof(InsufficientRecruitResources));
+
+        /// <summary>城内农兵/专业队储备不足，无法按编组出征。</summary>
+        public static GameError InsufficientGarrisonTroops { get; } = new(nameof(InsufficientGarrisonTroops));
     }
 
     public static class CharacterError

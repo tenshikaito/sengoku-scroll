@@ -50,9 +50,15 @@ public class Actor : IHasForce
     public byte PopularFeelings { get; set; }
 
     /// <summary>
-    /// 兵数
+    /// 农兵池（未编入驻城 SubUnit 的足轻；原 Soldier 语义）。
     /// </summary>
     public int Soldier { get; set; }
+
+    /// <summary>驻城专业队可用兵力（SubUnit 合计，不含伤兵；缓存）。</summary>
+    public int GarrisonSoldiers { get; set; }
+
+    /// <summary>总可用兵力缓存（农兵池 + 驻城专业队）。</summary>
+    public int TotalSoldiers { get; set; }
 
     /// <summary>
     /// 训练度

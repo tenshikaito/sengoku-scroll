@@ -70,6 +70,33 @@ export interface GameStartOptionsState {
   characterSharedVision: boolean;
   showAllyIntel: boolean;
   instantEventMessages: boolean;
+  /** 情报调试：显示全部人物与隐藏属性。 */
+  intelDebugMode: boolean;
+}
+
+export interface StrategyEntityEffectState {
+  id: number;
+  name: string;
+  effectTarget: string;
+  magnitude: string;
+  description: string;
+}
+
+export interface StrategyEntityTechnologyState {
+  id: number;
+  name: string;
+  category: string;
+  /** 0=研究中；1=已完成。 */
+  status: number;
+  target?: string | null;
+  effectivity?: number | null;
+}
+
+export interface StrategyCharacterRelationshipState {
+  targetCharacterId: number;
+  relationship: number;
+  trust: number;
+  viewEffects: StrategyEntityEffectState[];
 }
 
 export interface StrategyCharacterSummaryState {
@@ -77,6 +104,8 @@ export interface StrategyCharacterSummaryState {
   forceId: number;
   name?: string;
   strongholdId?: number;
+  /** 所属/驻在据点名称（服务端全图解析）。 */
+  strongholdName?: string;
   /** 直属上司角色 Id。 */
   leaderId?: number;
   /** Map | Stronghold | Unit */
@@ -103,18 +132,37 @@ export interface StrategyCharacterSummaryState {
   birthType?: string;
   /** 任务剩余天数。 */
   taskRemainingDays?: number | null;
+  /** 当前进行中的任务。 */
+  activeTasks?: StrategyCharacterTaskState[];
   /** 忠诚度 0–100。 */
   loyalty?: number;
   /** 个人金库（文）。 */
   money?: number;
   /** 人际关系（父母、配偶、师徒、仇敌等）。 */
   relations?: StrategyCharacterRelationState[];
+  /** 角色间关系（含看法）。 */
+  characterRelationships?: StrategyCharacterRelationshipState[];
+  /** 人物介绍。 */
+  introduction?: string | null;
+  /** 当前增减益。 */
+  activeEffects?: StrategyEntityEffectState[];
 }
 
 export interface StrategyCharacterRelationState {
   relationType: string;
+  /** 亲疏：亲密 / 友好 / 普通 / 险恶 / 仇视 */
+  relationTone: string;
   characterId: number;
   characterName: string;
+}
+
+export interface StrategyCharacterTaskState {
+  /** Personal | Life | Force | PartTime */
+  taskCategory: string;
+  name: string;
+  target: string;
+  status: string;
+  remaining: string;
 }
 
 /** 地图上独立行动的将领（匿名模式下不暴露身份）。 */
@@ -265,6 +313,9 @@ export interface StrategyDiplomacyState {
   trust?: number;
   arrearsFoodGo?: number;
   arrearsMoney?: number;
+  ourViewEffects?: StrategyEntityEffectState[];
+  theirViewEffects?: StrategyEntityEffectState[];
+  isInnerVassal?: boolean;
 }
 
 export interface StrategyRoadCellState {
@@ -297,6 +348,18 @@ export interface StrategyForceState {
   internalArrearsMoney?: number;
   /** 继承人角色 Id；无则 null。 */
   successorId?: number | null;
+  /** Military | Merchant | Religion */
+  category?: string;
+  lordCharacterId?: number | null;
+  lordName?: string;
+  cultureName?: string;
+  religionName?: string;
+  totalSoldiers?: number;
+  garrisonSoldiers?: number;
+  militiaSoldiers?: number;
+  introduction?: string | null;
+  technologies?: StrategyEntityTechnologyState[];
+  activeEffects?: StrategyEntityEffectState[];
 }
 
 export interface StrategyStrongholdState {
@@ -312,7 +375,7 @@ export interface StrategyStrongholdState {
   food: number;
   population: number;
   stability: number;
-  /** 行政效率 0–100（含距居城距离与腐败）。 */
+  /** 行政效率 0–100（100 − 距居城最短可移动路径 × 每格损耗%）。 */
   administrativeEfficiency?: number;
   popularFeelings: number;
   isLordResidence: boolean;
@@ -327,8 +390,42 @@ export interface StrategyStrongholdState {
   cultureName: string;
   religionName: string;
   money: number;
-  /** 城内驻军士兵数（非地图单位）。 */
+  /** 城内驻军（SubUnit 常备，不含农兵池）。 */
   garrisonSoldiers: number;
+  /** 农兵池（占位；规则待定）。 */
+  militiaSoldiers?: number;
+  /** 总兵力（驻军 + 农兵池）。 */
+  totalSoldiers?: number;
+  /** 务农劳力上限。 */
+  laborCapacity?: number;
+  /** 当前可用劳力。 */
+  laborAvailable?: number;
+  /** 外派农兵占用劳力。 */
+  militiaAway?: number;
+  /** 劳力可用比（0–100）。 */
+  laborRatioPercent?: number;
+  /** 有效作型：Single | Double | Triple。 */
+  effectiveCropPattern?: string;
+  /** 早稻/单季进度（0–100）。 */
+  earlyCropProgressPercent?: number;
+  /** 晚稻进度（0–100）。 */
+  lateCropProgressPercent?: number;
+  /** 第三季作进度（0–100）。 */
+  thirdCropProgressPercent?: number;
+  /** 驻城可出征兵种池。 */
+  garrisonTroopPools?: StrategyGarrisonTroopPoolState[];
+  /** 驻城常备军 SubUnit 明细（含农兵池）。 */
+  standingGarrisonUnits?: StrategyGarrisonStandingUnitState[];
+  /** 农业季作进度表。 */
+  cropCycles?: StrategyCropCycleState[];
+  /** 农业潜力（市民年产，合）。 */
+  agricultureProductionPotential?: number;
+  /** 掌握二季作技术。 */
+  knowsDoubleCrop?: boolean;
+  /** 掌握三季作技术。 */
+  knowsTripleCrop?: boolean;
+  /** 据点城内势力（商户、寺社等）。 */
+  cityActors?: StrategyStrongholdCityActorState[];
   /** 城内伤兵数。 */
   garrisonWounded?: number;
   pollTaxRate: number;
@@ -353,6 +450,66 @@ export interface StrategyStrongholdState {
   espionagePopulationBand?: string | null;
   espionageFoodBand?: string | null;
   espionageMoneyBand?: string | null;
+  /** 据点规模 1–30。 */
+  scale?: number;
+  /** 月度维持费（据点类型 + 城防设施）。 */
+  maintenance?: number;
+  introduction?: string | null;
+  technologies?: StrategyEntityTechnologyState[];
+  activeEffects?: StrategyEntityEffectState[];
+}
+
+export interface StrategyGarrisonTroopPoolState {
+  typeId: number;
+  typeName: string;
+  soldiers: number;
+}
+
+export interface StrategyGarrisonStandingUnitState {
+  subUnitId: number;
+  unitName: string;
+  typeId: number;
+  typeName: string;
+  isMounted: boolean;
+  soldiers: number;
+  /** Militia | Samurai */
+  role: string;
+  morale: number;
+  training: number;
+  maintenanceMoney: number;
+}
+
+export interface StrategyCropCycleState {
+  cycleIndex: number;
+  name: string;
+  startMonth: number;
+  startDay: number;
+  endMonth: number;
+  endDay: number;
+  progressPercent: number;
+  progressCapPercent: number;
+  potentialYieldGo: number;
+  estimatedYieldGo: number;
+}
+
+export interface StrategyStrongholdCityActorState {
+  id: number;
+  name: string;
+  /** Government | Merchant | Religion | Kokujin | Civilian */
+  kind: string;
+  money: number;
+  food: number;
+  luxuryGoods: number;
+  commerceProduction: number;
+  agricultureProduction: number;
+  characterCount: number;
+  characterIds?: number[];
+  /** 势力代表（当主/住持/会长等）。 */
+  leaderName?: string;
+  /** 本院 | 分院 | — */
+  branchLabel?: string;
+  /** 所属组织势力 Id（商家/寺社）；官府为领内武家 Id。 */
+  forceId?: number;
 }
 
 export interface StrategyDefenseFacilityState {

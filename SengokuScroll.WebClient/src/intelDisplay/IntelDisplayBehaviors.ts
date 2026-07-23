@@ -69,6 +69,82 @@ export function diplomacyRowClassName(tone: string | undefined | null): string {
   return DIPLOMACY_ROW_CLASS_BEHAVIORS.find((b) => b.tone === key)?.className ?? "";
 }
 
+/** 外交状态列单元格着色（仅状态列，非整行）。 */
+export function diplomacyStatusCellClassName(tone: string | undefined | null): string {
+  return diplomacyRowClassName(tone);
+}
+
+/** 亲疏/信赖五档着色：一档红、二档橙、三档默认、四档蓝、五档绿（不加粗）。 */
+const RELATION_TIER_CLASS: Record<string, string> = {
+  仇视: "intel-tier--danger",
+  猜疑: "intel-tier--danger",
+  险恶: "intel-tier--warn",
+  警戒: "intel-tier--warn",
+  友好: "intel-tier--favorable",
+  信任: "intel-tier--favorable",
+  亲密: "intel-tier--close",
+  深托: "intel-tier--close",
+};
+
+export function intelRelationTierClass(value: string | undefined | null): string {
+  return RELATION_TIER_CLASS[value?.trim() ?? ""] ?? "";
+}
+
+/** @deprecated 使用 intelRelationTierClass */
+export function intelRelationTierWarningClass(value: string | undefined | null): string {
+  return intelRelationTierClass(value);
+}
+
+/** 亲疏五档：亲密 / 友好 / 普通 / 险恶 / 仇视。 */
+export function diplomacyAffinityTierLabel(
+  score: number | undefined | null,
+  stance: string | undefined | null,
+): string {
+  if (Number.isFinite(Number(score)) && Number(score) !== 0) {
+    const n = Math.trunc(Number(score));
+    if (n >= 80) return "亲密";
+    if (n >= 55) return "友好";
+    if (n >= 35) return "普通";
+    if (n >= 15) return "险恶";
+    return "仇视";
+  }
+  switch (stance) {
+    case "Allied":
+      return "友好";
+    case "Enemy":
+      return "仇视";
+    case "Neutral":
+      return "普通";
+    default:
+      return "—";
+  }
+}
+
+/** 信赖五档：深托 / 信任 / 平常 / 警戒 / 猜疑。 */
+export function diplomacyTrustTierLabel(
+  score: number | undefined | null,
+  stance: string | undefined | null,
+): string {
+  if (Number.isFinite(Number(score)) && Number(score) !== 0) {
+    const n = Math.trunc(Number(score));
+    if (n >= 80) return "深托";
+    if (n >= 55) return "信任";
+    if (n >= 35) return "平常";
+    if (n >= 15) return "警戒";
+    return "猜疑";
+  }
+  switch (stance) {
+    case "Allied":
+      return "信任";
+    case "Enemy":
+      return "猜疑";
+    case "Neutral":
+      return "平常";
+    default:
+      return "—";
+  }
+}
+
 export abstract class IntelBandToneBehavior {
   abstract readonly band: string;
   abstract readonly tone: "high" | "mid" | "low";

@@ -23,7 +23,8 @@ internal sealed class EasyDifficultyPreset : IDifficultyPresetTemplate
             AllySharedVision = true,
             CharacterSharedVision = true,
             ShowAllyIntel = false,
-            InstantEventMessages = true
+            InstantEventMessages = true,
+            IntelDebugMode = false
         };
 }
 
@@ -41,7 +42,8 @@ internal sealed class NormalDifficultyPreset : IDifficultyPresetTemplate
             AllySharedVision = false,
             CharacterSharedVision = false,
             ShowAllyIntel = false,
-            InstantEventMessages = false
+            InstantEventMessages = false,
+            IntelDebugMode = false
         };
 }
 
@@ -59,7 +61,8 @@ internal sealed class HardDifficultyPreset : IDifficultyPresetTemplate
             AllySharedVision = false,
             CharacterSharedVision = false,
             ShowAllyIntel = false,
-            InstantEventMessages = false
+            InstantEventMessages = false,
+            IntelDebugMode = false
         };
 }
 
@@ -80,7 +83,12 @@ public static class DifficultyPresetRegistry
                 customOverride ?? NormalDifficultyPreset.Instance.CreateOptions());
 
         if (Presets.TryGetValue(difficulty, out var preset))
-            return preset.CreateOptions();
+        {
+            var options = preset.CreateOptions();
+            if (customOverride is not null)
+                options = options with { IntelDebugMode = customOverride.IntelDebugMode };
+            return GameStartOptionsProfile.ApplyAllConstraints(options);
+        }
 
         return NormalDifficultyPreset.Instance.CreateOptions();
     }

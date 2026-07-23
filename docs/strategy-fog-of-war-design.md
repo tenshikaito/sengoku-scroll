@@ -2,6 +2,8 @@
 
 > 版本：2026-07-21
 
+> **范围说明**：本文「谍报 intel」指 **ForceIntel 下非自势力数值 masking**（`EspionageIntelRules`）。实体 **看法 / 影响 / 任务** Tab 见 [`shared-detail-design.md` §1.2.1a](./shared-detail-design.md) 与 [`strategy-detail-design.md` §6.5c](./strategy-detail-design.md)。
+
 ## 1. 难度档位（3 模板 + Custom）
 
 | 难度 | Fog | Intel | Control | Instant UI | AllyVision | CharVision |

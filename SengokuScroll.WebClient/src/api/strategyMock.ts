@@ -1,15 +1,393 @@
 import type {
   StrategyAdvanceDayResponse,
   StrategyBattlePreview,
+  StrategyCharacterSummaryState,
   StrategyEvent,
   StrategyInstantBattleResponse,
   StrategyPathPreview,
+  StrategyStrongholdCityActorState,
   StrategyStrongholdState,
   StrategyWorldState,
   MapPoint,
 } from "./strategyTypes";
 import { buildManhattanPath, concatPathSegments } from "@/utils/strategyPathUtils";
 import { GameStartOptionsProfile } from "@/gameStartOptions/GameStartOptionsProfile";
+import { enrichStrongholdDerivedFields } from "@/utils/strategyStrongholdDerivedFields";
+import {
+  buildDefaultMockCharacterIntel,
+  enrichMockCharacterIntel,
+  generateMockPaperDollName,
+} from "@/api/mockIntelCharacterExtras";
+
+const MOCK_ORG_FORCE_IDS = {
+  mitsui: 10_001,
+  imai: 10_002,
+  nanban: 10_003,
+  shoganji: 10_004,
+} as const;
+
+const MOCK_MERCHANT_HOUSES = ["三井屋", "今井屋", "津田屋", "住友屋", "鸿池屋"] as const;
+
+function resolveMockMerchantHouseName(strongholdId: number): (typeof MOCK_MERCHANT_HOUSES)[number] {
+  return MOCK_MERCHANT_HOUSES[Math.max(0, strongholdId - 1) % MOCK_MERCHANT_HOUSES.length];
+}
+
+function resolveMockMerchantOrgId(houseName: string): number {
+  switch (houseName) {
+    case "三井屋":
+      return MOCK_ORG_FORCE_IDS.mitsui;
+    case "今井屋":
+      return MOCK_ORG_FORCE_IDS.imai;
+    case "南蛮商会":
+      return MOCK_ORG_FORCE_IDS.nanban;
+    case "证愿寺":
+      return MOCK_ORG_FORCE_IDS.shoganji;
+    default:
+      return 10_100 + (Math.abs(houseName.charCodeAt(0) * 31 + houseName.length) % 8_900);
+  }
+}
+
+function resolveMockMerchantLeader(houseName: string): string {
+  switch (houseName) {
+    case "三井屋":
+      return "三井高利";
+    case "今井屋":
+      return "今井宗久";
+    case "津田屋":
+      return "津田算长";
+    case "住友屋":
+      return "住友吉次";
+    case "鸿池屋":
+      return "鸿池新七";
+    case "南蛮商会":
+      return "南蛮商人";
+    default:
+      return `${houseName}当主`;
+  }
+}
+
+function resolveMockShopMoney(strongholdId: number, houseName: string): number {
+  if (houseName === "南蛮商会") return 35_000;
+  return 18_000 + Math.max(0, strongholdId) * 2_500;
+}
+
+function buildMockOrganizationForces(
+  strongholds: StrategyStrongholdState[],
+): StrategyWorldState["forces"] {
+  const shopCounts = new Map<number, number>();
+  const characterCounts = new Map<number, number>();
+  const treasury = new Map<number, { money: number; food: number }>();
+  const residenceByOrg = new Map<number, number>();
+
+  for (const stronghold of strongholds) {
+    for (const actor of stronghold.cityActors ?? []) {
+      const orgId = actor.forceId;
+      if (!orgId || orgId <= 0 || (actor.kind !== "Merchant" && actor.kind !== "Religion")) {
+        continue;
+      }
+      shopCounts.set(orgId, (shopCounts.get(orgId) ?? 0) + 1);
+      characterCounts.set(
+        orgId,
+        (characterCounts.get(orgId) ?? 0) + Math.max(actor.characterCount, actor.characterIds?.length ?? 0)
+      );
+      const current = treasury.get(orgId) ?? { money: 0, food: 0 };
+      treasury.set(orgId, {
+        money: current.money + actor.money,
+        food: current.food + actor.food,
+      });
+      if (!residenceByOrg.has(orgId) && (actor.branchLabel === "本店" || actor.branchLabel === "本院")) {
+        residenceByOrg.set(orgId, stronghold.id);
+      }
+    }
+  }
+
+  const orgNames = new Map<number, string>();
+  for (const stronghold of strongholds) {
+    for (const actor of stronghold.cityActors ?? []) {
+      const orgId = actor.forceId;
+      if (!orgId || orgId <= 0) continue;
+      if (actor.kind !== "Merchant" && actor.kind !== "Religion") continue;
+      if (!orgNames.has(orgId)) orgNames.set(orgId, actor.name);
+    }
+  }
+
+  return [...orgNames.entries()]
+    .map(([id, name]) => {
+      const totals = treasury.get(id) ?? { money: 0, food: 0 };
+      return {
+        id,
+        name,
+        food: totals.food,
+        money: totals.money,
+        status: "Independence",
+        strongholdCount: shopCounts.get(id) ?? 0,
+        characterCount: characterCounts.get(id) ?? 0,
+        prestige: 0,
+        orthodoxy: 0,
+        lordResidenceStrongholdId: residenceByOrg.get(id) ?? strongholds[0]?.id ?? 1,
+        category: actorKindFromOrgName(name),
+      };
+    })
+    .filter((force) => (shopCounts.get(force.id) ?? 0) > 0);
+}
+
+function actorKindFromOrgName(name: string): "Merchant" | "Religion" {
+  if (name.includes("寺") || name.includes("社") || name.includes("宫") || name.includes("神社")) {
+    return "Religion";
+  }
+  return "Merchant";
+}
+
+function resolveMockTempleName(name: string): string {
+  switch (name) {
+    case "清洲":
+      return "热田神宫";
+    case "小田原":
+      return "早云寺";
+    case "冈崎":
+      return "八幡宫";
+    case "骏府":
+      return "久能山浅间神社";
+    default:
+      return `${name}寺`;
+  }
+}
+
+function buildMockCityActors(
+  id: number,
+  name: string,
+  population: number,
+  hostForceId: number,
+): StrategyStrongholdCityActorState[] {
+  const commerceValue = Math.max(1000, population * 2);
+  const wildIds = id === 1 ? [90_001, 90_002, 90_003] : [];
+  const actors: StrategyStrongholdCityActorState[] = [
+    {
+      id: id * 1000 + 1,
+      name: `${name}官府`,
+      kind: "Government",
+      forceId: hostForceId,
+      money: 0,
+      food: 0,
+      luxuryGoods: 0,
+      commerceProduction: 0,
+      agricultureProduction: 0,
+      characterCount: 0,
+      characterIds: [],
+    },
+    {
+      id: id * 1000 + 2,
+      name: "民间",
+      kind: "Civilian",
+      money: 0,
+      food: 0,
+      luxuryGoods: 0,
+      commerceProduction: 0,
+      agricultureProduction: 0,
+      characterCount: wildIds.length,
+      characterIds: wildIds,
+    },
+  ];
+
+  if (commerceValue >= 20) {
+    const houseName = id === 1 ? "三井屋" : resolveMockMerchantHouseName(id);
+    const orgId = resolveMockMerchantOrgId(houseName);
+    const leaderId = 90_000 + id * 100 + 7;
+    const characterIds =
+      id === 1 && houseName === "三井屋" ? [90_011, 90_014] : [leaderId];
+    actors.push({
+      id: id * 1000 + 7,
+      name: houseName,
+      kind: "Merchant",
+      forceId: orgId,
+      money: resolveMockShopMoney(id, houseName),
+      food: 2_400_000,
+      luxuryGoods: 100,
+      commerceProduction: Math.max(500, Math.floor(commerceValue / 40)),
+      agricultureProduction: 0,
+      characterCount: characterIds.length,
+      characterIds,
+      leaderName: resolveMockMerchantLeader(houseName),
+      branchLabel: "本店",
+    });
+  }
+
+  if (population >= 40_000) {
+    const templeName = resolveMockTempleName(name);
+    const templeOrgId = resolveMockMerchantOrgId(templeName);
+    const isDemoTemple = id === 1;
+    const priestId = 90_000 + id * 100 + 8;
+    const priestName = isDemoTemple ? "大祝官" : generateMockPaperDollName(priestId, templeName);
+    actors.push({
+      id: id * 1000 + 8,
+      name: templeName,
+      kind: "Religion",
+      forceId: templeOrgId,
+      money: 12_000,
+      food: 1_200_000,
+      luxuryGoods: 20,
+      commerceProduction: 0,
+      agricultureProduction: isDemoTemple ? 240_000 : Math.max(120_000, population * 3),
+      characterCount: isDemoTemple ? 2 : 1,
+      characterIds: isDemoTemple ? [90_020, 90_021] : [priestId],
+      leaderName: priestName,
+      branchLabel: "本院",
+    });
+  }
+
+  if (commerceValue >= 80_000) {
+    const branchLeaderId = id === 1 ? 90_030 : 90_000 + id * 100 + 9;
+    actors.push({
+      id: id * 1000 + 9,
+      name: "南蛮商会",
+      kind: "Merchant",
+      forceId: MOCK_ORG_FORCE_IDS.nanban,
+      money: resolveMockShopMoney(id, "南蛮商会"),
+      food: 1_200_000,
+      luxuryGoods: 300,
+      commerceProduction: Math.max(800, Math.floor(commerceValue / 40)),
+      agricultureProduction: 0,
+      characterCount: 1,
+      characterIds: [branchLeaderId],
+      leaderName: id === 1 ? "柏来图" : resolveMockMerchantLeader("南蛮商会"),
+      branchLabel: "分店",
+    });
+  }
+
+  if (id === 1) {
+    actors.push({
+      id: id * 1000 + 71,
+      name: "今井屋",
+      kind: "Merchant",
+      forceId: MOCK_ORG_FORCE_IDS.imai,
+      money: 28_000,
+      food: 1_200_000,
+      luxuryGoods: 180,
+      commerceProduction: 640,
+      agricultureProduction: 0,
+      characterCount: 2,
+      characterIds: [90_012, 90_013],
+      leaderName: "今井宗久",
+      branchLabel: "分店",
+    });
+    actors.push({
+      id: id * 1000 + 88,
+      name: "证愿寺",
+      kind: "Religion",
+      forceId: MOCK_ORG_FORCE_IDS.shoganji,
+      money: 8_000,
+      food: 600_000,
+      luxuryGoods: 12,
+      commerceProduction: 0,
+      agricultureProduction: 120_000,
+      characterCount: 1,
+      characterIds: [90_022],
+      leaderName: "证愿寺住持",
+      branchLabel: "分院",
+    });
+  }
+
+  return actors.map((actor) => {
+    const suffix = actor.id % 1000;
+    const leaderByCharacterId: Record<number, string> =
+      id === 1
+        ? {
+            90_011: "三井高利",
+            90_014: "三井与一",
+            90_012: "今井宗久",
+            90_013: "津田作左卫门",
+            90_020: "大祝官",
+            90_021: "神官",
+            90_022: "证愿寺住持",
+            90_030: "柏来图",
+          }
+        : {};
+    const leaderFromStaff = actor.characterIds
+      ?.map((characterId) => leaderByCharacterId[characterId])
+      .find((value) => value);
+    const leaderName =
+      actor.leaderName ?? leaderFromStaff ?? (actor.kind === "Government" ? "—" : "—");
+    const branchLabel =
+      actor.branchLabel ??
+      (actor.kind === "Merchant"
+        ? suffix === 7
+          ? "本店"
+          : suffix === 9 || suffix === 71
+            ? "分店"
+            : "—"
+        : actor.kind === "Religion"
+          ? suffix === 8
+            ? "本院"
+            : suffix === 88
+              ? "分院"
+              : "—"
+          : "—");
+    return { ...actor, leaderName, branchLabel };
+  });
+}
+
+function buildMockCityActorCharacters(): StrategyCharacterSummaryState[] {
+  return [
+    enrichMockCharacterIntel({ id: 90_001, forceId: 0, name: "佐藤源平", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle" }),
+    enrichMockCharacterIntel({ id: 90_002, forceId: 0, name: "和田义盛", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle" }),
+    enrichMockCharacterIntel({ id: 90_003, forceId: 0, name: "山本勘助", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle" }),
+    enrichMockCharacterIntel({ id: 90_011, forceId: MOCK_ORG_FORCE_IDS.mitsui, name: "三井高利", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle" }),
+    enrichMockCharacterIntel({ id: 90_014, forceId: MOCK_ORG_FORCE_IDS.mitsui, name: "三井与一", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle", leaderId: 90_011 }),
+    enrichMockCharacterIntel({ id: 90_012, forceId: MOCK_ORG_FORCE_IDS.imai, name: "今井宗久", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle" }),
+    enrichMockCharacterIntel({ id: 90_013, forceId: MOCK_ORG_FORCE_IDS.imai, name: "津田作左卫门", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle" }),
+    enrichMockCharacterIntel({ id: 90_020, forceId: resolveMockMerchantOrgId("热田神宫"), name: "大祝官", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle", religionName: "神道教" }),
+    enrichMockCharacterIntel({ id: 90_021, forceId: resolveMockMerchantOrgId("热田神宫"), name: "神官", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle", religionName: "神道教" }),
+    enrichMockCharacterIntel({ id: 90_022, forceId: MOCK_ORG_FORCE_IDS.shoganji, name: "证愿寺住持", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle", religionName: "佛教" }),
+    enrichMockCharacterIntel({ id: 90_030, forceId: MOCK_ORG_FORCE_IDS.nanban, name: "柏来图", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle", religionName: "基督教" }),
+  ];
+}
+
+function buildMockMilitaryCharacters(): StrategyCharacterSummaryState[] {
+  return [
+    enrichMockCharacterIntel({ id: 1, forceId: 1, name: "织田信长", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle", age: 42 }),
+    enrichMockCharacterIntel({ id: 2, forceId: 1, name: "柴田胜家", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle", age: 38 }),
+    enrichMockCharacterIntel({ id: 4, forceId: 1, name: "林秀贞", strongholdId: 1, locationType: "Stronghold", forceStatus: "Idle", age: 45 }),
+    enrichMockCharacterIntel({ id: 6, forceId: 3, name: "酒井忠次", strongholdId: 2, locationType: "Stronghold", forceStatus: "Idle", age: 40 }),
+  ];
+}
+
+function buildMockCharactersFromWorld(
+  strongholds: StrategyStrongholdState[],
+): StrategyCharacterSummaryState[] {
+  const rows = [...buildMockCityActorCharacters(), ...buildMockMilitaryCharacters()];
+  const existing = new Set(rows.map((row) => row.id));
+
+  for (const stronghold of strongholds) {
+    for (const actor of stronghold.cityActors ?? []) {
+      const characterIds = actor.characterIds ?? [];
+      if (characterIds.length === 0) continue;
+      for (const characterId of characterIds) {
+        if (characterId <= 0 || existing.has(characterId)) continue;
+        const seedLabel = actor.name ?? `人物#${characterId}`;
+        const paperName = generateMockPaperDollName(characterId, seedLabel);
+        const extras = buildDefaultMockCharacterIntel(characterId, seedLabel);
+        rows.push(
+          enrichMockCharacterIntel({
+            id: characterId,
+            forceId: actor.forceId ?? 0,
+            name:
+              actor.leaderName && actor.leaderName !== "—" && actor.characterIds?.[0] === characterId
+                ? actor.leaderName
+                : paperName,
+            strongholdId: stronghold.id,
+            locationType: "Stronghold",
+            forceStatus: "Idle",
+            religionName: actor.kind === "Religion" ? "神道教" : undefined,
+            ...extras,
+          })
+        );
+        existing.add(characterId);
+      }
+    }
+  }
+
+  return rows;
+}
 
 function enrichMockStrongholds(
   items: (Partial<StrategyStrongholdState> &
@@ -18,7 +396,8 @@ function enrichMockStrongholds(
 ): StrategyStrongholdState[] {
   return items.map((s) => {
     const lordId = s.lordId ?? 0;
-    return {
+    const population = s.population ?? 0;
+    const merged = {
       typeId: 1,
       typeName: "平城",
       pollTaxRate: 10,
@@ -35,33 +414,33 @@ function enrichMockStrongholds(
       training: 65,
       cultureName: "日本",
       religionName: "神道教",
+      governancePriority: "Autonomous",
       money: 0,
       food: 0,
-      population: 0,
+      population,
       garrisonSoldiers: 800,
       lordName: "当主",
       ...s,
+      cityActors: (() => {
+        const actors = s.cityActors ?? buildMockCityActors(s.id, s.name, population, s.forceId);
+        const lordName = s.lordName ?? "当主";
+        return actors.map((actor) =>
+          actor.kind === "Government" ? { ...actor, leaderName: lordName } : actor
+        );
+      })(),
       lordId,
       isLordResidence: s.isLordResidence ?? s.name === residenceName,
       isDirectRule: s.isDirectRule ?? lordId === 0,
-    };
+    } satisfies StrategyStrongholdState;
+
+    return enrichStrongholdDerivedFields(merged);
   });
 }
 
 /** mini_kanto 初始状态（与后端 JSON 对齐，供 Mock 使用）。 */
 export function createMiniKantoState(): StrategyWorldState {
   const residenceName = "清洲";
-  return {
-    scenarioId: "mini_kanto",
-    playerForceId: 1,
-    lord: { name: "织田信长", unitId: null, x: 2, y: 8, residenceStrongholdName: residenceName },
-    map: {
-      name: "迷你关东试玩",
-      width: 20,
-      height: 20,
-    },
-    date: { year: 1560, month: 1, day: 1 },
-    forces: [
+  const militaryForces: StrategyWorldState["forces"] = [
       {
         id: 1,
         name: "织田家",
@@ -73,6 +452,21 @@ export function createMiniKantoState(): StrategyWorldState {
         prestige: 72,
         orthodoxy: 65,
         lordResidenceStrongholdId: 1,
+        category: "Military",
+      },
+      {
+        id: 3,
+        name: "酒井家",
+        food: 20000000,
+        money: 2000000,
+        status: "InnerVassal",
+        suzerainForceId: 1,
+        strongholdCount: 1,
+        characterCount: 1,
+        prestige: 58,
+        orthodoxy: 62,
+        lordResidenceStrongholdId: 2,
+        category: "Military",
       },
       {
         id: 2,
@@ -85,6 +479,7 @@ export function createMiniKantoState(): StrategyWorldState {
         prestige: 58,
         orthodoxy: 70,
         lordResidenceStrongholdId: 6,
+        category: "Military",
       },
       {
         id: 5,
@@ -97,6 +492,7 @@ export function createMiniKantoState(): StrategyWorldState {
         prestige: 42,
         orthodoxy: 55,
         lordResidenceStrongholdId: 11,
+        category: "Military",
       },
       {
         id: 6,
@@ -109,13 +505,10 @@ export function createMiniKantoState(): StrategyWorldState {
         prestige: 64,
         orthodoxy: 68,
         lordResidenceStrongholdId: 12,
+        category: "Military",
       },
-    ],
-    diplomacies: [
-      { targetForceId: 2, relation: "Enemy" },
-      { targetForceId: 6, relation: "Allied" },
-    ],
-    strongholds: enrichMockStrongholds(
+  ];
+  const strongholds = enrichMockStrongholds(
       [
       {
         id: 1,
@@ -141,6 +534,7 @@ export function createMiniKantoState(): StrategyWorldState {
         cultureName: "日本",
         religionName: "神道教",
         money: 18000000,
+        garrisonSoldiers: 1500,
       },
       {
         id: 2,
@@ -151,6 +545,7 @@ export function createMiniKantoState(): StrategyWorldState {
         lordId: 6,
         food: 72000000,
         population: 36000,
+        garrisonSoldiers: 1200,
         lordName: "酒井忠次",
         mayorName: "酒井忠次",
         morale: 78,
@@ -172,6 +567,7 @@ export function createMiniKantoState(): StrategyWorldState {
         cultureName: "日本",
         religionName: "神道教",
         money: 7200000,
+        garrisonSoldiers: 1000,
       },
       {
         id: 4,
@@ -181,6 +577,7 @@ export function createMiniKantoState(): StrategyWorldState {
         y: 10,
         food: 108000000,
         population: 72000,
+        garrisonSoldiers: 1800,
         pollTaxRate: 11,
         agricultureTaxRate: 26,
         commerceTaxRate: 14,
@@ -208,6 +605,7 @@ export function createMiniKantoState(): StrategyWorldState {
         cultureName: "日本",
         religionName: "神道教",
         money: 15000000,
+        garrisonSoldiers: 1200,
       },
       {
         id: 6,
@@ -217,6 +615,7 @@ export function createMiniKantoState(): StrategyWorldState {
         y: 14,
         food: 66000000,
         population: 39000,
+        garrisonSoldiers: 1400,
         morale: 76,
         training: 60,
         cultureName: "日本",
@@ -236,6 +635,7 @@ export function createMiniKantoState(): StrategyWorldState {
         cultureName: "日本",
         religionName: "神道教",
         money: 4800000,
+        garrisonSoldiers: 800,
       },
       {
         id: 8,
@@ -245,6 +645,7 @@ export function createMiniKantoState(): StrategyWorldState {
         y: 16,
         food: 60000000,
         population: 30000,
+        garrisonSoldiers: 900,
         morale: 75,
         training: 55,
         cultureName: "日本",
@@ -264,6 +665,7 @@ export function createMiniKantoState(): StrategyWorldState {
         cultureName: "日本",
         religionName: "神道教",
         money: 3600000,
+        garrisonSoldiers: 700,
       },
       {
         id: 10,
@@ -273,6 +675,7 @@ export function createMiniKantoState(): StrategyWorldState {
         y: 16,
         food: 36000000,
         population: 18000,
+        garrisonSoldiers: 800,
         morale: 70,
         training: 54,
         cultureName: "日本",
@@ -294,6 +697,7 @@ export function createMiniKantoState(): StrategyWorldState {
         cultureName: "日本",
         religionName: "神道教",
         money: 4200000,
+        garrisonSoldiers: 900,
       },
       {
         id: 12,
@@ -305,6 +709,7 @@ export function createMiniKantoState(): StrategyWorldState {
         lordName: "德川家康",
         food: 54000000,
         population: 33000,
+        garrisonSoldiers: 1100,
         morale: 77,
         training: 63,
         cultureName: "日本",
@@ -313,7 +718,25 @@ export function createMiniKantoState(): StrategyWorldState {
       },
     ],
       residenceName
-    ),
+    );
+  const organizationForces = buildMockOrganizationForces(strongholds);
+  return {
+    scenarioId: "mini_kanto",
+    playerForceId: 1,
+    lord: { name: "织田信长", unitId: null, x: 2, y: 8, residenceStrongholdName: residenceName },
+    map: {
+      name: "迷你关东试玩",
+      width: 20,
+      height: 20,
+    },
+    date: { year: 1560, month: 1, day: 1 },
+    forces: [...militaryForces, ...organizationForces],
+    diplomacies: [
+      { targetForceId: 2, relation: "Enemy" },
+      { targetForceId: 6, relation: "Allied" },
+    ],
+    strongholds,
+    characters: buildMockCharactersFromWorld(strongholds),
     units: [
       {
         id: 1,

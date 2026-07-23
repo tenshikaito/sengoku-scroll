@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import type { StrategyWorldState } from "@/api/strategy";
 import StrategyIntelBasicDescriptions from "../StrategyIntelBasicDescriptions.vue";
 import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
+import { resolvePlayerLordCharacterId } from "@/utils/strategyPlayerCharacter";
 import StrategyIntelPersonSkills from "../StrategyIntelPersonSkills.vue";
 import StrategyIntelPersonStats from "../StrategyIntelPersonStats.vue";
 import StrategyIntelSystemTable from "../StrategyIntelSystemTable.vue";
@@ -10,18 +11,27 @@ import {
   PERSON_LIST_COLUMN_PRESETS,
   PERSON_PERSONAL_DEV_ONLY_PROPS,
   PERSON_RELATION_COLUMNS,
+  PERSON_TASK_COLUMNS,
+  STANCE_EFFECT_COLUMNS,
   type PersonListPreset,
 } from "@/utils/strategyIntelSystemColumns";
 import { isIntelDevFieldsVisible } from "@/utils/strategyIntelDev";
 import {
-  entityEffectsIntelRows,
+  filterPersonRowsByCategory,
+  personEffectsIntelRows,
+  INTEL_PERSON_CATEGORY_FILTER_OPTIONS,
   personDetailIntelRows,
   personIntelRows,
   personIntroText,
+  personViewOfCharacterRows,
   personRelationshipTableRows,
   personSkillDetailRows,
   personStatDetailRows,
+  personTaskTableRows,
+  personCharacterViewOfLordRows,
+  type IntelPersonCategoryFilter,
 } from "@/utils/strategyIntelSystemData";
+import "@/styles/intelCircleRadios.css";
 
 const props = defineProps<{
   worldState: StrategyWorldState;
@@ -30,18 +40,46 @@ const props = defineProps<{
   initialSelectedId?: number | null;
   /** 仅显示详情二级 Tab（隐藏列表）。 */
   detailOnly?: boolean;
+  /** 调试模式：显示全部人物与隐藏属性。 */
+  intelDebugMode?: boolean;
 }>();
 
 const listPreset = ref<PersonListPreset>("status");
-const detailTab = ref<"basic" | "attributes" | "skills" | "relations" | "effects" | "intro">("basic");
+const categoryFilter = ref<IntelPersonCategoryFilter>("all");
+const detailTab = ref<
+  | "basic"
+  | "attributes"
+  | "skills"
+  | "tasks"
+  | "relations"
+  | "effects"
+  | "viewOfCharacter"
+  | "characterView"
+  | "intro"
+>("basic");
 const selectedPersonId = ref<number | null>(null);
 
+const playerLordCharacterId = computed(() => resolvePlayerLordCharacterId(props.worldState));
+
+const showPersonStanceEffectTabs = computed(() => {
+  if (selectedPersonId.value == null) return false;
+  const lordId = playerLordCharacterId.value;
+  if (lordId != null && selectedPersonId.value === lordId) return false;
+  return props.worldState.characters?.some((item) => item.id === selectedPersonId.value) ?? false;
+});
+
 const personRows = computed(() =>
-  personIntelRows(props.worldState, { realmFilter: props.realmFilter })
+  filterPersonRowsByCategory(
+    personIntelRows(props.worldState, {
+      realmFilter: props.realmFilter,
+      intelDebugMode: props.intelDebugMode,
+    }),
+    categoryFilter.value
+  )
 );
 const listColumns = computed(() => {
   const cols = PERSON_LIST_COLUMN_PRESETS[listPreset.value];
-  if (listPreset.value === "personal" && !isIntelDevFieldsVisible()) {
+  if (listPreset.value === "personal" && !isIntelDevFieldsVisible(props.intelDebugMode)) {
     const devProps = new Set<string>(PERSON_PERSONAL_DEV_ONLY_PROPS);
     return cols.filter((col) => !devProps.has(col.prop));
   }
@@ -53,28 +91,62 @@ const listRows = computed(
 
 const basicRows = computed(() =>
   selectedPersonId.value != null
-    ? personDetailIntelRows(props.worldState, selectedPersonId.value)
+    ? personDetailIntelRows(props.worldState, selectedPersonId.value, props.intelDebugMode)
     : []
 );
 
 const statRows = computed(() =>
   selectedPersonId.value != null
-    ? personStatDetailRows(props.worldState, selectedPersonId.value)
+    ? personStatDetailRows(props.worldState, selectedPersonId.value, props.intelDebugMode)
     : []
 );
 
 const skillRows = computed(() =>
   selectedPersonId.value != null
-    ? personSkillDetailRows(props.worldState, selectedPersonId.value)
+    ? personSkillDetailRows(props.worldState, selectedPersonId.value, props.intelDebugMode)
     : []
 );
 
-const effectsRows = computed(() => entityEffectsIntelRows());
+const effectsRows = computed(() =>
+  selectedPersonId.value != null
+    ? personEffectsIntelRows(props.worldState, selectedPersonId.value)
+    : []
+);
+
+const viewOfCharacterRows = computed(() =>
+  selectedPersonId.value != null
+    ? personViewOfCharacterRows(props.worldState, selectedPersonId.value)
+    : []
+);
+
+const characterViewOfLordRows = computed(() =>
+  selectedPersonId.value != null
+    ? personCharacterViewOfLordRows(props.worldState, selectedPersonId.value)
+    : []
+);
+
+const viewOfCharacterListRows = computed(
+  () => viewOfCharacterRows.value as unknown as Array<Record<string, unknown>>
+);
+
+const characterViewOfLordListRows = computed(
+  () => characterViewOfLordRows.value as unknown as Array<Record<string, unknown>>
+);
 
 const relationRows = computed(() =>
   selectedPersonId.value != null
     ? personRelationshipTableRows(props.worldState, selectedPersonId.value)
     : [],
+);
+
+const taskRows = computed(() =>
+  selectedPersonId.value != null
+    ? personTaskTableRows(props.worldState, selectedPersonId.value)
+    : [],
+);
+
+const taskListRows = computed(
+  () => taskRows.value as unknown as Array<Record<string, unknown>>,
 );
 
 const relationListRows = computed(
@@ -83,7 +155,7 @@ const relationListRows = computed(
 
 const introText = computed(() =>
   selectedPersonId.value != null
-    ? personIntroText(props.worldState, selectedPersonId.value)
+    ? personIntroText(props.worldState, selectedPersonId.value, props.intelDebugMode)
     : "请在上方列表选择人物。"
 );
 
@@ -114,8 +186,14 @@ function syncDefaultSelection() {
   selectedPersonId.value = defaultPersonId();
 }
 
+watch(showPersonStanceEffectTabs, (visible) => {
+  if (!visible && (detailTab.value === "viewOfCharacter" || detailTab.value === "characterView")) {
+    detailTab.value = "basic";
+  }
+});
+
 watch(
-  () => [props.worldState, props.realmFilter] as const,
+  () => [props.worldState, props.realmFilter, categoryFilter.value, props.intelDebugMode] as const,
   () => syncDefaultSelection(),
   { immediate: true }
 );
@@ -145,6 +223,20 @@ function onSelectRow(row: Record<string, unknown> | null) {
 <template>
   <div class="intel-pane" :class="{ 'intel-pane--detail-only': detailOnly }">
     <template v-if="!detailOnly">
+      <el-radio-group
+        v-model="categoryFilter"
+        class="person-filter-bar intel-circle-radios"
+        aria-label="人物类型筛选"
+      >
+        <el-radio
+          v-for="option in INTEL_PERSON_CATEGORY_FILTER_OPTIONS"
+          :key="option.value"
+          :value="option.value"
+        >
+          {{ option.label }}
+        </el-radio>
+      </el-radio-group>
+
       <el-tabs v-model="listPreset" class="layer-tabs layer-tabs--list">
         <el-tab-pane label="状态" name="status" />
         <el-tab-pane label="仕官" name="office" />
@@ -168,8 +260,11 @@ function onSelectRow(row: Record<string, unknown> | null) {
         <el-tab-pane label="基本" name="basic" />
         <el-tab-pane label="属性" name="attributes" />
         <el-tab-pane label="能力" name="skills" />
+        <el-tab-pane label="任务" name="tasks" />
         <el-tab-pane label="人际关系" name="relations" />
         <el-tab-pane label="影响" name="effects" />
+        <el-tab-pane v-if="showPersonStanceEffectTabs" label="本人看法" name="viewOfCharacter" />
+        <el-tab-pane v-if="showPersonStanceEffectTabs" label="对本人的看法" name="characterView" />
         <el-tab-pane label="介绍" name="intro" />
       </el-tabs>
 
@@ -186,6 +281,16 @@ function onSelectRow(row: Record<string, unknown> | null) {
         <StrategyIntelPersonSkills :rows="skillRows" />
       </div>
 
+      <div v-else-if="detailTab === 'tasks'" class="detail-body">
+        <StrategyIntelSystemTable
+          :rows="taskListRows"
+          :columns="PERSON_TASK_COLUMNS"
+          :highlight-current="false"
+          empty-text="暂无任务"
+          :max-height="220"
+        />
+      </div>
+
       <div v-else-if="detailTab === 'relations'" class="detail-body">
         <StrategyIntelSystemTable
           :rows="relationListRows"
@@ -200,6 +305,32 @@ function onSelectRow(row: Record<string, unknown> | null) {
         <StrategyIntelBasicDescriptions :rows="effectsRows" />
       </div>
 
+      <div v-else-if="detailTab === 'viewOfCharacter'" class="detail-body">
+        <StrategyIntelSystemTable
+          v-if="selectedPersonId != null"
+          :rows="viewOfCharacterListRows"
+          :columns="STANCE_EFFECT_COLUMNS"
+          :highlight-current="false"
+          empty-text="暂无本人看法记录"
+          :max-height="220"
+          fill-width
+        />
+        <p v-else class="placeholder">请选择人物。</p>
+      </div>
+
+      <div v-else-if="detailTab === 'characterView'" class="detail-body">
+        <StrategyIntelSystemTable
+          v-if="selectedPersonId != null"
+          :rows="characterViewOfLordListRows"
+          :columns="STANCE_EFFECT_COLUMNS"
+          :highlight-current="false"
+          empty-text="暂无对本人的看法记录"
+          :max-height="220"
+          fill-width
+        />
+        <p v-else class="placeholder">请选择人物。</p>
+      </div>
+
       <div v-else class="detail-body">
         <p class="intro-text">{{ introText }}</p>
       </div>
@@ -212,6 +343,10 @@ function onSelectRow(row: Record<string, unknown> | null) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.person-filter-bar {
+  margin-bottom: 2px;
 }
 
 .layer-tabs :deep(.el-tabs__header) {

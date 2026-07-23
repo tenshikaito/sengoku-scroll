@@ -55,7 +55,7 @@ docs/
 | 层级 | 文档 | 职责 |
 |------|------|------|
 | **基本设计** | [design-document.md](./design-document.md) | 项目定位、设计原则、三模式对比、解决方案结构、技术栈、重构计划 |
-| **游戏概念词典** | [game-concepts.md](./game-concepts.md) | 概念词典；§3.7 迷雾/谍报、§9 日推进链（2026-07-21 v1.6） |
+| **游戏概念词典** | [game-concepts.md](./game-concepts.md) | 概念词典；§1.3.1 看法/影响/任务、§3.7 迷雾/谍报（2026-07-22 v1.7） |
 | **共同详细设计** | [shared-detail-design.md](./shared-detail-design.md) | 三模式共享的领域模型、规则、时间、事件、指令、网络、存档 |
 | **模式详细设计** | `*-detail-design.md` | 各模式专属 System、玩法循环、模式特有机制 |
 | **开发计划** | [strategy-development-plan.md](./strategy-development-plan.md) | 里程碑、范围、确认清单（策略·草案） |

@@ -20,7 +20,15 @@ import type {
   StrategyVisibilityState,
   GameStartOptionsState,
   StrategyEspionageIntelEntry,
+  StrategyEntityEffectState,
+  StrategyEntityTechnologyState,
+  StrategyCharacterRelationshipState,
+  StrategyGarrisonTroopPoolState,
+  StrategyGarrisonStandingUnitState,
+  StrategyCropCycleState,
+  StrategyStrongholdCityActorState,
 } from "@/api/strategyTypes";
+import { enrichStrongholdDerivedFields } from "@/utils/strategyStrongholdDerivedFields";
 
 function pick(obj: Record<string, unknown>, camel: string, pascal: string): unknown {
   return obj[camel] ?? obj[pascal];
@@ -40,6 +48,49 @@ function optionalString(value: unknown): string | null {
 
 function requiredString(value: unknown, fallback: string): string {
   return optionalString(value) ?? fallback;
+}
+
+function normalizeEntityEffects(raw: unknown): StrategyEntityEffectState[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      const row = (item ?? {}) as Record<string, unknown>;
+      const name = optionalString(pick(row, "name", "Name"));
+      if (!name) return null;
+      return {
+        id: safeInt(pick(row, "id", "Id")),
+        name,
+        effectTarget: optionalString(pick(row, "effectTarget", "EffectTarget")) ?? "—",
+        magnitude: optionalString(pick(row, "magnitude", "Magnitude")) ?? "—",
+        description: optionalString(pick(row, "description", "Description")) ?? "",
+      };
+    })
+    .filter((item): item is StrategyEntityEffectState => item != null);
+}
+
+function normalizeEntityTechnologies(raw: unknown): StrategyEntityTechnologyState[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      const row = (item ?? {}) as Record<string, unknown>;
+      const name = optionalString(pick(row, "name", "Name"));
+      const id = safeInt(pick(row, "id", "Id"));
+      if (!id || !name) return null;
+      return {
+        id,
+        name,
+        category: optionalString(pick(row, "category", "Category")) ?? "—",
+        status: safeInt(pick(row, "status", "Status"), 0),
+        target: optionalString(pick(row, "target", "Target")) ?? null,
+        effectivity: (() => {
+          const rawEffectivity = pick(row, "effectivity", "Effectivity");
+          if (rawEffectivity == null || rawEffectivity === "") return null;
+          const n = safeInt(rawEffectivity, 0);
+          return Number.isFinite(n) ? n : null;
+        })(),
+      };
+    })
+    .filter((item): item is StrategyEntityTechnologyState => item != null);
 }
 
 function normalizeMapPoint(raw: unknown): MapPoint {
@@ -171,6 +222,104 @@ function normalizeRosterUnit(raw: unknown) {
   };
 }
 
+function normalizeGarrisonTroopPools(raw: unknown): StrategyGarrisonTroopPoolState[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      typeId: safeInt(pick(row, "typeId", "TypeId")),
+      typeName: requiredString(pick(row, "typeName", "TypeName"), "兵种"),
+      soldiers: safeInt(pick(row, "soldiers", "Soldiers")),
+    };
+  });
+}
+
+function normalizeStandingGarrisonUnits(raw: unknown): StrategyGarrisonStandingUnitState[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      subUnitId: safeInt(pick(row, "subUnitId", "SubUnitId")),
+      unitName: requiredString(pick(row, "unitName", "UnitName"), ""),
+      typeId: safeInt(pick(row, "typeId", "TypeId")),
+      typeName: requiredString(pick(row, "typeName", "TypeName"), "兵种"),
+      isMounted: pick(row, "isMounted", "IsMounted") === true,
+      soldiers: safeInt(pick(row, "soldiers", "Soldiers")),
+      role: requiredString(pick(row, "role", "Role"), "Samurai"),
+      morale: safeInt(pick(row, "morale", "Morale"), 80),
+      training: safeInt(pick(row, "training", "Training"), 65),
+      maintenanceMoney: safeInt(pick(row, "maintenanceMoney", "MaintenanceMoney")),
+    };
+  });
+}
+
+function normalizeCropCycles(raw: unknown): StrategyCropCycleState[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      cycleIndex: safeInt(pick(row, "cycleIndex", "CycleIndex")),
+      name: requiredString(pick(row, "name", "Name"), "季作"),
+      startMonth: safeInt(pick(row, "startMonth", "StartMonth"), 1),
+      startDay: safeInt(pick(row, "startDay", "StartDay"), 1),
+      endMonth: safeInt(pick(row, "endMonth", "EndMonth"), 1),
+      endDay: safeInt(pick(row, "endDay", "EndDay"), 1),
+      progressPercent: safeInt(pick(row, "progressPercent", "ProgressPercent")),
+      progressCapPercent: safeInt(pick(row, "progressCapPercent", "ProgressCapPercent"), 100),
+      potentialYieldGo: safeInt(pick(row, "potentialYieldGo", "PotentialYieldGo")),
+      estimatedYieldGo: safeInt(pick(row, "estimatedYieldGo", "EstimatedYieldGo")),
+    };
+  });
+}
+
+function normalizeCityActorKind(kind: string): string {
+  if (kind === "Nanban") return "Merchant";
+  return kind;
+}
+
+function normalizeCityActors(raw: unknown): StrategyStrongholdCityActorState[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      id: safeInt(pick(row, "id", "Id")),
+      name: requiredString(pick(row, "name", "Name"), "势力"),
+      kind: normalizeCityActorKind(requiredString(pick(row, "kind", "Kind"), "Merchant")),
+      money: safeInt(pick(row, "money", "Money")),
+      food: safeInt(pick(row, "food", "Food")),
+      luxuryGoods: safeInt(pick(row, "luxuryGoods", "LuxuryGoods")),
+      commerceProduction: safeInt(pick(row, "commerceProduction", "CommerceProduction")),
+      agricultureProduction: safeInt(pick(row, "agricultureProduction", "AgricultureProduction")),
+      characterCount: safeInt(pick(row, "characterCount", "CharacterCount")),
+      characterIds: (() => {
+        const raw = pick(row, "characterIds", "CharacterIds");
+        return Array.isArray(raw) ? raw.map((id) => safeInt(id)) : [];
+      })(),
+      leaderName: optionalString(pick(row, "leaderName", "LeaderName")) ?? "—",
+      branchLabel: optionalString(pick(row, "branchLabel", "BranchLabel")) ?? "—",
+      forceId: safeInt(pick(row, "forceId", "ForceId"), 0) || undefined,
+    };
+  });
+}
+
+function normalizeLegacyMerchants(raw: unknown): StrategyStrongholdCityActorState[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      id: safeInt(pick(row, "id", "Id")),
+      name: requiredString(pick(row, "name", "Name"), "商户"),
+      kind: "Merchant",
+      money: safeInt(pick(row, "money", "Money")),
+      food: safeInt(pick(row, "food", "Food")),
+      luxuryGoods: safeInt(pick(row, "luxuryGoods", "LuxuryGoods")),
+      commerceProduction: 0,
+      agricultureProduction: 0,
+      characterCount: 0,
+    };
+  });
+}
+
 function normalizeStronghold(
   raw: unknown,
   lord: StrategyLordState,
@@ -196,7 +345,7 @@ function normalizeStronghold(
       : `领主 #${lordId}`;
   }
 
-  return {
+  return enrichStrongholdDerivedFields({
     id,
     name: requiredString(pick(s, "name", "Name"), `据点 #${id}`),
     typeId: safeInt(pick(s, "typeId", "TypeId"), 1),
@@ -224,6 +373,39 @@ function normalizeStronghold(
     religionName: requiredString(pick(s, "religionName", "ReligionName"), "神道教"),
     money: safeInt(pick(s, "money", "Money")),
     garrisonSoldiers: safeInt(pick(s, "garrisonSoldiers", "GarrisonSoldiers")),
+    militiaSoldiers: safeInt(pick(s, "militiaSoldiers", "MilitiaSoldiers")),
+    totalSoldiers: (() => {
+      const explicit = safeInt(pick(s, "totalSoldiers", "TotalSoldiers"), 0);
+      if (explicit > 0) return explicit;
+      const garrison = safeInt(pick(s, "garrisonSoldiers", "GarrisonSoldiers"), 0);
+      const militia = safeInt(pick(s, "militiaSoldiers", "MilitiaSoldiers"), 0);
+      return garrison + militia > 0 ? garrison + militia : undefined;
+    })(),
+    laborCapacity: safeInt(pick(s, "laborCapacity", "LaborCapacity")),
+    laborAvailable: safeInt(pick(s, "laborAvailable", "LaborAvailable")),
+    laborRatioPercent: safeInt(pick(s, "laborRatioPercent", "LaborRatioPercent")),
+    militiaAway: safeInt(pick(s, "militiaAway", "MilitiaAway")),
+    effectiveCropPattern: optionalString(pick(s, "effectiveCropPattern", "EffectiveCropPattern")) ?? undefined,
+    earlyCropProgressPercent: safeInt(pick(s, "earlyCropProgressPercent", "EarlyCropProgressPercent")),
+    lateCropProgressPercent: safeInt(pick(s, "lateCropProgressPercent", "LateCropProgressPercent")),
+    thirdCropProgressPercent: safeInt(pick(s, "thirdCropProgressPercent", "ThirdCropProgressPercent")),
+    garrisonTroopPools: normalizeGarrisonTroopPools(pick(s, "garrisonTroopPools", "GarrisonTroopPools")),
+    standingGarrisonUnits: normalizeStandingGarrisonUnits(
+      pick(s, "standingGarrisonUnits", "StandingGarrisonUnits"),
+    ),
+    cropCycles: normalizeCropCycles(pick(s, "cropCycles", "CropCycles")),
+    agricultureProductionPotential: safeInt(
+      pick(s, "agricultureProductionPotential", "AgricultureProductionPotential"),
+    ),
+    knowsDoubleCrop: pick(s, "knowsDoubleCrop", "KnowsDoubleCrop") === true,
+    knowsTripleCrop: pick(s, "knowsTripleCrop", "KnowsTripleCrop") === true,
+    cityActors: (() => {
+      const cityActorsRaw = pick(s, "cityActors", "CityActors");
+      if (Array.isArray(cityActorsRaw) && cityActorsRaw.length > 0) {
+        return normalizeCityActors(cityActorsRaw);
+      }
+      return normalizeLegacyMerchants(pick(s, "merchants", "Merchants"));
+    })(),
     garrisonWounded: safeInt(pick(s, "garrisonWounded", "GarrisonWounded"), 0),
     pollTaxRate: safeInt(pick(s, "pollTaxRate", "PollTaxRate"), 10),
     agricultureTaxRate: safeInt(pick(s, "agricultureTaxRate", "AgricultureTaxRate"), 25),
@@ -241,7 +423,12 @@ function normalizeStronghold(
     espionagePopulationBand: optionalString(pick(s, "espionagePopulationBand", "EspionagePopulationBand")),
     espionageFoodBand: optionalString(pick(s, "espionageFoodBand", "EspionageFoodBand")),
     espionageMoneyBand: optionalString(pick(s, "espionageMoneyBand", "EspionageMoneyBand")),
-  };
+    scale: safeInt(pick(s, "scale", "Scale"), 10) || undefined,
+    maintenance: safeInt(pick(s, "maintenance", "Maintenance"), 0) || undefined,
+    introduction: optionalString(pick(s, "introduction", "Introduction")) ?? null,
+    technologies: normalizeEntityTechnologies(pick(s, "technologies", "Technologies")),
+    activeEffects: normalizeEntityEffects(pick(s, "activeEffects", "ActiveEffects")),
+  }) as StrategyStrongholdState;
 }
 
 function normalizeEspionageIntel(raw: unknown): StrategyEspionageIntelEntry {
@@ -290,6 +477,7 @@ function normalizeStartOptions(raw: unknown): GameStartOptionsState | undefined 
     characterSharedVision: pick(o, "characterSharedVision", "CharacterSharedVision") === true,
     showAllyIntel: pick(o, "showAllyIntel", "ShowAllyIntel") === true,
     instantEventMessages: pick(o, "instantEventMessages", "InstantEventMessages") === true,
+    intelDebugMode: pick(o, "intelDebugMode", "IntelDebugMode") !== false,
   };
 }
 
@@ -453,6 +641,7 @@ function normalizeCharacter(raw: unknown): StrategyCharacterSummaryState {
     forceId: safeInt(pick(row, "forceId", "ForceId")),
     name: pick(row, "name", "Name") as string | undefined,
     strongholdId: safeInt(pick(row, "strongholdId", "StrongholdId"), 0) || undefined,
+    strongholdName: optionalString(pick(row, "strongholdName", "StrongholdName")) ?? undefined,
     leaderId: safeInt(pick(row, "leaderId", "LeaderId"), 0) || undefined,
     locationType: pick(row, "locationType", "LocationType") as string | undefined,
     forceStatus: pick(row, "forceStatus", "ForceStatus") as string | undefined,
@@ -509,6 +698,22 @@ function normalizeCharacter(raw: unknown): StrategyCharacterSummaryState {
       const n = safeInt(raw, -1);
       return n >= 0 ? n : null;
     })(),
+    activeTasks: (() => {
+      const raw = pick(row, "activeTasks", "ActiveTasks");
+      if (!Array.isArray(raw)) return undefined;
+      return raw
+        .map((item) => {
+          const task = (item ?? {}) as Record<string, unknown>;
+          const name = optionalString(pick(task, "name", "Name"));
+          const target = optionalString(pick(task, "target", "Target"));
+          const status = optionalString(pick(task, "status", "Status"));
+          const remaining = optionalString(pick(task, "remaining", "Remaining"));
+          const taskCategory = optionalString(pick(task, "taskCategory", "TaskCategory")) ?? "Personal";
+          if (!name || !target || !status || !remaining) return null;
+          return { taskCategory, name, target, status, remaining };
+        })
+        .filter((item): item is NonNullable<typeof item> => item != null);
+    })(),
     loyalty: safeInt(pick(row, "loyalty", "Loyalty"), 0) || undefined,
     money: (() => {
       const raw = pick(row, "money", "Money");
@@ -524,11 +729,31 @@ function normalizeCharacter(raw: unknown): StrategyCharacterSummaryState {
           const characterId = safeInt(pick(rel, "characterId", "CharacterId"), 0);
           const characterName = optionalString(pick(rel, "characterName", "CharacterName"));
           const relationType = optionalString(pick(rel, "relationType", "RelationType"));
+          const relationTone = optionalString(pick(rel, "relationTone", "RelationTone")) ?? "普通";
           if (!characterId || !characterName || !relationType) return null;
-          return { relationType, characterId, characterName };
+          return { relationType, relationTone, characterId, characterName };
         })
         .filter((item): item is StrategyCharacterRelationState => item != null);
     })(),
+    characterRelationships: (() => {
+      const raw = pick(row, "characterRelationships", "CharacterRelationships");
+      if (!Array.isArray(raw)) return undefined;
+      return raw
+        .map((item) => {
+          const rel = (item ?? {}) as Record<string, unknown>;
+          const targetCharacterId = safeInt(pick(rel, "targetCharacterId", "TargetCharacterId"), 0);
+          if (!targetCharacterId) return null;
+          return {
+            targetCharacterId,
+            relationship: safeInt(pick(rel, "relationship", "Relationship"), 0),
+            trust: safeInt(pick(rel, "trust", "Trust"), 0),
+            viewEffects: normalizeEntityEffects(pick(rel, "viewEffects", "ViewEffects")),
+          } satisfies StrategyCharacterRelationshipState;
+        })
+        .filter((item): item is StrategyCharacterRelationshipState => item != null);
+    })(),
+    introduction: optionalString(pick(row, "introduction", "Introduction")) ?? null,
+    activeEffects: normalizeEntityEffects(pick(row, "activeEffects", "ActiveEffects")),
   };
 }
 
@@ -680,6 +905,22 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
               const n = safeInt(raw, 0);
               return n > 0 ? n : null;
             })(),
+            category: optionalString(pick(force, "category", "Category")) ?? "Military",
+            lordCharacterId: (() => {
+              const raw = pick(force, "lordCharacterId", "LordCharacterId");
+              if (raw == null) return null;
+              const n = safeInt(raw, 0);
+              return n > 0 ? n : null;
+            })(),
+            lordName: optionalString(pick(force, "lordName", "LordName")) ?? undefined,
+            cultureName: optionalString(pick(force, "cultureName", "CultureName")) ?? undefined,
+            religionName: optionalString(pick(force, "religionName", "ReligionName")) ?? undefined,
+            totalSoldiers: safeInt(pick(force, "totalSoldiers", "TotalSoldiers"), 0) || undefined,
+            garrisonSoldiers: safeInt(pick(force, "garrisonSoldiers", "GarrisonSoldiers"), 0) || undefined,
+            militiaSoldiers: safeInt(pick(force, "militiaSoldiers", "MilitiaSoldiers"), 0) || undefined,
+            introduction: optionalString(pick(force, "introduction", "Introduction")) ?? null,
+            technologies: normalizeEntityTechnologies(pick(force, "technologies", "Technologies")),
+            activeEffects: normalizeEntityEffects(pick(force, "activeEffects", "ActiveEffects")),
           } satisfies StrategyForceState;
         })
       : [],
@@ -712,6 +953,9 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
             trust: safeInt(pick(row, "trust", "Trust"), 0) || undefined,
             arrearsFoodGo: safeInt(pick(row, "arrearsFoodGo", "ArrearsFoodGo"), 0) || undefined,
             arrearsMoney: safeInt(pick(row, "arrearsMoney", "ArrearsMoney"), 0) || undefined,
+            ourViewEffects: normalizeEntityEffects(pick(row, "ourViewEffects", "OurViewEffects")),
+            theirViewEffects: normalizeEntityEffects(pick(row, "theirViewEffects", "TheirViewEffects")),
+            isInnerVassal: pick(row, "isInnerVassal", "IsInnerVassal") === true,
           };
         })
       : [],

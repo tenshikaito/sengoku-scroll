@@ -1,6 +1,6 @@
 # SengokuScroll 游戏概念词典（Game Concepts Reference）
 
-> 版本：1.6 | 日期：2026-07-21 | 索引：[设计文档索引](./README.md)
+> 版本：1.7 | 日期：2026-07-22 | 索引：[设计文档索引](./README.md)
 
 本文档是 **游戏中所有已定义概念的权威清单**：每个概念给出中英名称、一句话定义、实装状态与关键代码/设计引用。
 
@@ -66,6 +66,7 @@
 
 | 日期 | 版本 | 变更摘要 |
 |------|------|----------|
+| 2026-07-22 | 1.7 | 实体看法/影响/任务：EntityEffect、CharacterRelationship、IntelTasks；势力/人物看法 Tab；详见 shared §1.2.1a、strategy §6.5c |
 | 2026-07-21 | 1.6 | 谍报台账（2 月过期、scope/精度）；溃灭将领地图逐日回城；进行/倍速自动推进 UI；ForceIntel 不再因视野自动模糊兵数 |
 | 2026-07-19 | 1.5 | 战争迷雾/情报：`GameStartOptions`、三层视野、Known 据点、InstantEventMessages 双通道；详见 [`strategy-fog-of-war-design.md`](strategy-fog-of-war-design.md) |
 | 2026-07-17 | 1.4 | 道路实例迁至 `GameMapData.Roads`；地图区域写入 `TileMap.region`；移除 `PoliticalRegionGrid` / 剧本 `politicalRegions` |
@@ -84,6 +85,9 @@
 | GD | 运行时数据 GameData | §1.1 | ✅ |
 | FRC | 势力 Force | §1.2 | ✅ |
 | CHR | 角色 Character | §1.3 | ✅ |
+| EFX | 增减益 EntityEffect | §1.3.1 | ✅ |
+| CRR | 角色关系 CharacterRelationship | §1.3.1 | ✅ |
+| CIT | 情报任务 CharacterIntelTask | §1.3.1 | ✅ |
 | SH | 据点 Stronghold | §1.4 | ✅ |
 | UNT | 地图单位 Unit | §1.5 | ✅ |
 | SUB | 子编制 SubUnit | §1.5 | ✅ |
@@ -147,6 +151,23 @@
 | **Actor 类型 ActorType** | `Force` / `Merchant` / `Religion` / `Landlord`。 | ✅ | `Types/ActorType.cs` |
 
 ### 1.3 角色 Character
+
+将领、僧侣、商人等可操控或 AI 驱动的个体。运行时除位置/能力外，含 **Relationships**（私人关系+看法）、**ActiveEffects**（影响 Tab）、**IntelTasks**（任务 Tab）。
+
+#### 1.3.1 看法 / 影响 / 任务（2026-07）
+
+| 概念 | 定义 | 代码 |
+|------|------|------|
+| **EntityEffect** | 共用条目：Name、TargetStat、Magnitude、Duration | `EntityEffect.cs` |
+| **ActiveEffect** | 挂载 Force/Stronghold/Character 的增减益 | `*.ActiveEffects` |
+| **ViewEffect** | 挂载 Diplomacy 或 CharacterRelationship 的看法条目 | `ViewEffects` |
+| **CharacterRelationship** | A→B 视角的 Relationship、Trust + ViewEffects | `CharacterRelationship.cs` |
+| **Relations（DTO）** | 亲属/仇敌展示表（五档亲疏），非玩法数值主源 | `CharacterRelationsHelper` |
+| **CharacterIntelTask** | 任务 Tab 持久化行（Personal/Life/Force/PartTime） | `CharacterIntelTask.cs` |
+
+**formatter 分叉**：外交看法 → 外交关系；角色看法 → 亲疏/个人观感（见 `EntityEffectHelper`）。
+
+---
 
 | 概念 | 定义 | 状态 | 相关文件 |
 |------|------|------|----------|

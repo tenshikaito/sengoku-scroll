@@ -119,6 +119,16 @@ public static class StrategyLordHelper
         GameData gameData,
         StrategyScenarioMeta meta)
     {
+        if (OrganizationForceHelper.IsOrganizationForceId(gameData, forceId))
+        {
+            var headquarters = OrganizationForceHelper.EnumerateShops(gameData, forceId)
+                .OrderBy(shop => shop.StrongholdId)
+                .ThenBy(shop => shop.Id)
+                .FirstOrDefault();
+            if (headquarters != null)
+                return headquarters.StrongholdId;
+        }
+
         if (meta.ForceLordResidenceStrongholdIds.TryGetValue(forceId, out var residenceId)
             && residenceId > 0
             && gameData.Strongholds.ContainsKey(residenceId))

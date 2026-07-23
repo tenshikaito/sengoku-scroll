@@ -61,8 +61,32 @@ internal static class StrategyDefaultMasterDataSeed
         if (master.DefenseFacilityTypes.Count == 0)
             master.DefenseFacilityTypes = StrongholdDefenseRules.CreateDefaultDefenseFacilityTypes();
 
+        if (master.Technologies.Count == 0)
+            master.Technologies = CreateDefaultTechnologies();
+
         SeedMapMasterData(world);
     }
+
+    internal static Dictionary<int, TechnologyDefinition> CreateDefaultTechnologies()
+        => new()
+        {
+            [1] = new()
+            {
+                Id = 1,
+                Name = "二季作",
+                Category = "农业",
+                Target = "农业",
+                Effectivity = 0
+            },
+            [2] = new()
+            {
+                Id = 2,
+                Name = "三季作",
+                Category = "农业",
+                Target = "农业",
+                Effectivity = 0
+            }
+        };
 
     private static void SeedMapMasterData(GameWorld world)
     {

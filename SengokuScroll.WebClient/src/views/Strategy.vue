@@ -188,6 +188,7 @@ import { findOperableUnit, isMapOperableUnit, operableUnitAsMapState } from "@/u
 import { collectMapCellEntityOptions } from "@/utils/mapCellEntityPicker";
 import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
 import {
+  buildLoadStartOptions,
   resolveDifficultyFromOptions,
   writeGameStartSettings,
   type GameStartSettings,
@@ -1688,8 +1689,8 @@ async function handleRecruitConfirm(payload: { characterId: number }) {
     const general = state.value.characters?.find((c) => c.id === payload.characterId);
     if (general) {
       showRecruitSpeechBubble(
-        general.name,
-        recruitAssignmentBubbleMessage("conscript", sh.name, isPersonal ? "personal" : "assign"),
+        general.name ?? "将领",
+        recruitAssignmentBubbleMessage("conscript", sh.name ?? "据点", isPersonal ? "personal" : "assign"),
       );
     }
     info.value = general
@@ -1723,8 +1724,8 @@ async function handleMercenaryRecruitConfirm(payload: { characterId: number; bud
     const general = state.value.characters?.find((c) => c.id === payload.characterId);
     if (general) {
       showRecruitSpeechBubble(
-        general.name,
-        recruitAssignmentBubbleMessage("mercenary", sh.name, isPersonal ? "personal" : "assign"),
+        general.name ?? "将领",
+        recruitAssignmentBubbleMessage("mercenary", sh.name ?? "据点", isPersonal ? "personal" : "assign"),
       );
     }
     info.value = general
@@ -2611,10 +2612,12 @@ async function ensureMapMaster(world?: StrategyWorldState | null) {
 
 function syncLastGameStartSettingsFromWorldState(world: StrategyWorldState) {
   if (!world.startOptions) return;
+  const { intelDebugMode, ...customStartOptions } = world.startOptions;
   lastGameStartSettings.value = {
     scenarioId: world.scenarioId,
-    difficulty: resolveDifficultyFromOptions(world.startOptions),
-    customStartOptions: { ...world.startOptions },
+    difficulty: resolveDifficultyFromOptions(customStartOptions),
+    customStartOptions,
+    intelDebugMode: intelDebugMode ?? true,
   };
 }
 
@@ -2650,8 +2653,7 @@ async function startGameWithSettings(settings: GameStartSettings) {
     state.value = await loadScenario({
       scenarioId: settings.scenarioId,
       difficulty: settings.difficulty,
-      customStartOptions:
-        settings.difficulty === "Custom" ? settings.customStartOptions : undefined,
+      customStartOptions: buildLoadStartOptions(settings),
     });
     resetMapSessionUi();
     applyApiSourceInfoMessage();

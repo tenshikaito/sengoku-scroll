@@ -42,4 +42,7 @@ public sealed class StrategyScenarioMeta
     /// <summary>地图 Region → 收粮日历（M4-b）。</summary>
     public IReadOnlyDictionary<int, RegionHarvestProfile> RegionHarvestProfiles { get; init; }
         = new Dictionary<int, RegionHarvestProfile>();
+
+    /// <summary>剧本级规则选项。</summary>
+    public StrategyScenarioGameOptions GameOptions { get; init; } = new();
 }

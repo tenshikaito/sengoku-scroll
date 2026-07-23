@@ -63,8 +63,11 @@ public sealed class StrategySimulationHost : IDisposable
             var loaded = StrategyScenarioLoader.LoadFromFile(path);
             var meta = StrategyScenarioLoader.ApplyLoadOptions(loaded.Meta, loadOptions);
             simulation = StrategySimulationBootstrap.CreateScope(loaded.World, meta);
-            MerchantBootstrapHelper.EnsureMerchantShops(simulation.World.GameData);
+            StrongholdCityActorBootstrapHelper.EnsureCityActors(
+                simulation.World.GameData,
+                simulation.Services.GetRequiredService<StrategyForceLordRegistry>());
             StrategyAiBootstrapHelper.BootstrapAggressiveDirectives(simulation.World, meta);
+            IntelEntityBootstrapHelper.BootstrapGameWorld(simulation.World, meta);
             simulation.MovementTrace.Clear();
             simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
             LoadedScenarioId = scenarioId;

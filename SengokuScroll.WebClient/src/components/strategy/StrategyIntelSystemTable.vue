@@ -2,6 +2,7 @@
 import { ref, watch } from "vue";
 import type { IntelTableColumnDef } from "@/utils/strategyIntelSystemColumns";
 import { resolveIntelBandTone } from "@/utils/strategyIntelDisplay";
+import { diplomacyStatusCellClassName, intelRelationTierClass } from "@/intelDisplay/IntelDisplayBehaviors";
 import { resolveIntelColumnLabel } from "@/i18n/intelColumns";
 import { useI18n } from "@/i18n";
 
@@ -39,9 +40,6 @@ watch(
     }
     const row = rows.find((item) => Number(item.id) === currentId);
     tableRef.value?.setCurrentRow(row);
-    if (!row) {
-      emit("current-change", null);
-    }
   },
   { immediate: true, flush: "post" }
 );
@@ -64,9 +62,29 @@ function shouldUseRowClass() {
   return props.rowClassName != null || props.currentId != null;
 }
 
-function resolveBandClass(value: unknown, col: IntelTableColumnDef): string {
+function resolveLowRedStatClass(value: unknown): string {
+  const trimmed = String(value ?? "").trim();
+  if (trimmed === "低") return "intel-stat--low";
+  const n = Number(trimmed);
+  if (Number.isFinite(n) && n < 40) return "intel-stat--low";
+  return "";
+}
+
+const RELATION_TIER_PROPS = new Set(["relation", "trust", "relationTone"]);
+
+function resolveCellClass(row: Record<string, unknown>, col: IntelTableColumnDef): string {
+  if (col.toneField) {
+    const tone = row[col.toneField];
+    return diplomacyStatusCellClassName(tone == null ? "" : String(tone));
+  }
+  if (RELATION_TIER_PROPS.has(col.prop)) {
+    return intelRelationTierClass(row[col.prop] == null ? "" : String(row[col.prop]));
+  }
+  if (col.lowRedStat) {
+    return resolveLowRedStatClass(row[col.prop]);
+  }
   if (!col.band) return "";
-  const tone = resolveIntelBandTone(value == null ? "" : String(value));
+  const tone = resolveIntelBandTone(row[col.prop] == null ? "" : String(row[col.prop]));
   return tone ? `intel-band intel-band--${tone}` : "";
 }
 
@@ -113,7 +131,7 @@ function columnLabel(col: IntelTableColumnDef): string {
         show-overflow-tooltip
       >
         <template #default="{ row }">
-          <span :class="resolveBandClass(row[col.prop], col)">
+          <span :class="resolveCellClass(row, col)">
             {{ row[col.prop] }}
           </span>
         </template>
@@ -170,5 +188,41 @@ function columnLabel(col: IntelTableColumnDef): string {
 :deep(.intel-band--low) {
   color: green;
   font-weight: 600;
+}
+
+:deep(.intel-stat--low) {
+  color: #dc2626;
+}
+
+:deep(.dip-allied) {
+  color: #16a34a;
+}
+
+:deep(.dip-enemy) {
+  color: #dc2626;
+}
+
+:deep(.dip-neutral) {
+  color: #ea580c;
+}
+
+:deep(.intel-tier--warn) {
+  color: #ea580c;
+  font-weight: normal;
+}
+
+:deep(.intel-tier--danger) {
+  color: #dc2626;
+  font-weight: normal;
+}
+
+:deep(.intel-tier--favorable) {
+  color: #2563eb;
+  font-weight: normal;
+}
+
+:deep(.intel-tier--close) {
+  color: #16a34a;
+  font-weight: normal;
 }
 </style>

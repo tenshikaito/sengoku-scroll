@@ -81,7 +81,8 @@ public static class StrategyScenarioLoader
             ForceLordCharacterIds = BuildForceLordCharacterIds(scenario),
             ForceLordResidenceStrongholdIds = BuildForceLordResidenceStrongholdIds(scenario),
             Intel = intel,
-            RegionHarvestProfiles = BuildRegionHarvestProfiles(document.Map)
+            RegionHarvestProfiles = BuildRegionHarvestProfiles(document.Map),
+            GameOptions = document.Scenario.GameOptions ?? new StrategyScenarioGameOptions()
         };
     }
 
@@ -111,7 +112,8 @@ public static class StrategyScenarioLoader
             ForceLordCharacterIds = meta.ForceLordCharacterIds,
             ForceLordResidenceStrongholdIds = meta.ForceLordResidenceStrongholdIds,
             Intel = meta.Intel,
-            RegionHarvestProfiles = meta.RegionHarvestProfiles
+            RegionHarvestProfiles = meta.RegionHarvestProfiles,
+            GameOptions = meta.GameOptions
         };
     }
 
@@ -326,7 +328,8 @@ public static class StrategyScenarioLoader
                 StrongholdTypes = [],
                 DefenseFacilityTypes = StrongholdDefenseRules.CreateDefaultDefenseFacilityTypes(),
                 UnitTypes = [],
-                Characters = []
+                Characters = [],
+                Technologies = StrategyDefaultMasterDataSeed.CreateDefaultTechnologies()
             },
             GameData = new GameData
             {
@@ -365,8 +368,23 @@ public static class StrategyScenarioLoader
         StrategyDefaultMasterDataSeed.Apply(world);
         ApplyDefaultStrongholdDefense(world);
         ApplyDefaultEconomyFacilities(world);
+        ApplyAgricultureAndGarrisonBootstrap(world, document);
 
         return world;
+    }
+
+    private static void ApplyAgricultureAndGarrisonBootstrap(GameWorld world, StrategyScenarioDocument document)
+    {
+        var profiles = BuildRegionHarvestProfiles(document.Map);
+        var gameData = world.GameData;
+
+        foreach (var stronghold in gameData.Strongholds.Values)
+        {
+            var regionId = RegionLocationHelper.ResolveRegionId(world, stronghold.Location);
+            var regionPattern = AgricultureCropRules.ResolveRegionCropPattern(profiles, regionId);
+            AgricultureCropRules.InitializeForStronghold(stronghold, regionPattern);
+            StrongholdMilitaryBootstrapHelper.InitializeGarrisonComposition(stronghold, gameData);
+        }
     }
 
     private static void ApplyDefaultEconomyFacilities(GameWorld world)
@@ -904,7 +922,8 @@ public static class StrategyScenarioLoader
             EconomyFacilityIds = definition.EconomyFacilityIds.Count > 0
                 ? [..definition.EconomyFacilityIds]
                 : [],
-            HasCoreForceIds = [definition.ForceId]
+            HasCoreForceIds = [definition.ForceId],
+            Agriculture = new StrongholdAgricultureState()
         };
     }
 

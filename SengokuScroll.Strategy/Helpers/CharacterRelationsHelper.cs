@@ -3,7 +3,13 @@ using SengokuScroll.Strategy.Models;
 
 namespace SengokuScroll.Strategy.Helpers;
 
-/// <summary>从角色实体与剧本关系字段组装人际关系列表（含推断关系）。</summary>
+/// <summary>
+/// 从角色实体与剧本关系字段组装人际关系列表（父母、配偶、师徒、仇敌等）。
+/// </summary>
+/// <remarks>
+/// 输出供 DTO Relations / 情报「人际关系」Tab：RelationType + 五档 RelationTone。
+/// 与 Character.Relationships（数值 + ViewEffects）并存；前者偏展示，后者偏玩法与看法 Tab。
+/// </remarks>
 public static class CharacterRelationsHelper
 {
     public static IReadOnlyList<StrategyCharacterRelationDto> BuildRelations(
@@ -27,6 +33,7 @@ public static class CharacterRelationsHelper
             list.Add(new StrategyCharacterRelationDto
             {
                 RelationType = relationType,
+                RelationTone = ResolveRelationTone(character, target, relationType),
                 CharacterId = targetId,
                 CharacterName = target.Name
             });
@@ -36,7 +43,6 @@ public static class CharacterRelationsHelper
         Add("母亲", character.MotherId);
         Add("配偶", character.SpouseId);
         Add("师父", character.MasterId);
-        Add("上司", character.LeaderId);
 
         foreach (var enemyId in character.EnemyIds)
             Add("仇敌", enemyId);
@@ -48,9 +54,6 @@ public static class CharacterRelationsHelper
 
             if (other.FatherId == character.Id || other.MotherId == character.Id)
                 Add("子女", other.Id);
-
-            if (other.LeaderId == character.Id)
-                Add("下属", other.Id);
 
             if (other.EnemyIds.Contains(character.Id))
                 Add("仇敌", other.Id);
@@ -80,9 +83,39 @@ public static class CharacterRelationsHelper
             "岳父" => 4,
             "岳母" => 5,
             "师父" => 6,
-            "上司" => 7,
-            "下属" => 8,
-            "仇敌" => 9,
+            "仇敌" => 7,
             _ => 99
         };
+
+    /// <summary>亲疏五档：亲密 / 友好 / 普通 / 险恶 / 仇视。</summary>
+    private static string ResolveRelationTone(Character character, Character target, string relationType)
+    {
+        if (relationType is "仇敌"
+            || character.EnemyIds.Contains(target.Id)
+            || target.EnemyIds.Contains(character.Id))
+        {
+            return "仇视";
+        }
+
+        var affinity = (character.Personality.Friendship + target.Personality.Friendship) / 2;
+        if (relationType is "父亲" or "母亲" or "配偶" or "子女" or "岳父" or "岳母")
+        {
+            if (affinity >= 80) return "亲密";
+            if (affinity >= 55) return "友好";
+            if (affinity >= 35) return "普通";
+            return "险恶";
+        }
+
+        if (relationType is "师父")
+        {
+            if (affinity >= 70) return "友好";
+            if (affinity >= 40) return "普通";
+            return "险恶";
+        }
+
+        if (affinity >= 75) return "亲密";
+        if (affinity >= 50) return "友好";
+        if (affinity >= 30) return "普通";
+        return "险恶";
+    }
 }

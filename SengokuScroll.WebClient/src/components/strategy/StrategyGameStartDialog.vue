@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
 import {
-  cloneGameStartOptions,
+  cloneDifficultyStartOptions,
+  DEFAULT_INTEL_DEBUG_MODE,
   enforceCharacterFogControl,
   GAME_START_PRESETS,
+  INTEL_DEBUG_START_OPTION_VISIBLE,
   resolveDifficultyFromOptions,
   type GameStartSettings,
   type PresetDifficultyId,
@@ -35,7 +37,8 @@ const emit = defineEmits<{
 const form = reactive<GameStartSettings>({
   scenarioId: props.scenarioId ?? "mini_kanto",
   difficulty: "Normal",
-  customStartOptions: cloneGameStartOptions(GAME_START_PRESETS.Normal),
+  customStartOptions: cloneDifficultyStartOptions(GAME_START_PRESETS.Normal),
+  intelDebugMode: DEFAULT_INTEL_DEBUG_MODE,
 });
 
 const applyingPreset = ref(false);
@@ -56,7 +59,9 @@ watch(
       return;
     }
     applyingPreset.value = true;
+    const preservedDebugMode = form.intelDebugMode;
     Object.assign(form.customStartOptions, GAME_START_PRESETS[difficulty as PresetDifficultyId]);
+    form.intelDebugMode = preservedDebugMode;
     applyingPreset.value = false;
   },
 );
@@ -119,7 +124,7 @@ const difficultyOptions = [
 ];
 
 function onConfirm() {
-  const options = cloneGameStartOptions(form.customStartOptions);
+  const options = cloneDifficultyStartOptions(form.customStartOptions);
   enforceCharacterFogControl(options);
   const difficulty = resolveDifficultyFromOptions(options);
 
@@ -127,6 +132,7 @@ function onConfirm() {
     scenarioId: form.scenarioId,
     difficulty,
     customStartOptions: options,
+    intelDebugMode: form.intelDebugMode,
   });
 }
 
@@ -159,6 +165,22 @@ function onClose() {
           </el-radio-group>
           <p v-if="presetSummary" class="field-hint">{{ presetSummary }}</p>
           <p v-else class="field-hint">当前选项与预设不完全一致。</p>
+        </div>
+      </el-form-item>
+
+      <el-form-item
+        v-if="INTEL_DEBUG_START_OPTION_VISIBLE"
+        label="调试模式"
+        class="compact-item"
+      >
+        <div class="control-stack">
+          <div class="sub-option-row">
+            <span class="sub-option-label">情报调试</span>
+            <el-switch v-model="form.intelDebugMode" />
+          </div>
+          <p class="field-hint">
+            开启后情报对话框显示「调试模式」checkbox；该 checkbox 才控制隐藏人物与性情等字段的显示。
+          </p>
         </div>
       </el-form-item>
 

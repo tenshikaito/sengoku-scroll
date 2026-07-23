@@ -65,7 +65,10 @@ public class StrategyEconomySystem(
                 var settlement = HarvestEconomyActions.ApplyHarvestSettlement(
                     stronghold,
                     harvestEvent,
-                    HarvestConstants.DefaultInternalTributeFoodBp);
+                    HarvestConstants.DefaultInternalTributeFoodBp,
+                    gameData,
+                    scenarioMeta.RegionHarvestProfiles,
+                    regionId);
 
                 if (gameData.Forces.TryGetValue(stronghold.ForceId, out var force))
                     ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);
@@ -73,6 +76,13 @@ public class StrategyEconomySystem(
                 if (settlement.TributeObligationGo > 0)
                     dispatchHelper.DispatchHarvestFoodTribute(stronghold, settlement.TributeObligationGo);
             }
+
+            AgricultureProgressActions.AdvanceDailyProgress(
+                stronghold,
+                gameData,
+                gameDate,
+                scenarioMeta.RegionHarvestProfiles,
+                regionId);
 
             if (EconomyRules.ShouldConsumeDailyCivilianFood(stronghold))
                 StrongholdEconomyActions.ApplyDailyCivilianFoodConsumption(stronghold);

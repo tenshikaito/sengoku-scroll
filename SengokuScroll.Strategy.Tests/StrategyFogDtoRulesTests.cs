@@ -12,6 +12,65 @@ namespace SengokuScroll.Strategy.Tests;
 
 public class StrategyFogDtoRulesTests
 {
+    private static StrategyStrongholdStateDto CreateTestStrongholdDto() => new()
+    {
+        Id = 2,
+        Name = "犬山",
+        TypeId = 3,
+        TypeName = "山城",
+        ForceId = 3,
+        X = 4,
+        Y = 4,
+        Food = 72000000,
+        Population = 36000,
+        Stability = 70,
+        AdministrativeEfficiency = 80,
+        PopularFeelings = 65,
+        IsLordResidence = false,
+        LordId = 6,
+        MayorId = 0,
+        IsDirectRule = false,
+        LordName = "酒井忠次",
+        Morale = 78,
+        Training = 62,
+        CultureName = "日本",
+        ReligionName = "神道教",
+        Money = 9000000,
+        GarrisonSoldiers = 1200,
+        MilitiaSoldiers = 1200,
+        TotalSoldiers = 2400,
+        Technologies = [],
+        LaborCapacity = 18000,
+        LaborAvailable = 18000,
+        MilitiaAway = 0,
+        LaborRatioPercent = 100,
+        EffectiveCropPattern = "Single",
+        EarlyCropProgressPercent = 0,
+        LateCropProgressPercent = 0,
+        ThirdCropProgressPercent = 0,
+        GarrisonTroopPools = [],
+        StandingGarrisonUnits = [],
+        CropCycles = [],
+        AgricultureProductionPotential = 0,
+        KnowsDoubleCrop = false,
+        KnowsTripleCrop = false,
+        CityActors = [],
+        GarrisonWounded = 0,
+        PollTaxRate = 10,
+        AgricultureTaxRate = 25,
+        CommerceTaxRate = 12,
+        TariffTaxRate = 8,
+        GovernancePriority = "Military",
+        IsHistorical = true,
+        Defense = 500,
+        DefenseFacilities = [],
+        EconomyFacilities = [],
+        LuxuryGoods = 0,
+        Scale = 12,
+        Maintenance = 7200,
+        ActiveEffects = [],
+    };
+
     [Fact]
     public void ApplyStrongholdFog_OwnRealmInnerVassal_KeepsFullStats()
     {
@@ -46,43 +105,7 @@ public class StrategyFogDtoRulesTests
         var visibility = new ForceVisibilityState();
         visibility.EnsureCapacity(20, 20);
 
-        var dto = new StrategyStrongholdStateDto
-        {
-            Id = 2,
-            Name = "犬山",
-            TypeId = 3,
-            TypeName = "山城",
-            ForceId = 3,
-            X = 4,
-            Y = 4,
-            Food = 72000000,
-            Population = 36000,
-            Stability = 70,
-            AdministrativeEfficiency = 80,
-            PopularFeelings = 65,
-            IsLordResidence = false,
-            LordId = 6,
-            MayorId = 0,
-            IsDirectRule = false,
-            LordName = "酒井忠次",
-            Morale = 78,
-            Training = 62,
-            CultureName = "日本",
-            ReligionName = "神道教",
-            Money = 9000000,
-            GarrisonSoldiers = 1200,
-            GarrisonWounded = 0,
-            PollTaxRate = 10,
-            AgricultureTaxRate = 25,
-            CommerceTaxRate = 12,
-            TariffTaxRate = 8,
-            GovernancePriority = "Military",
-            IsHistorical = true,
-            Defense = 500,
-            DefenseFacilities = [],
-            EconomyFacilities = [],
-            LuxuryGoods = 0
-        };
+        var dto = CreateTestStrongholdDto();
 
         var result = StrategyFogDtoRules.ApplyStrongholdFog(dto, meta, gameData, visibility, 20);
 
@@ -108,43 +131,7 @@ public class StrategyFogDtoRulesTests
         visibility.EnsureCapacity(20, 20);
         visibility.MarkExplored(4, 4, 20);
 
-        var dto = new StrategyStrongholdStateDto
-        {
-            Id = 2,
-            Name = "犬山",
-            TypeId = 3,
-            TypeName = "山城",
-            ForceId = 3,
-            X = 4,
-            Y = 4,
-            Food = 72000000,
-            Population = 36000,
-            Stability = 70,
-            AdministrativeEfficiency = 80,
-            PopularFeelings = 65,
-            IsLordResidence = false,
-            LordId = 6,
-            MayorId = 0,
-            IsDirectRule = false,
-            LordName = "酒井忠次",
-            Morale = 78,
-            Training = 62,
-            CultureName = "日本",
-            ReligionName = "神道教",
-            Money = 9000000,
-            GarrisonSoldiers = 1200,
-            GarrisonWounded = 0,
-            PollTaxRate = 10,
-            AgricultureTaxRate = 25,
-            CommerceTaxRate = 12,
-            TariffTaxRate = 8,
-            GovernancePriority = "Military",
-            IsHistorical = true,
-            Defense = 500,
-            DefenseFacilities = [],
-            EconomyFacilities = [],
-            LuxuryGoods = 0
-        };
+        var dto = CreateTestStrongholdDto();
 
         var result = StrategyFogDtoRules.ApplyStrongholdFog(dto, meta, null!, visibility, 20);
 

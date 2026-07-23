@@ -1,12 +1,13 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Extensions;
+using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
 
 namespace SengokuScroll.Strategy.Rules;
 
-/// <summary>居城出征校验。</summary>
+/// <summary>居城出征校验：农兵池与驻城专业队。</summary>
 public static class StrongholdDeployRules
 {
     public static GameResult ValidateDeploy(
@@ -27,8 +28,21 @@ public static class StrongholdDeployRules
             return GameError.DataNotFound;
 
         var total = composition.Sum(c => c.Soldiers);
-        if (total <= 0 || total > StrongholdGarrisonRules.GetCityGarrisonSoldiers(stronghold))
+        if (total <= 0)
             return GameError.DataNotFound;
+
+        var pools = StrongholdMilitaryBootstrapHelper.ListGarrisonTroopPools(stronghold, gameData)
+            .ToDictionary(p => p.TypeId, p => p.Soldiers);
+
+        foreach (var entry in composition)
+        {
+            if (entry.Soldiers <= 0)
+                continue;
+
+            var available = pools.GetValueOrDefault(entry.TypeId);
+            if (entry.Soldiers > available)
+                return GameError.StrongholdError.InsufficientGarrisonTroops;
+        }
 
         if (gameData.Units.Values.Any(u =>
                 u.IsMilitary && u.Soldier > 0 && u.Location.IsSameTile(stronghold.Location)))

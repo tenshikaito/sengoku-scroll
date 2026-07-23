@@ -5687,7 +5687,8 @@
         "strongholdId": 1,
         "leadership": 96,
         "power": 82,
-        "birthYear": 1534
+        "birthYear": 1534,
+        "enemyIds": [3, 5]
       },
       {
         "id": 2,
@@ -5695,7 +5696,8 @@
         "forceId": 1,
         "leadership": 91,
         "power": 88,
-        "birthYear": 1522
+        "birthYear": 1522,
+        "masterId": 1
       },
       {
         "id": 3,
@@ -5704,7 +5706,8 @@
         "strongholdId": 6,
         "leadership": 68,
         "power": 65,
-        "birthYear": 1538
+        "birthYear": 1538,
+        "enemyIds": [1, 5]
       },
       {
         "id": 4,
@@ -5713,7 +5716,8 @@
         "strongholdId": 1,
         "leadership": 72,
         "politics": 78,
-        "birthYear": 1507
+        "birthYear": 1507,
+        "masterId": 1
       },
       {
         "id": 5,
@@ -5722,7 +5726,8 @@
         "strongholdId": 4,
         "leadership": 88,
         "power": 75,
-        "birthYear": 1515
+        "birthYear": 1515,
+        "enemyIds": [3]
       },
       {
         "id": 6,
@@ -5731,7 +5736,8 @@
         "strongholdId": 2,
         "leadership": 85,
         "power": 80,
-        "birthYear": 1485
+        "birthYear": 1485,
+        "masterId": 9
       },
       {
         "id": 7,
@@ -5758,7 +5764,9 @@
         "strongholdId": 12,
         "leadership": 90,
         "power": 78,
-        "birthYear": 1542
+        "birthYear": 1542,
+        "masterId": 3,
+        "enemyIds": [1]
       },
       {
         "id": 10,
@@ -5767,7 +5775,8 @@
         "strongholdId": 1,
         "leadership": 85,
         "power": 90,
-        "birthYear": 1539
+        "birthYear": 1539,
+        "masterId": 1
       },
       {
         "id": 11,
@@ -5776,7 +5785,8 @@
         "strongholdId": 1,
         "leadership": 82,
         "politics": 88,
-        "birthYear": 1513
+        "birthYear": 1513,
+        "masterId": 1
       }
     ],
     "strongholds": [

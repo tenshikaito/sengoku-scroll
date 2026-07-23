@@ -239,8 +239,7 @@ export const loadScenario = (loadRequest: StrategyLoadRequest | string) => {
       : {
           scenarioId: loadRequest.scenarioId,
           difficulty: loadRequest.difficulty,
-          customStartOptions:
-            loadRequest.difficulty === "Custom" ? loadRequest.customStartOptions : undefined,
+          customStartOptions: loadRequest.customStartOptions,
         };
 
   return request(

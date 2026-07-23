@@ -26,7 +26,8 @@ public static class GameStartOptionsMapper
             AllySharedVision = options.AllySharedVision,
             CharacterSharedVision = options.CharacterSharedVision,
             ShowAllyIntel = options.ShowAllyIntel,
-            InstantEventMessages = options.InstantEventMessages
+            InstantEventMessages = options.InstantEventMessages,
+            IntelDebugMode = options.IntelDebugMode
         };
 
     public static GameStartOptions FromDto(GameStartOptionsDto dto)
@@ -47,7 +48,8 @@ public static class GameStartOptionsMapper
             AllySharedVision = dto.AllySharedVision,
             CharacterSharedVision = dto.CharacterSharedVision,
             ShowAllyIntel = dto.ShowAllyIntel,
-            InstantEventMessages = dto.InstantEventMessages
+            InstantEventMessages = dto.InstantEventMessages,
+            IntelDebugMode = dto.IntelDebugMode ?? true
         };
 
         return GameStartOptionsProfile.ApplyAllConstraints(options);

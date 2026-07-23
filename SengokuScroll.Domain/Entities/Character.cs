@@ -143,6 +143,21 @@ public class Character : CharacterDefinition, IMovable
     /// <summary>仇敌角色 Id 列表。</summary>
     public List<int> EnemyIds { get; set; } = [];
 
+    /// <summary>入仕日期；用于计算仕官年数（不直接展示）。</summary>
+    public GameDate ServiceDate { get; set; }
+
+    /// <summary>对势力的忠诚度 0–100；受 ActiveEffects 中 Loyalty 条目叠加。</summary>
+    public byte Loyalty { get; set; } = 50;
+
+    /// <summary>角色间关系（参照势力外交；含看法条目）。</summary>
+    public List<CharacterRelationship> Relationships { get; set; } = [];
+
+    /// <summary>当前增减益（灾害/事件/政策等）。</summary>
+    public List<EntityEffect> ActiveEffects { get; set; } = [];
+
+    /// <summary>当前任务列表（情报 · 任务 Tab）。</summary>
+    public List<CharacterIntelTask> IntelTasks { get; set; } = [];
+
     public sealed class CharacterActionTarget : IActionTarget
     {
         public int ForceId { get; set; }

@@ -75,6 +75,24 @@ function statPercent(value: unknown): string {
   return Number.isFinite(n) ? String(Math.trunc(n)) : "—";
 }
 
+function adminEfficiencyLabel(value: unknown): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${Math.trunc(n)}%`;
+}
+
+function strongholdTotalSoldiers(stronghold: StrategyStrongholdState): number {
+  const total = Number(stronghold.totalSoldiers);
+  if (Number.isFinite(total) && total > 0) return Math.trunc(total);
+  const garrison = Number.isFinite(Number(stronghold.garrisonSoldiers))
+    ? Math.max(0, Math.trunc(Number(stronghold.garrisonSoldiers)))
+    : 0;
+  const militia = Number.isFinite(Number(stronghold.militiaSoldiers))
+    ? Math.max(0, Math.trunc(Number(stronghold.militiaSoldiers)))
+    : 0;
+  return garrison + militia;
+}
+
 function textOrDash(value: unknown): string {
   if (value == null) return "—";
   const s = String(value).trim();
@@ -259,13 +277,22 @@ function formatDefense(value: unknown): string {
   return Number.isFinite(n) ? Math.trunc(n).toLocaleString() : "—";
 }
 
+function cropPatternLabel(pattern: string | undefined): string {
+  switch (pattern) {
+    case "Double":
+      return "二季作";
+    case "Triple":
+      return "三季作";
+    default:
+      return "单季作";
+  }
+}
+
 function strongholdGarrisonSoldiers(
   worldState: StrategyWorldState,
   stronghold: StrategyStrongholdState
 ): number {
-  const city = Number.isFinite(Number(stronghold.garrisonSoldiers))
-    ? Math.max(0, Math.trunc(Number(stronghold.garrisonSoldiers)))
-    : 0;
+  const city = strongholdTotalSoldiers(stronghold);
   if (
     isForeignIntelRestricted(worldState, stronghold.forceId) &&
     !hasStrongholdMilitaryEspionageIntel(stronghold)
@@ -330,6 +357,15 @@ function strongholdCoreIntelRows(
 
   rows.push(
     { label: "人口", value: strongholdHoverFieldValue(worldState, stronghold, "人口", safePopulation(stronghold.population)) },
+    {
+      label: "行政效率",
+      value: strongholdHoverFieldValue(
+        worldState,
+        stronghold,
+        "行政效率",
+        adminEfficiencyLabel(stronghold.administrativeEfficiency),
+      ),
+    },
     { label: "金钱", value: strongholdHoverFieldValue(worldState, stronghold, "金钱", formatMoney(stronghold.money)) },
     { label: "粮食", value: strongholdHoverFieldValue(worldState, stronghold, "粮食", formatFoodGo(stronghold.food)) },
     {
@@ -434,6 +470,44 @@ export function strongholdDetailIntelRows(
       findBattlefieldAtCell,
     }),
   );
+
+  return rows;
+}
+
+/** 据点详情 · 影响 Tab（技术 + 增减益占位）。 */
+export function strongholdEffectsIntelRows(
+  stronghold: StrategyStrongholdState,
+): IntelFieldRow[] {
+  const rows: IntelFieldRow[] = [
+    {
+      label: "二季作",
+      value: stronghold.knowsDoubleCrop ? "掌握" : "未掌握",
+    },
+    {
+      label: "三季作",
+      value: stronghold.knowsTripleCrop ? "掌握" : "未掌握",
+    },
+    {
+      label: "有效作型",
+      value: cropPatternLabel(stronghold.effectiveCropPattern),
+    },
+    {
+      label: "农业潜力",
+      value: formatFoodGo(stronghold.agricultureProductionPotential ?? 0),
+    },
+    { label: "增减益", value: "暂无增减益（系统后续实装）" },
+  ];
+
+  if (stronghold.laborCapacity != null) {
+    const available = stronghold.laborAvailable ?? stronghold.laborCapacity;
+    const ratio = stronghold.laborRatioPercent ?? 100;
+    const thousands = available / 1000;
+    const laborText = Number.isInteger(thousands) ? `${thousands}千` : `${thousands.toFixed(1)}千`;
+    rows.splice(4, 0, {
+      label: "劳力",
+      value: `${laborText}(${ratio}%)`,
+    });
+  }
 
   return rows;
 }

@@ -4,14 +4,13 @@ using SengokuScroll.Domain.Actions;
 using SengokuScroll.Domain.Contexts;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Strategy.Data.Models;
-using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Actions;
 
-/// <summary>从居城城内兵出征：扣减驻军并生成带编制的地图部队。</summary>
+/// <summary>从居城城内兵出征：扣减农兵池/驻城专业队并生成地图部队。</summary>
 public static class UnitDeploymentActions
 {
     public static GameResult<Unit> DeployFromStronghold(
@@ -32,10 +31,7 @@ public static class UnitDeploymentActions
             return validate.Error!;
 
         var totalSoldiers = composition.Sum(c => c.Soldiers);
-        stronghold.ForceActor.Soldier -= totalSoldiers;
-
         var unitId = gameData.Units.Keys.Where(id => id > 0).DefaultIfEmpty(100).Max() + 1;
-        var nextSubId = gameData.SubUnits.Keys.DefaultIfEmpty(0).Max() + 1;
 
         var unit = new Unit
         {
@@ -64,32 +60,34 @@ public static class UnitDeploymentActions
             }
         };
 
+        var allocated = new List<SubUnit>();
         foreach (var entry in composition)
         {
             if (entry.Soldiers <= 0)
                 continue;
 
-            var sub = new SubUnit
+            if (!StrongholdMilitaryBootstrapHelper.TryAllocateGarrisonTroops(
+                    stronghold,
+                    gameData,
+                    entry.TypeId,
+                    entry.Soldiers,
+                    unitId,
+                    allocated))
             {
-                Id = nextSubId++,
-                TypeId = (byte)entry.TypeId,
-                TypeName = StrategyTroopTypes.ResolveName(entry.TypeId, entry.TypeName),
-                ForceId = playerForceId,
-                StrongholdId = stronghold.Id,
-                UnitId = unitId,
-                Soldier = entry.Soldiers,
-                LeaderId = entry.CommanderId ?? 0
-            };
-
-            gameData.SubUnits[sub.Id] = sub;
-            unit.SubUnitIds.Add(sub.Id);
+                StrongholdMilitaryBootstrapHelper.ReturnSubUnitsToGarrison(stronghold, gameData, allocated);
+                return GameError.StrongholdError.InsufficientGarrisonTroops;
+            }
         }
+
+        foreach (var sub in allocated)
+            unit.SubUnitIds.Add(sub.Id);
 
         if (gameData.Characters.TryGetValue(commanderId, out var commander))
             UnitCommanderHelper.AttachToUnit(commander, unit);
 
         gameData.Units[unitId] = unit;
         MapLocationActions.RegisterUnit(context.GameWorld, unit);
+        StrongholdMilitaryStatsHelper.Recalculate(stronghold, gameData);
 
         return unit;
     }

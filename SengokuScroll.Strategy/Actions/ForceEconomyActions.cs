@@ -34,7 +34,8 @@ public static class ForceEconomyActions
 
         foreach (var stronghold in gameData.Strongholds.Values.Where(s => s.ForceId == force.Id))
         {
-            var maintenance = EconomyCalculator.CalculateStrongholdMonthlyMaintenanceMoney(stronghold);
+            var maintenance = EconomyCalculator.CalculateStrongholdMonthlyMaintenanceMoney(stronghold)
+                + EconomyCalculator.CalculateGarrisonProfessionalMaintenanceMoney(stronghold, gameData);
 
             stronghold.ForceActor.Money = Math.Max(0, stronghold.ForceActor.Money - maintenance);
             expenseMoney += maintenance;

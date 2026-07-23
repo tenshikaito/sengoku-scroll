@@ -16,7 +16,8 @@ public class GameStartOptionsProfileTests
             AllySharedVision = true,
             CharacterSharedVision = true,
             ShowAllyIntel = false,
-            InstantEventMessages = false
+            InstantEventMessages = false,
+            IntelDebugMode = true
         };
 
         var sanitized = GameStartOptionsProfile.ApplyAllConstraints(options);

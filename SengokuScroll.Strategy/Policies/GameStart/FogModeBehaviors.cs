@@ -2,6 +2,7 @@ using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Rules;
 using SengokuScroll.Strategy.Vision;
 
 namespace SengokuScroll.Strategy.Policies.GameStart;
@@ -77,6 +78,24 @@ internal abstract class FogEnabledModeBehavior : IFogModeBehavior
             Population = 0,
             GarrisonSoldiers = 0,
             GarrisonWounded = 0,
+            MilitiaSoldiers = 0,
+            TotalSoldiers = 0,
+            Technologies = [],
+            LaborCapacity = 0,
+            LaborAvailable = 0,
+            MilitiaAway = 0,
+            LaborRatioPercent = 0,
+            EffectiveCropPattern = AgricultureCropRules.Single,
+            EarlyCropProgressPercent = 0,
+            LateCropProgressPercent = 0,
+            ThirdCropProgressPercent = 0,
+            GarrisonTroopPools = [],
+            StandingGarrisonUnits = [],
+            CropCycles = [],
+            AgricultureProductionPotential = 0,
+            KnowsDoubleCrop = false,
+            KnowsTripleCrop = false,
+            CityActors = [],
             Money = 0,
             Morale = 0,
             Training = 0,

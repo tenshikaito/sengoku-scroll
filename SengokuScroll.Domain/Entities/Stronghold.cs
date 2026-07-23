@@ -119,14 +119,25 @@ public class Stronghold : IHasForce
     public byte Defense { get; set; }
 
     /// <summary>
-    /// 维持费
+    /// 维持费（据点类型 + 城防设施；由规则同步）
     /// </summary>
     public int Maintenance { get; set; }
 
-    /// <summary>
-    /// 史实: 非史实据点收支会降为 设定惩罚百分比
+    /// <summary>据点规模 1–30（用途待定）。</summary>
+    public byte Scale { get; set; } = 10;
+
+    /// <summary>据点介绍（情报 · 介绍 Tab）；史实据点可与 Description 并用。</summary>
+    public string? Introduction { get; set; }
+
+    /// <summary>史实: 非史实据点收支会降为 设定惩罚百分比
     /// </summary>
     public bool IsHistorical { get; set; }
+
+    /// <summary>当前增减益。</summary>
+    public List<EntityEffect> ActiveEffects { get; set; } = [];
+
+    /// <summary>已掌握/研究中的技术。</summary>
+    public List<EntityTechnology> Technologies { get; set; } = [];
 
     /// <summary>
     /// 人头税
@@ -158,6 +169,9 @@ public class Stronghold : IHasForce
 
     /// <summary>城防设施</summary>
     public required List<int> DefenseFacilityIds { get; set; }
+
+    /// <summary>农业：分季进度、作型与劳力。</summary>
+    public required StrongholdAgricultureState Agriculture { get; set; }
 
     /// <summary>经济设施（Market、奢侈品工坊等；M4-d）。</summary>
     public required List<int> EconomyFacilityIds { get; set; }

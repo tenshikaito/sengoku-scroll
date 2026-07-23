@@ -1,6 +1,6 @@
 # SengokuScroll（战国绘卷）共同详细设计
 
-> 版本：1.0 | 日期：2026-06-19 | 索引：[设计文档索引](./README.md) | 上一级：[基本设计](./design-document.md)
+> 版本：1.1 | 日期：2026-07-22 | 索引：[设计文档索引](./README.md) | 上一级：[基本设计](./design-document.md)
 
 ---
 
@@ -291,8 +291,14 @@ Entity（抽象基类）
 | `StrongholdId` | int | 所在据点ID |
 | `PositionId` | int | 职位ID |
 | `Salary` | int | 俸禄 |
-| `TaskId` | int? | 当前任务ID |
+| `TaskId` | int? | 当前任务ID（旧字段，逐步由 IntelTasks 取代） |
 | `TaskProgress` | int | 任务进度 |
+| `ServiceDate` | GameDate | 仕官开始日期（情报 Tab 派生仕官年数） |
+| `Loyalty` | byte | 基础忠诚 0–100；DTO 下发有效值含 ActiveEffects 叠加 |
+| `Relationships` | List&lt;CharacterRelationship&gt; | 角色间数值关系 + ViewEffects（本人/对本人看法） |
+| `ActiveEffects` | List&lt;EntityEffect&gt; | 灾害/政策等增减益（影响 Tab） |
+| `IntelTasks` | List&lt;CharacterIntelTask&gt; | 持久化任务（任务 Tab；bootstrap 写入） |
+| `Introduction` | string? | 介绍 Tab 文案 |
 | `ActionPlan` | CharacterActionPlan | 行动计划 |
 | `ActionStatus` | CharacterActionStatus | 行动状态 |
 | `ForceStatus` | CharacterForceStatus | 势力状态 |
@@ -334,6 +340,47 @@ Entity（抽象基类）
 | `Idle` | 空闲：表示角色没有任何任务、可以自由活动 |
 | `Task` | 任务中：表示角色有任务需要执行、需要优先执行任务 |
 | `UnitAction` | 单位行动中：表示角色正在参与单位行动、无法执行个人指令 |
+
+---
+
+#### 1.2.1a EntityEffect（增减益 / 看法条目）
+
+> 基于 `SengokuScroll.Domain.Entities.EntityEffect.cs`、`EffectTargetStat.cs`、`EffectDurationKind.cs`
+
+共用结构，挂载位置决定 UI 与 formatter：
+
+| 挂载位置 | 列表字段 | 情报 UI | Strategy formatter |
+|----------|----------|---------|-------------------|
+| Force / Stronghold / Character | `ActiveEffects` | 影响 Tab | `FormatTargetStat` |
+| `Diplomacy` | `ViewEffects` | 势力 · 本家看法 / 对本家的看法 | `FormatDiplomacyViewTargetStat` |
+| `CharacterRelationship` | `ViewEffects` | 人物 · 本人看法 / 对本人的看法 | `FormatCharacterViewTargetStat` |
+
+**字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `Id` | int | 条目 Id |
+| `Name` | string | 名称（如「桶狭间之战」） |
+| `TargetStat` | EffectTargetStat | 作用属性（见下表） |
+| `Magnitude` | int | 幅度；符号表示增减 |
+| `Duration` | EffectDurationKind | Permanent / LongTerm / Temporary |
+| `Description` | string? | 说明 |
+| `ExpiresOn` | GameDate? | Temporary 到期日 |
+
+**EffectTargetStat（节选）：**
+
+| 值 | ActiveEffects | 外交看法 | 角色看法 |
+|----|---------------|----------|----------|
+| Relationship | — | 外交关系 | **亲疏** |
+| Trust | — | 信赖 | 信赖 |
+| Diplomacy | — | 外交关系 | （归并为亲疏，禁止新写入） |
+| PersonalOpinion | — | — | 个人观感 |
+| Loyalty | 忠诚 | — | — |
+| Agriculture / Commerce / Morale | 农业/商业/士气 | — | — |
+
+**CharacterRelationship**（`CharacterRelationship.cs`）：OwnerCharacterId → TargetCharacterId 视角；`Relationship`/`Trust` 为基线数值；`ViewEffects` 仅影响私人关系展示与后续玩法，**不**修改势力 `Diplomacy.Relation` 枚举。
+
+**CharacterIntelTask**（`CharacterIntelTask.cs`）：`TaskCategory` = Personal | Life | Force | PartTime；供任务 Tab 与存档。
 
 ---
 
@@ -565,12 +612,18 @@ Character（角色）
 ├── ForceId → Force（所属势力）
 ├── StrongholdId → Stronghold（所在据点）
 ├── PositionId → Position（职位）
-├── TaskId → Task（当前任务）
+├── Relationships → CharacterRelationship[]（私人关系 + ViewEffects）
+├── ActiveEffects → EntityEffect[]（影响 Tab）
+├── IntelTasks → CharacterIntelTask[]（任务 Tab）
+├── TaskId → Task（当前任务，旧）
 ├── FamilyId → Family（家族）
 ├── FatherId → Character（父亲）
 ├── MotherId → Character（母亲）
 ├── SpouseId → Character（配偶）
 └── ChildrenIds → Character[]（子女）
+
+Force（势力）
+└── Diplomacies → Diplomacy[]（含 ViewEffects → 势力看法 Tab）
 ```
 
 ---

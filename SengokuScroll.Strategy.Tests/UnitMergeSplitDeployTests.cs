@@ -4,6 +4,7 @@ using SengokuScroll.Domain.Actions;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Extensions;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Hosting;
 using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Unit;
@@ -66,7 +67,7 @@ public class UnitMergeSplitDeployTests
 
         var world = GetWorld(host);
         var stronghold = world.GameData.Strongholds[1];
-        var garrisonBefore = stronghold.ForceActor.Soldier;
+        var garrisonBefore = StrongholdMilitaryStatsHelper.GetTotalAvailableSoldiers(stronghold, world.GameData);
         var unitsBefore = world.GameData.Units.Count;
 
         var result = host.DeployFromStronghold(
@@ -87,7 +88,9 @@ public class UnitMergeSplitDeployTests
         var deployed = world.GameData.Units.Values.Single(u =>
             u.ForceId == 1 && u.Location.IsSameTile(stronghold.Location) && u.Name == "清洲出征队");
         Assert.Equal(500, deployed.Soldier);
-        Assert.Equal(garrisonBefore - 500, stronghold.ForceActor.Soldier);
+        Assert.Equal(
+            garrisonBefore - 500,
+            StrongholdMilitaryStatsHelper.GetTotalAvailableSoldiers(stronghold, world.GameData));
         Assert.Equal(4, deployed.LeaderId);
     }
 

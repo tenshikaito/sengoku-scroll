@@ -37,8 +37,15 @@ export function resolveStrongholdTypeLabel(
   return STRONGHOLD_TYPE_NAMES[typeId] ?? "平城";
 }
 
-/** 据点规模（与城防默认设施人口门槛一致：大/中/小）。 */
-export function resolveStrongholdScaleLabel(population: unknown): string {
+/** 据点规模：优先读 1–30 数值；无则按人口回退大/中/小。 */
+export function resolveStrongholdScaleLabel(
+  scale: unknown,
+  population?: unknown,
+): string {
+  const scaleValue = Number(scale);
+  if (Number.isFinite(scaleValue) && scaleValue >= 1 && scaleValue <= 30) {
+    return String(Math.trunc(scaleValue));
+  }
   const n = Number(population);
   if (!Number.isFinite(n) || n < 0) return "—";
   if (n >= 50_000) return "大";
@@ -63,6 +70,12 @@ const KNOWN_STRONGHOLD_HIDDEN_LABELS = new Set([
   "维护费",
   "城内将",
   "设施",
+  "农兵",
+  "武士",
+  "伤兵",
+  "劳力",
+  "农事进度",
+  "生产效率",
   "人头税",
   "农业税",
   "商业税",

@@ -154,6 +154,17 @@ class StrongholdBlockadedErrorBehavior extends ApiErrorMessageBehavior {
   }
 }
 
+class InsufficientGarrisonTroopsErrorBehavior extends ApiErrorMessageBehavior {
+  readonly code = "InsufficientGarrisonTroops";
+
+  resolve(): ApiErrorResolution {
+    return {
+      type: "message",
+      message: "驻城兵种池兵力不足，无法按此编组出征",
+    };
+  }
+}
+
 class UnitNotDirectlyControllableErrorBehavior extends ApiErrorMessageBehavior {
   readonly code = "UnitNotDirectlyControllable";
 
@@ -179,6 +190,7 @@ const API_ERROR_BEHAVIORS: ApiErrorMessageBehavior[] = [
   new CharacterNotOnRecallableTaskErrorBehavior(),
   new ApNotEnoughErrorBehavior(),
   new StrongholdBlockadedErrorBehavior(),
+  new InsufficientGarrisonTroopsErrorBehavior(),
   new UnitNotDirectlyControllableErrorBehavior(),
 ];
 
