@@ -6,6 +6,7 @@ using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Battle;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Helpers;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Battle;
@@ -174,8 +175,8 @@ public static class BattleFactorEvaluator
             return;
 
         // 业务：统率映射 0.88～1.12 战力，武力映射 0.94～1.06 战力
-        var leadershipScale = 0.88 + self.Leadership / 100.0 * 0.24;
-        var powerScale = 0.94 + self.Power / 100.0 * 0.12;
+        var leadershipScale = 0.88 + CharacterEffectiveStats.Leadership(self) / 100.0 * 0.24;
+        var powerScale = 0.94 + CharacterEffectiveStats.Power(self) / 100.0 * 0.12;
 
         if (isAttackerSide)
             b.AttackerPowerScale *= leadershipScale * powerScale;
@@ -201,13 +202,13 @@ public static class BattleFactorEvaluator
         // 业务：守方智谋领先敌方每 10 点 +1% 胜率
         if (!isAttackerSide && enemy is not null)
         {
-            var strategyEdge = (self.Strategy - enemy.Strategy) / 10;
+            var strategyEdge = (CharacterEffectiveStats.Strategy(self) - CharacterEffectiveStats.Strategy(enemy)) / 10;
             if (strategyEdge != 0)
                 b.DefenderWinRateDelta += strategyEdge;
         }
 
         // 业务：军事熟练每级 +1% 胜率，上限 +6%
-        var militaryLevel = self.Proficiency.Military.Level;
+        var militaryLevel = CharacterEffectiveStats.SkillLevel(self.Proficiency.Military.Level, self);
         if (militaryLevel > 1)
         {
             var bonus = Math.Min(6, militaryLevel - 1);

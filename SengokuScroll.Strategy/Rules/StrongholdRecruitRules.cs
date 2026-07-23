@@ -1,5 +1,6 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
+using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
 
 namespace SengokuScroll.Strategy.Rules;
@@ -7,8 +8,8 @@ namespace SengokuScroll.Strategy.Rules;
 /// <summary>征兵校验。</summary>
 public static class StrongholdRecruitRules
 {
-    public const int PopulationPerSoldier = 2;
-    public const int MoneyCostPerSoldier = 100;
+    public const int PopulationPerSoldier = RecruitConstants.PopulationCostPerSoldier;
+    public const int MoneyCostPerSoldier = RecruitConstants.MoneyCostPerSoldier;
     public const int FoodCostPerSoldier = 50;
     public const int MaxRecruitPerOrder = 500;
 

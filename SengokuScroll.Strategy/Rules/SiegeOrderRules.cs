@@ -121,6 +121,30 @@ public static class SiegeOrderRules
     public static bool IsSiegeMovementLocked(Unit unit)
         => unit.SiegeMode != UnitSiegeMode.None;
 
+    /// <summary>战败/撤退时解除攻城令，避免 AI 被 SiegeLocked 跳过而无法撤离。</summary>
+    public static void ClearActiveOrder(Unit unit, GameData? gameData = null)
+    {
+        if (unit.SiegeMode == UnitSiegeMode.Encircle
+            && gameData is not null
+            && unit.ActionTarget.StrongholdId > 0
+            && gameData.Strongholds.TryGetValue(unit.ActionTarget.StrongholdId, out var stronghold))
+        {
+            var garrison = StrongholdGarrisonRules.FindGarrisonUnit(stronghold, gameData);
+            if (garrison is not null && garrison.Status == UnitStatus.BeingSurround)
+            {
+                garrison.Status = UnitStatus.Waiting;
+                if (garrison.Stance == UnitStance.Hold)
+                    garrison.Stance = UnitStance.Normal;
+            }
+        }
+
+        unit.SiegeMode = UnitSiegeMode.None;
+        unit.ActionTarget.StrongholdId = 0;
+        unit.DirectiveTargetId = 0;
+        if (unit.Stance == UnitStance.Surrounding)
+            unit.Stance = UnitStance.Normal;
+    }
+
     /// <summary>攻方是否与目标据点相邻或已站在据点格上。</summary>
     public static bool IsAdjacentToStronghold(Unit unit, Stronghold stronghold)
     {

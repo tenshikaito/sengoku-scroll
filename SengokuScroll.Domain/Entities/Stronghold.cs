@@ -1,5 +1,6 @@
 ﻿using SengokuScroll.Common.Types;
 using SengokuScroll.Domain.Entities.Abstraction;
+using SengokuScroll.Domain.Entities.Types;
 
 namespace SengokuScroll.Domain.Entities;
 
@@ -39,6 +40,9 @@ public class Stronghold : IHasForce
 
     /// <summary>代官（执行政务；与领主可分离）。</summary>
     public int LeaderId { get; set; }
+
+    /// <summary>政务方针：每月初据此向城内待命将领自动派发任务。</summary>
+    public StrongholdGovernancePriority GovernancePriority { get; set; }
 
     /// <summary>
     /// 坐标

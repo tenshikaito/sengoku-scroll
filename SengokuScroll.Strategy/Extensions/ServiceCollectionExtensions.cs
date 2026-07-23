@@ -93,8 +93,18 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IStrategyStrongholdOccupationSystem>(
             sp => sp.GetRequiredService<StrategyStrongholdOccupationSystem>());
 
+        services.AddSingleton<StrategyRecruitTaskSystem>();
+        services.AddSingleton<IStrategyRecruitTaskSystem>(sp => sp.GetRequiredService<StrategyRecruitTaskSystem>());
+
+        services.AddSingleton<StrategyStrongholdGovernanceSystem>();
+        services.AddSingleton<IStrategyStrongholdGovernanceSystem>(
+            sp => sp.GetRequiredService<StrategyStrongholdGovernanceSystem>());
+
         services.AddSingleton<StrategyCharacterAISystem>();
         services.AddSingleton<IStrategyCharacterAISystem>(sp => sp.GetRequiredService<StrategyCharacterAISystem>());
+
+        services.AddSingleton<StrategyCharacterStaminaSystem>();
+        services.AddSingleton<IStrategyCharacterStaminaSystem>(sp => sp.GetRequiredService<StrategyCharacterStaminaSystem>());
 
         services.AddSingleton<StrategyAISystem>();
         services.AddSingleton<IStrategyAISystem>(sp => sp.GetRequiredService<StrategyAISystem>());
@@ -121,6 +131,8 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IEconomySystem>(),
             sp.GetRequiredService<IStrategyMigrantSystem>(),
             sp.GetRequiredService<IStrategySupplySystem>(),
+            sp.GetRequiredService<IStrategyStrongholdGovernanceSystem>(),
+            sp.GetRequiredService<IStrategyRecruitTaskSystem>(),
             sp.GetRequiredService<IStrategyCharacterAISystem>(),
             sp.GetRequiredService<IAISystem>(),
             sp.GetRequiredService<IUnitSystem>(),
@@ -130,6 +142,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IStrategyStrongholdOccupationSystem>(),
             sp.GetRequiredService<IStrategyMessageCarrierSystem>(),
             sp.GetRequiredService<IStrategyBattleResolutionSystem>(),
-            sp.GetRequiredService<ICharacterSystem>()
+            sp.GetRequiredService<ICharacterSystem>(),
+            sp.GetRequiredService<IStrategyCharacterStaminaSystem>(),
         ];
 }

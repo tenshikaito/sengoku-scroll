@@ -1,5 +1,8 @@
 import type { StrategySupplyConvoyState, StrategyWorldState } from "@/api/strategy";
-import { resolvePlayerLordCharacterId } from "@/utils/strategyPlayerCharacter";
+import {
+  isLordLeadingUnit,
+  resolvePlayerLordCharacterId,
+} from "@/utils/strategyPlayerCharacter";
 
 /** 移民队无所属势力、无指令菜单，不参与格点多选。 */
 export function isMigrantConvoy(convoy: StrategySupplyConvoyState): boolean {
@@ -59,6 +62,7 @@ export function collectMapCellEntityOptions(
     const lordId = resolvePlayerLordCharacterId(worldState);
     if (
       lordId != null
+      && !isLordLeadingUnit(worldState)
       && worldState.lord.x === x
       && worldState.lord.y === y
       && !seenCharacterIds.has(lordId)

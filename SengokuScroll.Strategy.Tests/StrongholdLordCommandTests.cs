@@ -358,6 +358,27 @@ public class StrongholdLordCommandTests
     }
 
     [Fact]
+    public void CanExecutePersonalStrongholdCommands_ForOfficialInCity_ReturnsTrue()
+    {
+        var loaded = StrategyScenarioLoader.LoadFromFile(MiniKantoPath);
+        var gameData = loaded.World.GameData;
+        var okazaki = gameData.Strongholds[3];
+        var hayashi = gameData.Characters.Values.First(c => c.Name == "林秀贞");
+
+        okazaki.LordId = hayashi.Id;
+        hayashi.LocationType = CharacterLocationType.Stronghold;
+        hayashi.LocationStrongholdId = okazaki.Id;
+        hayashi.StrongholdId = okazaki.Id;
+        hayashi.Location = okazaki.Location;
+
+        Assert.True(StrongholdRecruitTaskRules.CanExecutePersonalStrongholdCommands(
+            hayashi,
+            okazaki,
+            loaded.Meta,
+            gameData));
+    }
+
+    [Fact]
     public void AppointMayor_CharacterAiOnDayAdvance_StartsRouteWithoutInstantLeave()
     {
         var loaded = StrategyScenarioLoader.LoadFromFile(MiniKantoPath);

@@ -37,8 +37,12 @@ export class DirectiveOnlyControlModeBehavior extends ControlModeBehavior {
     const lordUnitId = lord.lordUnitId;
     if (lordUnitId != null && lordUnitId > 0 && lordUnitId === unit.id) return true;
 
-    if (lord.lordCharacterLocationType === "Unit") {
-      return lordUnitId === unit.id;
+    if (
+      lord.lordCharacterId != null
+      && lord.lordCharacterId > 0
+      && unit.commanderId === lord.lordCharacterId
+    ) {
+      return true;
     }
 
     return lord.lordX === unit.x && lord.lordY === unit.y;

@@ -43,7 +43,6 @@ function openDetail(row: MessageRow) {
   const notification = notificationFromEventDetail(row.event, props.playerForceId);
   if (!notification) return;
   emit("open-detail", notification);
-  emit("update:visible", false);
 }
 </script>
 
@@ -61,9 +60,17 @@ function openDetail(row: MessageRow) {
       <li v-for="row in rows" :key="row.key" class="message-row">
         <span class="message-category">[{{ row.label }}]</span>
         <button
-          v-if="row.detailAvailable"
+          v-if="row.detailAvailable && row.event.category !== 'RecruitTaskCompleted'"
           type="button"
           class="message-link"
+          @click="openDetail(row)"
+        >
+          {{ row.text }}
+        </button>
+        <button
+          v-else-if="row.detailAvailable"
+          type="button"
+          class="message-plain message-plain--clickable"
           @click="openDetail(row)"
         >
           {{ row.text }}
@@ -127,6 +134,15 @@ function openDetail(row: MessageRow) {
 
 .message-plain {
   color: #1e293b;
+}
+
+.message-plain--clickable {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .strategy-message-dialog :deep(.el-dialog__title) {

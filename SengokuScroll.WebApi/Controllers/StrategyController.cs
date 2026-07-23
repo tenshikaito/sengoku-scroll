@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SengokuScroll.Common.Types;
 using SengokuScroll.Domain;
+using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Hosting;
 using SengokuScroll.Strategy.Persistence;
 using SengokuScroll.Strategy.Models;
@@ -177,10 +178,44 @@ public class StrategyController(
             request.CommerceTaxRate,
             request.TariffTaxRate));
 
-    /// <summary>据点征兵。</summary>
+    /// <summary>设置据点政务方针（军事优先 / 内政优先）。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/governance-priority")]
+    public IActionResult SetStrongholdGovernancePriority(
+        int strongholdId,
+        [FromBody] SetStrongholdGovernancePriorityRequest request)
+    {
+        if (!Enum.TryParse<StrongholdGovernancePriority>(request.Priority, ignoreCase: true, out var priority))
+            return BadRequest(new { error = "InvalidGovernancePriority" });
+
+        return ToPolicyResult(simulationHost.SetStrongholdGovernancePriority(strongholdId, priority));
+    }
+
+    /// <summary>据点征兵：指派将领执行征兵任务。</summary>
     [HttpPost("strongholds/{strongholdId:int}/recruit")]
     public IActionResult RecruitAtStronghold(int strongholdId, [FromBody] RecruitAtStrongholdRequest request)
-        => ToActionResult(simulationHost.RecruitAtStronghold(strongholdId, request.Soldiers));
+        => ToActionResult(simulationHost.RecruitAtStronghold(strongholdId, request.CharacterId));
+
+    /// <summary>据点募兵：指派将领并设定预算。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/mercenary-recruit")]
+    public IActionResult MercenaryRecruitAtStronghold(
+        int strongholdId,
+        [FromBody] MercenaryRecruitAtStrongholdRequest request)
+        => ToActionResult(simulationHost.MercenaryRecruitAtStronghold(
+            strongholdId,
+            request.CharacterId,
+            request.BudgetMoney));
+
+    /// <summary>角色个人征兵：领主/代官/当主在城内亲自执行。</summary>
+    [HttpPost("characters/{characterId:int}/personal-recruit")]
+    public IActionResult PersonalRecruit(int characterId)
+        => ToActionResult(simulationHost.PersonalRecruit(characterId));
+
+    /// <summary>角色个人募兵：预算从执行者个人金库扣除。</summary>
+    [HttpPost("characters/{characterId:int}/personal-mercenary-recruit")]
+    public IActionResult PersonalMercenaryRecruit(
+        int characterId,
+        [FromBody] PersonalMercenaryRecruitRequest request)
+        => ToActionResult(simulationHost.PersonalMercenaryRecruit(characterId, request.BudgetMoney));
 
     /// <summary>任命据点领主/代官；领主任命中当主 Id 表示设为直辖。</summary>
     [HttpPost("strongholds/{strongholdId:int}/appoint-lord")]
@@ -189,6 +224,24 @@ public class StrategyController(
             strongholdId,
             request.CharacterId,
             request.AppointType));
+
+    /// <summary>将领调动：自本据点派遣或自其它据点召集至本据点。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/transfer-character")]
+    public IActionResult TransferCharacterToStronghold(
+        int strongholdId,
+        [FromBody] TransferCharacterRequest request)
+        => ToActionResult(simulationHost.TransferCharacterToStronghold(
+            strongholdId,
+            request.CharacterId,
+            request.Mode,
+            request.DestinationStrongholdId));
+
+    /// <summary>召回外派任务的将领。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/recall-character")]
+    public IActionResult RecallCharacter(
+        int strongholdId,
+        [FromBody] RecallCharacterRequest request)
+        => ToPolicyResult(simulationHost.RecallCharacter(strongholdId, request.CharacterId));
 
     /// <summary>外交：宣战/议和/同盟。</summary>
     [HttpPost("diplomacy/relation")]

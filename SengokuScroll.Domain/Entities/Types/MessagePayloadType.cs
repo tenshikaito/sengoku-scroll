@@ -19,5 +19,11 @@ public enum MessagePayloadType
     FalseIntelligence,
 
     /// <summary>变更目标据点税率；由居城当主下达，非直辖城经信使投递。</summary>
-    TaxRateChange
+    TaxRateChange,
+
+    /// <summary>变更目标据点政务方针；由居城当主下达，异格据点经信使投递。</summary>
+    GovernancePriorityChange,
+
+    /// <summary>召回正在外派任务的将领；由居城当主下达，经信使传达至执行者所在格。</summary>
+    CharacterRecall
 }

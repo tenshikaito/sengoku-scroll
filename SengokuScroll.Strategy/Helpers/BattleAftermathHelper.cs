@@ -307,7 +307,7 @@ public sealed class BattleAftermathHelper(
             return;
 
         gameData.Characters.TryGetValue(loser.LeaderId, out var commander);
-        BattleRetreatRules.ApplyDefeatRetreat(loser, winner, commander);
+        BattleRetreatRules.ApplyDefeatRetreat(loser, winner, commander, gameData);
     }
 
     private void ApplyWinnerVictory(Unit winner, Unit loser, GameData gameData)

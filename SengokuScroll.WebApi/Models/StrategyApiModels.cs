@@ -194,10 +194,31 @@ public sealed class SetStrongholdTaxRateRequest
     public byte? TariffTaxRate { get; init; }
 }
 
-/// <summary>据点征兵请求。</summary>
+/// <summary>设置据点政务方针。</summary>
+public sealed class SetStrongholdGovernancePriorityRequest
+{
+    /** Military | Domestic | Autonomous */
+    public required string Priority { get; init; }
+}
+
+/// <summary>据点征兵请求：指派城内待命将领。</summary>
 public sealed class RecruitAtStrongholdRequest
 {
-    public required int Soldiers { get; init; }
+    public required int CharacterId { get; init; }
+}
+
+/// <summary>据点募兵请求：指派将领并设定预算。</summary>
+public sealed class MercenaryRecruitAtStrongholdRequest
+{
+    public required int CharacterId { get; init; }
+
+    public required int BudgetMoney { get; init; }
+}
+
+/// <summary>角色个人募兵请求：预算从执行者个人金库扣除。</summary>
+public sealed class PersonalMercenaryRecruitRequest
+{
+    public required int BudgetMoney { get; init; }
 }
 
 /// <summary>任命据点领主或代官；领主任命时 characterId 为当主 Id 表示设为直辖。</summary>
@@ -207,6 +228,24 @@ public sealed class AppointStrongholdLordRequest
 
     /** Lord | Mayor */
     public string AppointType { get; init; } = "Lord";
+}
+
+/// <summary>将领调动：派遣或召集。</summary>
+public sealed class TransferCharacterRequest
+{
+    public required int CharacterId { get; init; }
+
+    /** Dispatch | Summon */
+    public string Mode { get; init; } = "Summon";
+
+    /** 派遣模式下的目标据点 Id。 */
+    public int DestinationStrongholdId { get; init; }
+}
+
+/// <summary>召回外派任务的将领。</summary>
+public sealed class RecallCharacterRequest
+{
+    public required int CharacterId { get; init; }
 }
 
 /// <summary>外交关系变更。</summary>

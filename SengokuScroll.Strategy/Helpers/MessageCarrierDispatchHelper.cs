@@ -7,6 +7,7 @@ using SengokuScroll.Domain.Services.Pathfinding;
 using SengokuScroll.Strategy.Actions;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Unit;
 
@@ -136,6 +137,137 @@ public class MessageCarrierDispatchHelper(
         return MessageCarrierDispatchOutcome.CarrierDispatched;
     }
 
+    /// <summary>
+    /// 向本家据点下达政务方针变更；自居城派出载体，同格即时生效。
+    /// </summary>
+    public MessageCarrierDispatchOutcome IssueGovernancePriorityChange(
+        Point3 issuerLocation,
+        int sourceStrongholdId,
+        Stronghold targetStronghold,
+        PendingStrongholdGovernanceChange governanceChange,
+        StrategyScenarioMeta meta)
+    {
+        var gameData = context.GameWorldContext.GameWorld.GameData;
+
+        if (!StrongholdDomesticRules.RequiresInTransitDeliveryForTaxChange(issuerLocation, targetStronghold))
+        {
+            MessageCarrierActions.ApplyGovernancePriorityChange(
+                targetStronghold,
+                governanceChange,
+                gameData,
+                meta,
+                out _);
+            return MessageCarrierDispatchOutcome.AppliedImmediately;
+        }
+
+        var path = pathfindingService.CalculatePath(
+            new MapPathAgent(issuerLocation, targetStronghold.ForceId),
+            targetStronghold.Location);
+
+        if (path is null || path.Count <= 1)
+        {
+            MessageCarrierActions.ApplyGovernancePriorityChange(
+                targetStronghold,
+                governanceChange,
+                gameData,
+                meta,
+                out _);
+            return MessageCarrierDispatchOutcome.AppliedImmediately;
+        }
+
+        var carrierId = NextEntityId(gameData.MessageCarriers.Keys);
+        gameData.Strongholds.TryGetValue(sourceStrongholdId, out var origin);
+
+        var carrier = new MessageCarrier
+        {
+            Id = carrierId,
+            Name = BuildGovernanceCarrierName(origin?.Name, targetStronghold.Name),
+            ForceId = targetStronghold.ForceId,
+            Location = issuerLocation,
+            SourceStrongholdId = sourceStrongholdId,
+            CourierCount = LogisticsConstants.DefaultMessengerCourierCount,
+            EscortSoldierCount = LogisticsConstants.DefaultMessengerEscortCount,
+            CarrierKind = MessageCarrierKind.Character,
+            Status = MessageCarrierStatus.Moving,
+            RoutePoints = RouteCalculator.ToDailyRouteQueue(path),
+            Payload = new MessagePayload
+            {
+                Type = MessagePayloadType.GovernancePriorityChange,
+                TargetStrongholdId = targetStronghold.Id,
+                PendingGovernanceChange = governanceChange
+            }
+        };
+
+        gameData.MessageCarriers[carrierId] = carrier;
+        return MessageCarrierDispatchOutcome.CarrierDispatched;
+    }
+
+    /// <summary>向执行外派任务的将领下达召回令；自居城派出载体，同格即时生效。</summary>
+    public MessageCarrierDispatchOutcome IssueCharacterRecall(
+        Point3 issuerLocation,
+        int sourceStrongholdId,
+        Character targetCharacter,
+        GameData gameData,
+        StrategyScenarioMeta meta)
+    {
+        var targetLocation = StrongholdPersonnelActions.ResolveCharacterDeliveryLocation(
+            targetCharacter,
+            gameData);
+
+        if (!RequiresInTransitDeliveryForCharacterRecall(issuerLocation, targetLocation))
+        {
+            _ = StrongholdPersonnelActions.ApplyCharacterRecall(
+                targetCharacter,
+                gameData,
+                meta);
+            return MessageCarrierDispatchOutcome.AppliedImmediately;
+        }
+
+        var path = pathfindingService.CalculatePath(
+            new MapPathAgent(issuerLocation, targetCharacter.ForceId),
+            targetLocation);
+
+        if (path is null || path.Count <= 1)
+        {
+            _ = StrongholdPersonnelActions.ApplyCharacterRecall(
+                targetCharacter,
+                gameData,
+                meta);
+            return MessageCarrierDispatchOutcome.AppliedImmediately;
+        }
+
+        var carrierId = NextEntityId(gameData.MessageCarriers.Keys);
+        gameData.Strongholds.TryGetValue(sourceStrongholdId, out var origin);
+
+        var carrier = new MessageCarrier
+        {
+            Id = carrierId,
+            Name = BuildRecallCarrierName(origin?.Name, targetCharacter.Name),
+            ForceId = targetCharacter.ForceId,
+            Location = issuerLocation,
+            SourceStrongholdId = sourceStrongholdId,
+            CourierCount = LogisticsConstants.DefaultMessengerCourierCount,
+            EscortSoldierCount = LogisticsConstants.DefaultMessengerEscortCount,
+            CarrierKind = MessageCarrierKind.Character,
+            Status = MessageCarrierStatus.Moving,
+            RoutePoints = RouteCalculator.ToDailyRouteQueue(path),
+            Payload = new MessagePayload
+            {
+                Type = MessagePayloadType.CharacterRecall,
+                TargetCharacterId = targetCharacter.Id
+            }
+        };
+
+        gameData.MessageCarriers[carrierId] = carrier;
+        return MessageCarrierDispatchOutcome.CarrierDispatched;
+    }
+
+    private static bool RequiresInTransitDeliveryForCharacterRecall(Point3 issuerLocation, Point3 targetLocation)
+        => issuerLocation.X != targetLocation.X || issuerLocation.Y != targetLocation.Y;
+
+    private static string BuildRecallCarrierName(string? originName, string? characterName)
+        => $"召回·{characterName ?? "将领"}（自{originName ?? "居城"}）";
+
     /// <summary>从己方部队所在格向当主所在格派出战报载体（异格时生成实体）。</summary>
     /// <returns>新建载体 Id；同格或路径不可达时返回 null。</returns>
     public int? DispatchBattleReport(
@@ -229,6 +361,12 @@ public class MessageCarrierDispatchHelper(
     {
         var origin = string.IsNullOrWhiteSpace(originName) ? "居城" : originName.Trim();
         return $"{origin}税令→{targetStrongholdName.Trim()}";
+    }
+
+    private static string BuildGovernanceCarrierName(string? originName, string targetStrongholdName)
+    {
+        var origin = string.IsNullOrWhiteSpace(originName) ? "居城" : originName.Trim();
+        return $"{origin}方针→{targetStrongholdName.Trim()}";
     }
 
     private static string BuildStrategicReportCarrierName(string? originName)

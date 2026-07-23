@@ -17,6 +17,40 @@ export function resolvePlayerLordCharacterId(worldState: StrategyWorldState): nu
   );
 }
 
+/** 当主是否正在领兵（LocationType=Unit）。 */
+export function isLordLeadingUnit(worldState: StrategyWorldState): boolean {
+  return worldState.lord.locationType === "Unit";
+}
+
+/** 当主当前率领的部队 Id（领兵时按 commanderId 解析，否则取 meta 绑定）。 */
+export function resolveLordLedUnitId(worldState: StrategyWorldState): number | null {
+  const lordCharacterId = resolvePlayerLordCharacterId(worldState);
+  if (lordCharacterId != null) {
+    const ledUnit = worldState.units.find((u) => u.commanderId === lordCharacterId);
+    if (ledUnit) return ledUnit.id;
+  }
+
+  const metaUnitId = worldState.lord.unitId;
+  if (metaUnitId != null && metaUnitId > 0) return metaUnitId;
+
+  return null;
+}
+
+export function buildLordUnitControlContext(worldState: StrategyWorldState) {
+  const lordCharacterId = resolvePlayerLordCharacterId(worldState);
+  const character = lordCharacterId
+    ? worldState.characters?.find((c) => c.id === lordCharacterId)
+    : null;
+
+  return {
+    lordUnitId: resolveLordLedUnitId(worldState) ?? worldState.lord.unitId,
+    lordCharacterId,
+    lordX: worldState.lord.x,
+    lordY: worldState.lord.y,
+    lordCharacterLocationType: character?.locationType ?? worldState.lord.locationType,
+  };
+}
+
 /** 当主是否在城内（Stronghold）。 */
 export function isLordInStronghold(worldState: StrategyWorldState): boolean {
   return worldState.lord.locationType === "Stronghold";
@@ -150,16 +184,11 @@ export function isLordLeadingOrWithUnit(
   worldState: StrategyWorldState,
   unit: StrategyUnitState,
 ): boolean {
-  const lordUnitId = worldState.lord.unitId;
-  if (lordUnitId != null && lordUnitId > 0 && lordUnitId === unit.id) return true;
+  const ledUnitId = resolveLordLedUnitId(worldState);
+  if (ledUnitId != null && ledUnitId === unit.id) return true;
 
-  const characterId = resolvePlayerLordCharacterId(worldState);
-  const character = characterId
-    ? worldState.characters?.find((c) => c.id === characterId)
-    : null;
-  if (character?.locationType === "Unit") {
-    return lordUnitId === unit.id;
-  }
+  const lordCharacterId = resolvePlayerLordCharacterId(worldState);
+  if (lordCharacterId != null && unit.commanderId === lordCharacterId) return true;
 
   return worldState.lord.x === unit.x && worldState.lord.y === unit.y;
 }
@@ -171,34 +200,24 @@ export function isLordDirectlyControlledUnit(
   if (!unit) return false;
   if (unit.forceId !== worldState.playerForceId) return false;
 
-  const characterId = resolvePlayerLordCharacterId(worldState);
-  const character = characterId
-    ? worldState.characters?.find((c) => c.id === characterId)
-    : null;
-
   return GameStartOptionsProfile.fromWorldState(worldState).allowsDirectUnitControl(
     unit,
     worldState.playerForceId,
-    {
-      lordUnitId: worldState.lord.unitId,
-      lordX: worldState.lord.x,
-      lordY: worldState.lord.y,
-      lordCharacterLocationType: character?.locationType,
-    },
+    buildLordUnitControlContext(worldState),
   );
 }
 
-/** 外政据点是否显示「方针」按钮：有城主领地或内藩当主居城。 */
+/** 外政据点是否显示「方针」按钮：已任命领主的外城（不含内藩）。 */
 export function canShowStrongholdDirectiveButton(
   worldState: StrategyWorldState,
   stronghold: StrategyStrongholdState | null | undefined,
 ): boolean {
   if (!stronghold || !isPlayerRealmStronghold(worldState, stronghold)) return false;
-  if (!stronghold.isDirectRule && stronghold.lordId > 0) return true;
-  return isInnerVassalLordResidenceStronghold(worldState, stronghold);
+  if (isInnerVassalRealmStronghold(worldState, stronghold)) return false;
+  return !stronghold.isDirectRule && stronghold.lordId > 0;
 }
 
-/** 当主可否对指定据点下达指令（驻居城可遥控本家全境，否则须亲赴该据点格）。 */
+/** 当主可否对指定据点下达据点级指令（驻居城可遥控本家全境，否则须亲赴该据点格）。 */
 export function canLordCommandStronghold(
   worldState: StrategyWorldState,
   stronghold: StrategyStrongholdState | null | undefined,
@@ -206,6 +225,58 @@ export function canLordCommandStronghold(
   if (!stronghold || !isPlayerRealmStronghold(worldState, stronghold)) return false;
   if (isLordAtResidence(worldState)) return true;
   return isLordPresentAtStronghold(worldState, stronghold);
+}
+
+/** 角色是否驻留于指定据点城内。 */
+export function resolveCharacterStronghold(
+  worldState: StrategyWorldState,
+  characterId: number,
+): StrategyStrongholdState | null {
+  const character = worldState.characters?.find((c) => c.id === characterId);
+  if (!character || character.locationType !== "Stronghold" || !character.strongholdId) return null;
+  return worldState.strongholds.find((s) => s.id === character.strongholdId) ?? null;
+}
+
+/** 角色是否为该城领主或代官。 */
+export function isCharacterStrongholdOfficial(
+  characterId: number,
+  stronghold: StrategyStrongholdState,
+): boolean {
+  return characterId === stronghold.lordId || characterId === (stronghold.mayorId ?? 0);
+}
+
+/** 领主/代官/当主在城内时可亲自执行个人军事/内政指令。 */
+export function canExecutePersonalStrongholdCommands(
+  worldState: StrategyWorldState,
+  characterId: number | null | undefined,
+): boolean {
+  if (!worldState || characterId == null || characterId <= 0) return false;
+  const stronghold = resolveCharacterStronghold(worldState, characterId);
+  if (!stronghold || !isPlayerRealmStronghold(worldState, stronghold)) return false;
+
+  const playerLordId = resolvePlayerLordCharacterId(worldState);
+  if (characterId === playerLordId) return true;
+  return isCharacterStrongholdOfficial(characterId, stronghold);
+}
+
+/** 据点任命领主或代官是否驻留于该城城内。 */
+export function isStrongholdOfficialPresentAtStronghold(
+  worldState: StrategyWorldState,
+  stronghold: StrategyStrongholdState,
+): boolean {
+  const officialIds = [stronghold.lordId, stronghold.mayorId ?? 0].filter((id) => id > 0);
+  for (const id of officialIds) {
+    const character = worldState.characters?.find((c) => c.id === id);
+    if (
+      character
+      && !character.isDead
+      && character.locationType === "Stronghold"
+      && character.strongholdId === stronghold.id
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** 同格据点是否可入城（本家或空城等由后端校验；前端仅判存在且当主在地图）。 */

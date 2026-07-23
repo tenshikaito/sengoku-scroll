@@ -217,6 +217,7 @@ function normalizeStronghold(
     isDirectRule,
     lordName,
     mayorName: optionalString(pick(s, "mayorName", "MayorName")),
+    mayorId: safeInt(pick(s, "mayorId", "MayorId"), 0) || undefined,
     morale: safeInt(pick(s, "morale", "Morale"), 80),
     training: safeInt(pick(s, "training", "Training"), 65),
     cultureName: requiredString(pick(s, "cultureName", "CultureName"), "日本"),
@@ -228,6 +229,7 @@ function normalizeStronghold(
     agricultureTaxRate: safeInt(pick(s, "agricultureTaxRate", "AgricultureTaxRate"), 25),
     commerceTaxRate: safeInt(pick(s, "commerceTaxRate", "CommerceTaxRate"), 12),
     tariffTaxRate: safeInt(pick(s, "tariffTaxRate", "TariffTaxRate"), 8),
+    governancePriority: optionalString(pick(s, "governancePriority", "GovernancePriority")) ?? "Autonomous",
     isHistorical: pick(s, "isHistorical", "IsHistorical") !== false,
     defense: safeInt(pick(s, "defense", "Defense")),
     defenseFacilities: normalizeDefenseFacilities(pick(s, "defenseFacilities", "DefenseFacilities")),
@@ -508,6 +510,11 @@ function normalizeCharacter(raw: unknown): StrategyCharacterSummaryState {
       return n >= 0 ? n : null;
     })(),
     loyalty: safeInt(pick(row, "loyalty", "Loyalty"), 0) || undefined,
+    money: (() => {
+      const raw = pick(row, "money", "Money");
+      if (raw == null) return undefined;
+      return safeInt(raw, 0);
+    })(),
     relations: (() => {
       const raw = pick(row, "relations", "Relations");
       if (!Array.isArray(raw)) return undefined;

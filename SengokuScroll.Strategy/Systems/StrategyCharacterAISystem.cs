@@ -4,6 +4,7 @@ using SengokuScroll.Domain.Contexts;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Services.Pathfinding;
 using SengokuScroll.Domain.Systems;
+using SengokuScroll.Domain.Types;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Policies.CharacterAi;
@@ -42,7 +43,7 @@ public class StrategyCharacterAISystem(
         {
             if (character.ActionStatus == CharacterActionStatus.Resting)
             {
-                ProcessResting(character);
+                ProcessResting(character, gameDate);
                 continue;
             }
 
@@ -82,13 +83,13 @@ public class StrategyCharacterAISystem(
         }
     }
 
-    private static void ProcessResting(Character character)
+    private static void ProcessResting(Character character, GameDate gameDate)
     {
-        character.Hp = Math.Min(100, character.Hp + 8);
+        var recovery = CharacterStaminaRules.ResolveRestRecovery(character, gameDate);
+        character.Hp = Math.Min(100, character.Hp + recovery);
         character.Emotion = Math.Min(100, character.Emotion + 2);
 
-        if (character.IsSick && character.Hp >= 60)
-            character.IsSick = false;
+        CharacterStaminaRules.TryRecoverFromIllness(character);
 
         if (character.Hp >= 75 && !character.IsSick)
             character.ActionStatus = CharacterActionStatus.Waiting;

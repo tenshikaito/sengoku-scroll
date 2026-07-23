@@ -242,6 +242,9 @@ public sealed record StrategyCharacterSummaryDto
     /// <summary>忠诚度 0–100（暂以情义属性映射）。</summary>
     public required int Loyalty { get; init; }
 
+    /// <summary>个人金库储蓄（文）。</summary>
+    public required int Money { get; init; }
+
     /// <summary>人际关系（父母、配偶、师徒、仇敌等）。</summary>
     public required IReadOnlyList<StrategyCharacterRelationDto> Relations { get; init; }
 }
@@ -470,6 +473,9 @@ public sealed record StrategyStrongholdStateDto
 
     public string? MayorName { get; init; }
 
+    /// <summary>代官角色 Id；0 = 无代官。</summary>
+    public required int MayorId { get; init; }
+
     public required int Morale { get; init; }
 
     public required int Training { get; init; }
@@ -493,6 +499,9 @@ public sealed record StrategyStrongholdStateDto
     public required byte CommerceTaxRate { get; init; }
 
     public required byte TariffTaxRate { get; init; }
+
+    /// <summary>政务方针：Autonomous | Military | Domestic。</summary>
+    public required string GovernancePriority { get; init; }
 
     /// <summary>是否史实据点（false = 虚构据点）。</summary>
     public required bool IsHistorical { get; init; }
@@ -1649,8 +1658,9 @@ public static class StrategyWorldStateMapper
             IsDead = c.IsDead,
             IsSick = c.IsSick,
             BirthType = c.Birth.ToString(),
-            TaskRemainingDays = null,
+            TaskRemainingDays = c.RecruitTask?.DeadlineDaysRemaining,
             Loyalty = c.Personality.Friendship,
+            Money = c.Money,
             Relations = CharacterRelationsHelper.BuildRelations(c, characters)
         };
     }
@@ -2153,6 +2163,7 @@ public static class StrategyWorldStateMapper
             IsDirectRule = isDirectRule,
             LordName = lordName,
             MayorName = string.IsNullOrWhiteSpace(mayor) ? null : mayor,
+            MayorId = s.LeaderId,
             Morale = s.ForceActor.Morale,
             Training = s.ForceActor.Training,
             CultureName = overlay?.CultureName ?? "日本",
@@ -2164,6 +2175,7 @@ public static class StrategyWorldStateMapper
             AgricultureTaxRate = s.AgricultureTaxRate,
             CommerceTaxRate = s.CommerceTaxRate,
             TariffTaxRate = s.TariffTaxRate,
+            GovernancePriority = s.GovernancePriority.ToString(),
             IsHistorical = s.IsHistorical,
             Defense = facilities.Sum(f => f.Defense),
             DefenseFacilities = facilities,

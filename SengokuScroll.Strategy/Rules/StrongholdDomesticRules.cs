@@ -107,7 +107,7 @@ public static class StrongholdDomesticRules
         return lord.Location.X == loc.X && lord.Location.Y == loc.Y;
     }
 
-    /// <summary>当主可否对该据点下达内政/军事指令：驻居城可遥控本家全境，否则须亲赴该据点格。</summary>
+    /// <summary>当主可否对该据点下达据点级指令：驻居城可遥控本家全境，否则须亲赴该据点格。</summary>
     public static bool CanLordCommandAtStronghold(
         StrategyScenarioMeta meta,
         GameData gameData,
@@ -120,6 +120,30 @@ public static class StrongholdDomesticRules
             return true;
 
         return IsLordPresentAtStronghold(meta, gameData, stronghold);
+    }
+
+    /// <summary>据点任命领主或代官是否驻留于该城城内。</summary>
+    public static bool IsStrongholdOfficialPresentAtStronghold(
+        Stronghold stronghold,
+        GameData gameData)
+    {
+        foreach (var officialId in new[] { stronghold.LordId, stronghold.LeaderId })
+        {
+            if (officialId <= 0
+                || !gameData.Characters.TryGetValue(officialId, out var official)
+                || official.IsDead)
+            {
+                continue;
+            }
+
+            if (official.LocationType == CharacterLocationType.Stronghold
+                && official.LocationStrongholdId == stronghold.Id)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>直辖据点税率变更须经在途载体自居城传达（同格除外）。</summary>

@@ -45,6 +45,12 @@ public sealed class GameError(string code, params object[] data)
 
         /// <summary>当主居城不可任命外臣领主，须保持直辖。</summary>
         public static GameError CannotAppointLordToResidence { get; } = new(nameof(CannotAppointLordToResidence));
+
+        /// <summary>募兵预算不足或据点府库资金不够。</summary>
+        public static GameError InsufficientRecruitBudget { get; } = new(nameof(InsufficientRecruitBudget));
+
+        /// <summary>征兵资源不足（人口等）。</summary>
+        public static GameError InsufficientRecruitResources { get; } = new(nameof(InsufficientRecruitResources));
     }
 
     public static class CharacterError
@@ -140,5 +146,23 @@ public sealed class GameError(string code, params object[] data)
 
         /// <summary>当主不能担任据点代官。</summary>
         public static GameError CharacterIsForceLord { get; } = new(nameof(CharacterIsForceLord));
+
+        /// <summary>将领已有任务或不在城内待命。</summary>
+        public static GameError CharacterHasActiveTask { get; } = new(nameof(CharacterHasActiveTask));
+
+        /// <summary>将领不在指定据点城内。</summary>
+        public static GameError CharacterNotAtStronghold { get; } = new(nameof(CharacterNotAtStronghold));
+
+        /// <summary>该将领已担任据点代官，不能调动或改任。</summary>
+        public static GameError CharacterIsStrongholdMayor { get; } = new(nameof(CharacterIsStrongholdMayor));
+
+        /// <summary>将领已在目标据点，无需调动。</summary>
+        public static GameError CharacterAlreadyAtStronghold { get; } = new(nameof(CharacterAlreadyAtStronghold));
+
+        /// <summary>直辖据点未任命代官，无法设置政务方针。</summary>
+        public static GameError DirectRuleRequiresMayor { get; } = new(nameof(DirectRuleRequiresMayor));
+
+        /// <summary>该将领当前没有可召回的外派任务。</summary>
+        public static GameError CharacterNotOnRecallableTask { get; } = new(nameof(CharacterNotOnRecallableTask));
     }
 }

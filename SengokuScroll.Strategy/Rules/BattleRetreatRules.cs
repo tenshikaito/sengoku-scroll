@@ -1,5 +1,7 @@
+using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Rules;
@@ -42,8 +44,12 @@ public static class BattleRetreatRules
     public static void ApplyDefeatRetreat(
         Unit loser,
         Unit winner,
-        Character? commander)
+        Character? commander,
+        GameData? gameData = null)
     {
+        SiegeOrderRules.ClearActiveOrder(loser, gameData);
+        BattlefieldEngagementRules.LeaveBattlefield(loser);
+
         loser.Directive = UnitDirective.Retreat;
         loser.Stance = UnitStance.Normal;
         loser.ActionTarget.UnitId = 0;

@@ -105,6 +105,8 @@ export interface StrategyCharacterSummaryState {
   taskRemainingDays?: number | null;
   /** 忠诚度 0–100。 */
   loyalty?: number;
+  /** 个人金库（文）。 */
+  money?: number;
   /** 人际关系（父母、配偶、师徒、仇敌等）。 */
   relations?: StrategyCharacterRelationState[];
 }
@@ -318,6 +320,8 @@ export interface StrategyStrongholdState {
   isDirectRule: boolean;
   lordName: string;
   mayorName?: string | null;
+  /** 代官角色 Id；无则 0。 */
+  mayorId?: number;
   morale: number;
   training: number;
   cultureName: string;
@@ -331,6 +335,8 @@ export interface StrategyStrongholdState {
   agricultureTaxRate: number;
   commerceTaxRate: number;
   tariffTaxRate: number;
+  /** 政务方针：Autonomous | Military | Domestic */
+  governancePriority: string;
   /** false = 虚构据点。 */
   isHistorical: boolean;
   /** 城防（城防设施防御值累加）。 */
@@ -673,6 +679,12 @@ export interface StrategyEvent {
   detailCategory?: string;
   /** Category=StrategicReportArrived 时附带的完整详情文案。 */
   detailMessage?: string;
+  /** Category=RecruitTaskCompleted 时的汇报将领 Id。 */
+  characterId?: number;
+  /** Category=RecruitTaskCompleted 时的汇报将领姓名。 */
+  characterName?: string;
+  /** 详情对话框标题（如募兵汇报正式标题）。 */
+  title?: string;
 }
 
 export interface StrategyPolicyChangeResponse {

@@ -23,4 +23,13 @@ public sealed record StrategyEventDto
 
     /// <summary>Category=StrategicReportArrived 时附带的完整详情文案。</summary>
     public string? DetailMessage { get; init; }
+
+    /// <summary>Category=RecruitTaskCompleted 时的汇报将领 Id。</summary>
+    public int? CharacterId { get; init; }
+
+    /// <summary>Category=RecruitTaskCompleted 时的汇报将领姓名。</summary>
+    public string? CharacterName { get; init; }
+
+    /// <summary>详情对话框标题（Category=RecruitTaskCompleted 等）；Brief 仍为气泡/简报文案。</summary>
+    public string? Title { get; init; }
 }

@@ -63,6 +63,56 @@ internal sealed class TaxRateChangePayloadHandler : IMessagePayloadDeliveryHandl
     }
 }
 
+internal sealed class GovernancePriorityChangePayloadHandler : IMessagePayloadDeliveryHandler
+{
+    public static readonly GovernancePriorityChangePayloadHandler Instance = new();
+    public MessagePayloadType PayloadType => MessagePayloadType.GovernancePriorityChange;
+
+    public bool TryDeliver(MessagePayloadDeliveryContext ctx)
+    {
+        var carrier = ctx.Carrier;
+        if (carrier.Payload.TargetStrongholdId <= 0
+            || !ctx.GameData.Strongholds.TryGetValue(carrier.Payload.TargetStrongholdId, out var stronghold))
+            return false;
+
+        if (!MessageCarrierActions.DeliverPendingGovernanceChange(
+                carrier,
+                stronghold,
+                ctx.GameData,
+                ctx.ScenarioMeta))
+        {
+            return false;
+        }
+
+        MessageCarrierNotificationHelper.NotifyGovernancePriorityDelivered(ctx, stronghold);
+        return true;
+    }
+}
+
+internal sealed class CharacterRecallPayloadHandler : IMessagePayloadDeliveryHandler
+{
+    public static readonly CharacterRecallPayloadHandler Instance = new();
+    public MessagePayloadType PayloadType => MessagePayloadType.CharacterRecall;
+
+    public bool TryDeliver(MessagePayloadDeliveryContext ctx)
+    {
+        var carrier = ctx.Carrier;
+        var targetCharacterId = carrier.Payload.TargetCharacterId;
+        ctx.GameData.Characters.TryGetValue(targetCharacterId, out var targetCharacter);
+
+        if (!MessageCarrierActions.DeliverCharacterRecall(
+                carrier,
+                ctx.GameData,
+                ctx.ScenarioMeta))
+        {
+            return false;
+        }
+
+        MessageCarrierNotificationHelper.NotifyCharacterRecallDelivered(ctx, targetCharacter?.Name);
+        return true;
+    }
+}
+
 internal sealed class BattleReportPayloadHandler : IMessagePayloadDeliveryHandler
 {
     public static readonly BattleReportPayloadHandler Instance = new();
@@ -110,6 +160,8 @@ public static class MessagePayloadDeliveryRegistry
     [
         PolicyChangePayloadHandler.Instance,
         TaxRateChangePayloadHandler.Instance,
+        GovernancePriorityChangePayloadHandler.Instance,
+        CharacterRecallPayloadHandler.Instance,
         BattleReportPayloadHandler.Instance,
         StrategicReportPayloadHandler.Instance,
         FalseIntelligencePayloadHandler.Instance
@@ -151,6 +203,34 @@ internal static class MessageCarrierNotificationHelper
         {
             Category = "TaxRateDelivered",
             Message = $"📨 税令已传达至 {stronghold.Name}，新税率已生效"
+        });
+    }
+
+    public static void NotifyGovernancePriorityDelivered(
+        MessagePayloadDeliveryContext ctx,
+        Stronghold stronghold)
+    {
+        if (ctx.Carrier.ForceId != ctx.ScenarioMeta.PlayerForceId)
+            return;
+
+        var label = StrongholdGovernancePriorityLabelRegistry.Label(stronghold.GovernancePriority);
+        ctx.DayOutcomeBuffer.AddEvent(new StrategyEventDto
+        {
+            Category = "GovernancePriorityDelivered",
+            Message = $"📨 方针已传达至 {stronghold.Name}：{label}"
+        });
+    }
+
+    public static void NotifyCharacterRecallDelivered(MessagePayloadDeliveryContext ctx, string? characterName = null)
+    {
+        if (ctx.Carrier.ForceId != ctx.ScenarioMeta.PlayerForceId)
+            return;
+
+        var name = string.IsNullOrWhiteSpace(characterName) ? "将领" : characterName.Trim();
+        ctx.DayOutcomeBuffer.AddEvent(new StrategyEventDto
+        {
+            Category = "CharacterRecallDelivered",
+            Message = $"📨 召回令已传达，{name} 正尽快回城"
         });
     }
 
@@ -214,4 +294,16 @@ public static class UnitDirectiveLabelRegistry
 
     public static string Label(string directive)
         => Labels.TryGetValue(directive, out var label) ? label : directive;
+}
+
+public static class StrongholdGovernancePriorityLabelRegistry
+{
+    public static string Label(StrongholdGovernancePriority priority)
+        => priority switch
+        {
+            StrongholdGovernancePriority.Military => "军事优先",
+            StrongholdGovernancePriority.Domestic => "内政优先",
+            StrongholdGovernancePriority.Autonomous => "自由决策",
+            _ => priority.ToString()
+        };
 }

@@ -2,6 +2,7 @@ using SengokuScroll.Common.Types;
 using Microsoft.Extensions.DependencyInjection;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
+using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Services.Pathfinding;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Battle;
@@ -994,8 +995,8 @@ public sealed class StrategySimulationHost : IDisposable
         }
     }
 
-    /// <summary>据点征兵；当主须在居城。</summary>
-    public GameResult<StrategyWorldStateDto> RecruitAtStronghold(int strongholdId, int soldiers)
+    /// <summary>据点征兵；当主须在居城。改为向将领派发征兵任务。</summary>
+    public GameResult<StrategyWorldStateDto> RecruitAtStronghold(int strongholdId, int characterId)
     {
         lock (sync)
         {
@@ -1007,20 +1008,206 @@ public sealed class StrategySimulationHost : IDisposable
             if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
                 return GameError.StrongholdError.StrongholdNotFound;
 
-            if (!StrongholdRecruitRules.CanRecruitAt(stronghold, meta, gameData))
+            if (!StrongholdRecruitTaskRules.CanAssignRecruitTaskAt(stronghold, meta, gameData))
                 return GameError.DiplomacyError.NotSelfForce;
 
             if (!StrongholdDomesticRules.CanLordCommandAtStronghold(meta, gameData, stronghold))
                 return GameError.DomesticError.LordNotAtResidence;
 
-            if (!StrongholdMilitaryActions.TryRecruit(stronghold, soldiers, out var error))
-                return error ?? GameError.DataNotFound;
+            var error = StrongholdRecruitTaskActions.TryAssignConscriptRecruitTask(
+                stronghold,
+                characterId,
+                gameData,
+                meta);
+            if (error is not null)
+                return error;
 
             if (gameData.Forces.TryGetValue(stronghold.ForceId, out var force))
                 ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);
 
             return BuildStateResult();
         }
+    }
+
+    /// <summary>据点募兵；当主须在居城，将领携预算执行任务。</summary>
+    public GameResult<StrategyWorldStateDto> MercenaryRecruitAtStronghold(
+        int strongholdId,
+        int characterId,
+        int budgetMoney)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var gameData = simulation.World.GameData;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!StrongholdRecruitTaskRules.CanAssignRecruitTaskAt(stronghold, meta, gameData))
+                return GameError.DiplomacyError.NotSelfForce;
+
+            if (!StrongholdDomesticRules.CanLordCommandAtStronghold(meta, gameData, stronghold))
+                return GameError.DomesticError.LordNotAtResidence;
+
+            var error = StrongholdRecruitTaskActions.TryAssignMercenaryRecruitTask(
+                stronghold,
+                characterId,
+                budgetMoney,
+                gameData,
+                meta);
+            if (error is not null)
+                return error;
+
+            if (gameData.Forces.TryGetValue(stronghold.ForceId, out var force))
+                ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);
+
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>设置据点政务方针；当主须能指挥该本家据点，异格据点经信使传达后生效。</summary>
+    public GameResult<StrategyPolicyChangeResponseDto> SetStrongholdGovernancePriority(
+        int strongholdId,
+        StrongholdGovernancePriority priority)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var gameData = simulation.World.GameData;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!StrongholdGovernanceRules.CanPlayerConfigureGovernancePolicy(stronghold, meta, gameData))
+                return GameError.DiplomacyError.NotSelfForce;
+
+            if (!StrongholdDomesticRules.CanLordCommandAtStronghold(meta, gameData, stronghold))
+                return GameError.DomesticError.LordNotAtResidence;
+
+            if (!Enum.IsDefined(priority))
+                return GameError.DataNotFound;
+
+            var residenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
+                meta.PlayerForceId,
+                gameData,
+                meta);
+            if (residenceId <= 0
+                || !gameData.Strongholds.TryGetValue(residenceId, out var residence))
+            {
+                return GameError.StrongholdError.StrongholdNotFound;
+            }
+
+            var governanceChange = new PendingStrongholdGovernanceChange { Priority = priority };
+            var helper = simulation.Services.GetRequiredService<MessageCarrierDispatchHelper>();
+            var outcome = helper.IssueGovernancePriorityChange(
+                residence.Location,
+                residenceId,
+                stronghold,
+                governanceChange,
+                meta);
+
+            simulation.MovementTrace.Log(
+                "GovernancePriorityChange",
+                outcome == MessageCarrierDispatchOutcome.AppliedImmediately ? "方针即时生效" : "方针信使派出",
+                strongholdId,
+                residence.Location,
+                stronghold.Location,
+                $"priority={priority} outcome={outcome}");
+
+            var world = BuildStateResult();
+            if (!world.IsSuccess)
+                return world.Error!;
+
+            return new StrategyPolicyChangeResponseDto
+            {
+                State = world.Value!,
+                Outcome = outcome.ToString()
+            };
+        }
+    }
+
+    /// <summary>角色个人征兵：领主/代官/当主在城内亲自执行。</summary>
+    public GameResult<StrategyWorldStateDto> PersonalRecruit(int characterId)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var gameData = simulation.World.GameData;
+            if (!TryResolvePersonalCommandStronghold(characterId, gameData, out var character, out var stronghold))
+                return GameError.DomesticError.CharacterNotAtStronghold;
+
+            if (!StrongholdRecruitTaskRules.CanAssignRecruitTaskAt(stronghold, meta, gameData))
+                return GameError.DiplomacyError.NotSelfForce;
+
+            var error = StrongholdRecruitTaskActions.TryAssignPersonalConscriptRecruitTask(
+                stronghold,
+                character,
+                gameData,
+                meta);
+            if (error is not null)
+                return error;
+
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>角色个人募兵：预算从执行者个人金库扣除。</summary>
+    public GameResult<StrategyWorldStateDto> PersonalMercenaryRecruit(int characterId, int budgetMoney)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var gameData = simulation.World.GameData;
+            if (!TryResolvePersonalCommandStronghold(characterId, gameData, out var character, out var stronghold))
+                return GameError.DomesticError.CharacterNotAtStronghold;
+
+            if (!StrongholdRecruitTaskRules.CanAssignRecruitTaskAt(stronghold, meta, gameData))
+                return GameError.DiplomacyError.NotSelfForce;
+
+            var error = StrongholdRecruitTaskActions.TryAssignPersonalMercenaryRecruitTask(
+                stronghold,
+                character,
+                budgetMoney,
+                gameData,
+                meta);
+            if (error is not null)
+                return error;
+
+            return BuildStateResult();
+        }
+    }
+
+    private static bool TryResolvePersonalCommandStronghold(
+        int characterId,
+        GameData gameData,
+        out Character character,
+        out Stronghold stronghold)
+    {
+        character = null!;
+        stronghold = null!;
+        if (characterId <= 0
+            || !gameData.Characters.TryGetValue(characterId, out var resolved)
+            || resolved.IsDead
+            || resolved.LocationType != Character.CharacterLocationType.Stronghold
+            || resolved.LocationStrongholdId <= 0
+            || !gameData.Strongholds.TryGetValue(resolved.LocationStrongholdId, out var locatedStronghold))
+        {
+            return false;
+        }
+
+        character = resolved;
+        stronghold = locatedStronghold;
+        return true;
     }
 
     /// <summary>任命据点领主/代官；领主任命中当主 Id 表示设为直辖。</summary>
@@ -1064,6 +1251,132 @@ public sealed class StrategySimulationHost : IDisposable
                 return error;
 
             return BuildStateResult();
+        }
+    }
+
+    /// <summary>调动将领：派遣（自本据点）或召集（至本据点）。</summary>
+    public GameResult<StrategyWorldStateDto> TransferCharacterToStronghold(
+        int strongholdId,
+        int characterId,
+        string mode,
+        int destinationStrongholdId = 0)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var gameData = simulation.World.GameData;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            GameError? error;
+            if (string.Equals(mode, "Dispatch", StringComparison.OrdinalIgnoreCase))
+            {
+                if (destinationStrongholdId <= 0
+                    || !gameData.Strongholds.TryGetValue(destinationStrongholdId, out var destination))
+                {
+                    return GameError.StrongholdError.StrongholdNotFound;
+                }
+
+                error = StrongholdPersonnelActions.TryDispatchCharacter(
+                    stronghold,
+                    destination,
+                    characterId,
+                    gameData,
+                    meta);
+            }
+            else
+            {
+                error = StrongholdPersonnelActions.TryTransferCharacter(
+                    stronghold,
+                    characterId,
+                    gameData,
+                    meta);
+            }
+
+            if (error is not null)
+                return error;
+
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>召回外派任务的将领；自居城派出信使，同格即时生效。</summary>
+    public GameResult<StrategyPolicyChangeResponseDto> RecallCharacter(int strongholdId, int characterId)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var gameData = simulation.World.GameData;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!StrongholdDomesticRules.IsPlayerRealmStronghold(stronghold, meta, gameData))
+                return GameError.DiplomacyError.NotSelfForce;
+
+            if (!StrongholdDomesticRules.CanLordCommandAtStronghold(meta, gameData, stronghold))
+                return GameError.DomesticError.LordNotAtResidence;
+
+            if (characterId <= 0 || !gameData.Characters.TryGetValue(characterId, out var character) || character.IsDead)
+                return GameError.DataNotFound;
+
+            if (character.ForceId != stronghold.ForceId)
+                return GameError.DiplomacyError.NotSelfForce;
+
+            if (!StrongholdPersonnelActions.HasRecallableTask(character))
+                return GameError.DomesticError.CharacterNotOnRecallableTask;
+
+            var residenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
+                meta.PlayerForceId,
+                gameData,
+                meta);
+            if (residenceId <= 0
+                || !gameData.Strongholds.TryGetValue(residenceId, out var residence))
+            {
+                return GameError.StrongholdError.StrongholdNotFound;
+            }
+
+            var helper = simulation.Services.GetRequiredService<MessageCarrierDispatchHelper>();
+            var dayOutcomeBuffer = simulation.Services.GetRequiredService<StrategyDayOutcomeBuffer>();
+            var outcome = helper.IssueCharacterRecall(
+                residence.Location,
+                residenceId,
+                character,
+                gameData,
+                meta);
+
+            if (outcome == MessageCarrierDispatchOutcome.AppliedImmediately
+                && character.ForceId == meta.PlayerForceId)
+            {
+                dayOutcomeBuffer.AddEvent(new StrategyEventDto
+                {
+                    Category = "CharacterRecallDelivered",
+                    Message = $"📨 召回令已传达，{character.Name} 正尽快回城"
+                });
+            }
+
+            simulation.MovementTrace.Log(
+                "CharacterRecall",
+                outcome == MessageCarrierDispatchOutcome.AppliedImmediately ? "召回令即时传达" : "召回令信使派出",
+                characterId,
+                residence.Location,
+                StrongholdPersonnelActions.ResolveCharacterDeliveryLocation(character, gameData),
+                $"character={character.Name} outcome={outcome}");
+
+            var world = BuildStateResult();
+            if (!world.IsSuccess)
+                return world.Error!;
+
+            return new StrategyPolicyChangeResponseDto
+            {
+                State = world.Value!,
+                Outcome = outcome.ToString()
+            };
         }
     }
 

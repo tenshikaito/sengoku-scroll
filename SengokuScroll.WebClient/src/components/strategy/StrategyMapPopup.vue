@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import type { StrategyUnitState } from "@/api/strategyTypes";
 import type { StrategyMapPopupMode } from "@/strategyMapInteraction/types";
@@ -25,6 +25,10 @@ const props = defineProps<{
   strongholdCommandsTooltip?: string;
   /** 是否可调整税率（己方非内藩据点） */
   canAdjustTax?: boolean;
+  /** 是否可设置政务方针（有代官或非直辖领主） */
+  canSetGovernancePolicy?: boolean;
+  /** 方针按钮说明 */
+  governancePolicyTooltip?: string;
   /** 税率指令说明（直辖即时 / 非直辖信使） */
   taxRateTooltip?: string;
   /** 可对当前格敌方据点展开谍报 */
@@ -57,6 +61,8 @@ const props = defineProps<{
   canUnitMove?: boolean;
   /** 本家直属兵队可攻城 */
   canUnitSiege?: boolean;
+  /** 角色在城内可执行个人军事/内政指令（领主/代官/当主） */
+  canExecutePersonalCommands?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -67,9 +73,15 @@ const emit = defineEmits<{
   beginSplit: [];
   beginExpedition: [];
   beginTaxRate: [];
+  beginGovernancePolicy: [];
   beginRecruit: [];
+  beginMercenaryRecruit: [];
+  beginPersonalRecruit: [];
+  beginPersonalMercenaryRecruit: [];
   beginEspionage: [];
   beginAppointLord: [];
+  beginTransferCharacter: [];
+  beginRecallCharacter: [];
   beginLeaveStronghold: [];
   beginEnterStronghold: [];
   beginVisit: [];
@@ -78,6 +90,82 @@ const emit = defineEmits<{
   showIntel: [];
   cancel: [];
 }>();
+
+type StrongholdMenuView = "categories" | "military" | "domestic" | "personnel";
+
+const strongholdMenuView = ref<StrongholdMenuView>("categories");
+const characterMenuView = ref<StrongholdMenuView>("categories");
+
+watch(
+  () => props.mode,
+  (mode) => {
+    if (mode !== "strongholdCommand") {
+      strongholdMenuView.value = "categories";
+    }
+    if (mode !== "characterCommand") {
+      characterMenuView.value = "categories";
+    }
+  },
+);
+
+function openCharacterCategory(view: Exclude<StrongholdMenuView, "categories">) {
+  if (blockIfStrongholdBesieged()) return;
+  if (!props.canExecutePersonalCommands) {
+    showUnavailableTip("须在城内且为当主、领主或代官方可执行个人指令");
+    return;
+  }
+  characterMenuView.value = view;
+}
+
+function backToCharacterCategories() {
+  characterMenuView.value = "categories";
+}
+
+function onPersonalMercenaryRecruitClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (!props.canExecutePersonalCommands) {
+    showUnavailableTip("须在城内且为当主、领主或代官方可执行个人指令");
+    return;
+  }
+  emit("beginPersonalMercenaryRecruit");
+}
+
+function onPersonalRecruitClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (!props.canExecutePersonalCommands) {
+    showUnavailableTip("须在城内且为当主、领主或代官方可执行个人指令");
+    return;
+  }
+  emit("beginPersonalRecruit");
+}
+
+function onPersonalMutedAction(tip: string) {
+  if (blockIfStrongholdBesieged()) return;
+  if (!props.canExecutePersonalCommands) {
+    showUnavailableTip("须在城内且为当主、领主或代官方可执行个人指令");
+    return;
+  }
+  showUnavailableTip(tip);
+}
+
+function openStrongholdCategory(view: Exclude<StrongholdMenuView, "categories">) {
+  if (blockIfStrongholdBesieged()) return;
+  if (strongholdCommandsUnavailable.value) {
+    showUnavailableTip(strongholdCommandsTip.value);
+    return;
+  }
+  strongholdMenuView.value = view;
+}
+
+function backToStrongholdCategories() {
+  strongholdMenuView.value = "categories";
+}
+
+function cancelPopup() {
+  strongholdMenuView.value = "categories";
+  characterMenuView.value = "categories";
+  emit("cancel");
+}
 
 function swallowPointer(event: Event) {
   event.stopPropagation();
@@ -149,6 +237,31 @@ const taxRateTip = computed(
       : "调整人头/农/商/关税；非直辖城经信使传达后生效")
 );
 
+const governancePolicyUnavailable = computed(
+  () =>
+    besieged.value
+    || props.lordAtResidence === false
+    || props.canSetGovernancePolicy === false,
+);
+const governancePolicyTip = computed(
+  () =>
+    props.governancePolicyTooltip
+    ?? (props.canSetGovernancePolicy === false
+      ? "仅本家据点可设置方针"
+      : "设定自由决策/军事/内政优先，每月自动向待命将领派任务")
+);
+
+function onGovernancePolicyClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (governancePolicyUnavailable.value) {
+    showUnavailableTip(
+      props.lordAtResidence === false ? strongholdCommandsTip.value : governancePolicyTip.value
+    );
+    return;
+  }
+  emit("beginGovernancePolicy");
+}
+
 function onTaxRateClick() {
   if (blockIfStrongholdBesieged()) return;
   if (taxRateUnavailable.value) {
@@ -158,6 +271,15 @@ function onTaxRateClick() {
     return;
   }
   emit("beginTaxRate");
+}
+
+function onMercenaryRecruitClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (strongholdCommandsUnavailable.value) {
+    showUnavailableTip(strongholdCommandsTip.value);
+    return;
+  }
+  emit("beginMercenaryRecruit");
 }
 
 function onRecruitClick() {
@@ -185,6 +307,24 @@ function onAppointClick() {
     return;
   }
   emit("beginAppointLord");
+}
+
+function onTransferClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (strongholdCommandsUnavailable.value) {
+    showUnavailableTip(strongholdCommandsTip.value);
+    return;
+  }
+  emit("beginTransferCharacter");
+}
+
+function onRecallClick() {
+  if (blockIfStrongholdBesieged()) return;
+  if (strongholdCommandsUnavailable.value) {
+    showUnavailableTip(strongholdCommandsTip.value);
+    return;
+  }
+  emit("beginRecallCharacter");
 }
 
 function onStrongholdMutedAction(tip: string) {
@@ -338,6 +478,95 @@ function onCharacterEspionageClick() {
 
     <template v-else-if="mode === 'characterCommand'">
       <div class="actions actions--vertical">
+        <template v-if="canExecutePersonalCommands">
+          <template v-if="characterMenuView === 'categories'">
+            <StrategyMapActionButton
+              variant="primary"
+              :tooltip-side="tooltipSide"
+              tooltip="以个人金库出资，亲自募兵/征兵"
+              @click="openCharacterCategory('military')"
+            >
+              ⚔ 军备
+            </StrategyMapActionButton>
+            <StrategyMapActionButton
+              variant="primary"
+              :tooltip-side="tooltipSide"
+              tooltip="个人内政指令（部分尚未实装）"
+              @click="openCharacterCategory('domestic')"
+            >
+              🏛 内政
+            </StrategyMapActionButton>
+            <StrategyMapActionButton
+              variant="primary"
+              :tooltip-side="tooltipSide"
+              tooltip="个人人事指令（部分尚未实装）"
+              @click="openCharacterCategory('personnel')"
+            >
+              👤 人事
+            </StrategyMapActionButton>
+          </template>
+
+          <template v-else-if="characterMenuView === 'military'">
+            <button type="button" class="map-action map-action--default map-action--back" @click.stop="backToCharacterCategories">
+              ← 返回
+            </button>
+            <StrategyMapActionButton
+              variant="primary"
+              :tooltip-side="tooltipSide"
+              tooltip="以本人资金在城内募兵（60 日期限）"
+              @click="onPersonalMercenaryRecruitClick"
+            >
+              💰 募兵
+            </StrategyMapActionButton>
+            <StrategyMapActionButton
+              variant="primary"
+              :tooltip-side="tooltipSide"
+              tooltip="亲自在城内征兵（消耗民心/治安）"
+              @click="onPersonalRecruitClick"
+            >
+              ⚔ 征兵
+            </StrategyMapActionButton>
+          </template>
+
+          <template v-else-if="characterMenuView === 'domestic'">
+            <button type="button" class="map-action map-action--default map-action--back" @click.stop="backToCharacterCategories">
+              ← 返回
+            </button>
+            <StrategyMapActionButton
+              variant="muted"
+              :tooltip-side="tooltipSide"
+              tooltip="个人建设功能尚未实装"
+              @click="onPersonalMutedAction('个人建设功能尚未实装')"
+            >
+              🏗 建设
+            </StrategyMapActionButton>
+            <StrategyMapActionButton
+              variant="muted"
+              :tooltip-side="tooltipSide"
+              tooltip="个人运输功能尚未实装"
+              @click="onPersonalMutedAction('个人运输功能尚未实装')"
+            >
+              📦 运输
+            </StrategyMapActionButton>
+          </template>
+
+          <template v-else-if="characterMenuView === 'personnel'">
+            <button type="button" class="map-action map-action--default map-action--back" @click.stop="backToCharacterCategories">
+              ← 返回
+            </button>
+            <StrategyMapActionButton
+              variant="muted"
+              :tooltip-side="tooltipSide"
+              tooltip="个人人事功能尚未实装"
+              @click="onPersonalMutedAction('个人登庸功能尚未实装')"
+            >
+              📜 登庸
+            </StrategyMapActionButton>
+          </template>
+
+          <div class="divider" />
+        </template>
+
         <StrategyMapActionButton
           :variant="leaveAvailable ? 'primary' : 'muted'"
           :tooltip-side="tooltipSide"
@@ -416,61 +645,139 @@ function onCharacterEspionageClick() {
         >
           📜 方针
         </StrategyMapActionButton>
-        <template v-if="!strongholdDirectiveOnly">
-        <StrategyMapActionButton
-          :variant="expeditionUnavailable ? 'muted' : 'primary'"
-          :tooltip-side="tooltipSide"
-          :tooltip="expeditionTip"
-          @click="onExpeditionClick"
-        >
-          🚩 出征
-        </StrategyMapActionButton>
-        <StrategyMapActionButton
-          :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
-          :tooltip-side="tooltipSide"
-          :tooltip="strongholdCommandsUnavailable ? strongholdCommandsTip : '从居城选派将领担任领主或代官，或设为当主直辖'"
-          @click="onAppointClick"
-        >
-          👤 任命
-        </StrategyMapActionButton>
-        <StrategyMapActionButton
-          variant="muted"
-          :tooltip-side="tooltipSide"
-          tooltip="据点建设功能尚未实装"
-          @click="onStrongholdMutedAction('据点建设功能尚未实装')"
-        >
-          🏗 建设
-        </StrategyMapActionButton>
-        <StrategyMapActionButton
-          :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
-          :tooltip-side="tooltipSide"
-          :tooltip="strongholdCommandsUnavailable ? strongholdCommandsTip : '消耗人口与钱粮补充城内兵（当主须在居城）'"
-          @click="onRecruitClick"
-        >
-          ⚔ 征兵
-        </StrategyMapActionButton>
-        <StrategyMapActionButton
-          :variant="taxRateUnavailable ? 'muted' : 'primary'"
-          :tooltip-side="tooltipSide"
-          :tooltip="taxRateTip"
-          @click="onTaxRateClick"
-        >
-          💰 税率
-        </StrategyMapActionButton>
-        <StrategyMapActionButton
-          variant="muted"
-          :tooltip-side="tooltipSide"
-          tooltip="据点运输功能尚未实装"
-          @click="onStrongholdMutedAction('据点运输功能尚未实装')"
-        >
-          📦 运输
-        </StrategyMapActionButton>
+
+        <template v-if="strongholdMenuView === 'categories'">
+          <template v-if="!strongholdDirectiveOnly">
+            <StrategyMapActionButton
+              :variant="governancePolicyUnavailable ? 'muted' : 'primary'"
+              :tooltip-side="tooltipSide"
+              :tooltip="governancePolicyUnavailable ? governancePolicyTip : '设定自由决策/军事/内政优先，每月自动向待命将领派任务'"
+              @click="onGovernancePolicyClick"
+            >
+              📋 方针
+            </StrategyMapActionButton>
+            <StrategyMapActionButton
+              :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
+              :tooltip-side="tooltipSide"
+              :tooltip="strongholdCommandsTip"
+              @click="openStrongholdCategory('military')"
+            >
+              ⚔ 军备
+            </StrategyMapActionButton>
+            <StrategyMapActionButton
+              :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
+              :tooltip-side="tooltipSide"
+              :tooltip="strongholdCommandsTip"
+              @click="openStrongholdCategory('domestic')"
+            >
+              🏛 内政
+            </StrategyMapActionButton>
+            <StrategyMapActionButton
+              :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
+              :tooltip-side="tooltipSide"
+              :tooltip="strongholdCommandsTip"
+              @click="openStrongholdCategory('personnel')"
+            >
+              👤 人事
+            </StrategyMapActionButton>
+          </template>
         </template>
+
+        <template v-else-if="strongholdMenuView === 'military' && !strongholdDirectiveOnly">
+          <button type="button" class="map-action map-action--default map-action--back" @click.stop="backToStrongholdCategories">
+            ← 返回
+          </button>
+          <StrategyMapActionButton
+            :variant="expeditionUnavailable ? 'muted' : 'primary'"
+            :tooltip-side="tooltipSide"
+            :tooltip="expeditionTip"
+            @click="onExpeditionClick"
+          >
+            🚩 出征
+          </StrategyMapActionButton>
+          <StrategyMapActionButton
+            :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
+            :tooltip-side="tooltipSide"
+            :tooltip="strongholdCommandsUnavailable ? strongholdCommandsTip : '从据点府库拨付预算，向将领发布募兵任务'"
+            @click="onMercenaryRecruitClick"
+          >
+            💰 募兵
+          </StrategyMapActionButton>
+          <StrategyMapActionButton
+            :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
+            :tooltip-side="tooltipSide"
+            :tooltip="strongholdCommandsUnavailable ? strongholdCommandsTip : '向将领发布征兵任务'"
+            @click="onRecruitClick"
+          >
+            ⚔ 征兵
+          </StrategyMapActionButton>
+        </template>
+
+        <template v-else-if="strongholdMenuView === 'domestic' && !strongholdDirectiveOnly">
+          <button type="button" class="map-action map-action--default map-action--back" @click.stop="backToStrongholdCategories">
+            ← 返回
+          </button>
+          <StrategyMapActionButton
+            :variant="taxRateUnavailable ? 'muted' : 'primary'"
+            :tooltip-side="tooltipSide"
+            :tooltip="taxRateTip"
+            @click="onTaxRateClick"
+          >
+            💰 税率
+          </StrategyMapActionButton>
+          <StrategyMapActionButton
+            variant="muted"
+            :tooltip-side="tooltipSide"
+            tooltip="据点建设功能尚未实装"
+            @click="onStrongholdMutedAction('据点建设功能尚未实装')"
+          >
+            🏗 建设
+          </StrategyMapActionButton>
+          <StrategyMapActionButton
+            variant="muted"
+            :tooltip-side="tooltipSide"
+            tooltip="据点运输功能尚未实装"
+            @click="onStrongholdMutedAction('据点运输功能尚未实装')"
+          >
+            📦 运输
+          </StrategyMapActionButton>
+        </template>
+
+        <template v-else-if="strongholdMenuView === 'personnel' && !strongholdDirectiveOnly">
+          <button type="button" class="map-action map-action--default map-action--back" @click.stop="backToStrongholdCategories">
+            ← 返回
+          </button>
+          <StrategyMapActionButton
+            :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
+            :tooltip-side="tooltipSide"
+            :tooltip="strongholdCommandsUnavailable ? strongholdCommandsTip : '选派将领担任领主或代官'"
+            @click="onAppointClick"
+          >
+            👤 任命
+          </StrategyMapActionButton>
+          <StrategyMapActionButton
+            :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
+            :tooltip-side="tooltipSide"
+            :tooltip="strongholdCommandsUnavailable ? strongholdCommandsTip : '自本据点派遣或将其它据点将领召集至本据点'"
+            @click="onTransferClick"
+          >
+            🚶 调动
+          </StrategyMapActionButton>
+          <StrategyMapActionButton
+            :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
+            :tooltip-side="tooltipSide"
+            :tooltip="strongholdCommandsUnavailable ? strongholdCommandsTip : '中断外派任务，令其尽快回城（效果减半，未用资金退回）'"
+            @click="onRecallClick"
+          >
+            ↩ 召回
+          </StrategyMapActionButton>
+        </template>
+
         <div class="divider" />
         <button type="button" class="map-action map-action--default" @click.stop="emit('showIntel')">
           📋 情报
         </button>
-        <button type="button" class="map-action map-action--default" @click.stop="emit('cancel')">取消</button>
+        <button type="button" class="map-action map-action--default" @click.stop="cancelPopup">取消</button>
       </div>
     </template>
 
@@ -627,6 +934,11 @@ function onCharacterEspionageClick() {
   cursor: pointer;
   border: 1px solid transparent;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.map-action--back {
+  margin-bottom: 2px;
+  color: #cbd5e1;
 }
 
 .map-action--default {

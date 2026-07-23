@@ -1,5 +1,7 @@
+using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
+using SengokuScroll.Strategy.Data.Models;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Actions;
@@ -57,5 +59,61 @@ public static class MessageCarrierActions
             carrier.Payload.PendingTaxChange = null;
 
         return ok;
+    }
+
+    /// <summary>将政务方针变更立即写入据点（居城同格免载体）。</summary>
+    public static bool ApplyGovernancePriorityChange(
+        Stronghold stronghold,
+        PendingStrongholdGovernanceChange change,
+        GameData gameData,
+        StrategyScenarioMeta meta,
+        out GameError? error)
+    {
+        error = StrongholdGovernanceActions.TrySetGovernancePriority(
+            stronghold,
+            change.Priority,
+            gameData,
+            meta);
+        return error is null;
+    }
+
+    /// <summary>载体抵达后，将待投递政务方针写入目标据点。</summary>
+    public static bool DeliverPendingGovernanceChange(
+        MessageCarrier carrier,
+        Stronghold stronghold,
+        GameData gameData,
+        StrategyScenarioMeta meta)
+    {
+        if (carrier.Payload.PendingGovernanceChange is not { } change)
+            return false;
+
+        var ok = ApplyGovernancePriorityChange(stronghold, change, gameData, meta, out _);
+        if (ok)
+            carrier.Payload.PendingGovernanceChange = null;
+
+        return ok;
+    }
+
+    /// <summary>载体抵达后，向目标将领传达召回令。</summary>
+    public static bool DeliverCharacterRecall(
+        MessageCarrier carrier,
+        GameData gameData,
+        StrategyScenarioMeta meta)
+    {
+        if (carrier.Payload.TargetCharacterId <= 0
+            || !gameData.Characters.TryGetValue(carrier.Payload.TargetCharacterId, out var character))
+        {
+            return false;
+        }
+
+        var error = StrongholdPersonnelActions.ApplyCharacterRecall(
+            character,
+            gameData,
+            meta);
+
+        if (error is null)
+            carrier.Payload.TargetCharacterId = 0;
+
+        return error is null;
     }
 }

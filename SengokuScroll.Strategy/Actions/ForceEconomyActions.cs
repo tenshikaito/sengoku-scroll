@@ -51,8 +51,7 @@ public static class ForceEconomyActions
         foreach (var unit in gameData.Units.Values.Where(u => u.ForceId == force.Id))
             armyMaintenance += EconomyCalculator.CalculateUnitMonthlyMaintenanceMoney(unit);
 
-        var salaryExpense = EconomyCalculator.CalculateForceMonthlySalaryExpense(force, gameData);
-        DeductForceMoney(force, gameData, salaryExpense);
+        var salaryExpense = PayForceMonthlySalaries(force, gameData);
 
         SyncForceTreasuryFromStrongholds(force, gameData);
         force.Money = Math.Max(0, force.Money - armyMaintenance);
@@ -85,10 +84,30 @@ public static class ForceEconomyActions
         force.Food = food;
     }
 
-    private static void DeductForceMoney(Force force, GameData gameData, int amount)
+    private static int PayForceMonthlySalaries(Force force, GameData gameData)
+    {
+        var paidTotal = 0;
+
+        foreach (var character in gameData.Characters.Values
+                     .Where(c => c.ForceId == force.Id && !c.IsDead && c.Salary > 0)
+                     .OrderByDescending(c => c.Salary))
+        {
+            var paid = DeductForceMoney(force, gameData, character.Salary);
+            if (paid <= 0)
+                continue;
+
+            character.Money += paid;
+            paidTotal += paid;
+        }
+
+        return paidTotal;
+    }
+
+    /// <summary>从势力据点府库扣款，返回实际扣除额。</summary>
+    private static int DeductForceMoney(Force force, GameData gameData, int amount)
     {
         if (amount <= 0)
-            return;
+            return 0;
 
         // 业务：俸禄从旗下据点府库按余额从高到低依次扣款
         var remaining = amount;
@@ -103,5 +122,7 @@ public static class ForceEconomyActions
             stronghold.ForceActor.Money -= pay;
             remaining -= pay;
         }
+
+        return amount - remaining;
     }
 }

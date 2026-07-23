@@ -402,17 +402,83 @@ export const setStrongholdTaxRates = (
     }
   );
 
-export const recruitAtStronghold = (strongholdId: number, soldiers: number) =>
+export const setStrongholdGovernancePriority = (
+  strongholdId: number,
+  priority: "Autonomous" | "Military" | "Domestic"
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/governance-priority`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/governance-priority`, {
+        priority,
+      }).then((raw) => {
+        const body = raw as Record<string, unknown>;
+        return {
+          state: normalizeStrategyWorldState(body.state ?? body.State),
+          outcome: String(body.outcome ?? body.Outcome ?? ""),
+        };
+      }),
+    () => {
+      throw new Error("Mock 模式不支持设置方针");
+    }
+  );
+
+export const recruitAtStronghold = (strongholdId: number, characterId: number) =>
   request(
     "POST",
     `/strongholds/${strongholdId}/recruit`,
     () =>
-      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/recruit`, { soldiers }).then(
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/recruit`, { characterId }).then(
         normalizeStrategyWorldState
       ),
     () => {
       throw new Error("Mock 模式不支持征兵");
     }
+  );
+
+export const mercenaryRecruitAtStronghold = (
+  strongholdId: number,
+  characterId: number,
+  budgetMoney: number,
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/mercenary-recruit`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/mercenary-recruit`, {
+        characterId,
+        budgetMoney,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持募兵");
+    }
+  );
+
+export const personalRecruit = (characterId: number) =>
+  request(
+    "POST",
+    `/characters/${characterId}/personal-recruit`,
+    () =>
+      fetchLive<unknown>("POST", `/characters/${characterId}/personal-recruit`, {}).then(
+        normalizeStrategyWorldState,
+      ),
+    () => {
+      throw new Error("Mock 模式不支持个人征兵");
+    },
+  );
+
+export const personalMercenaryRecruit = (characterId: number, budgetMoney: number) =>
+  request(
+    "POST",
+    `/characters/${characterId}/personal-mercenary-recruit`,
+    () =>
+      fetchLive<unknown>("POST", `/characters/${characterId}/personal-mercenary-recruit`, {
+        budgetMoney,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持个人募兵");
+    },
   );
 
 export type AppointOfficialKind = "Lord" | "Mayor";
@@ -432,6 +498,47 @@ export const appointStrongholdLord = (
       }).then(normalizeStrategyWorldState),
     () => {
       throw new Error("Mock 模式不支持任命");
+    }
+  );
+
+export const transferCharacterToStronghold = (
+  strongholdId: number,
+  payload: {
+    characterId: number;
+    mode?: "dispatch" | "summon";
+    destinationStrongholdId?: number;
+  },
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/transfer-character`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/transfer-character`, {
+        characterId: payload.characterId,
+        mode: payload.mode === "dispatch" ? "Dispatch" : "Summon",
+        destinationStrongholdId: payload.destinationStrongholdId ?? 0,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持调动");
+    }
+  );
+
+export const recallCharacter = (strongholdId: number, characterId: number) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/recall-character`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/recall-character`, {
+        characterId,
+      }).then((raw) => {
+        const body = raw as Record<string, unknown>;
+        return {
+          state: normalizeStrategyWorldState(body.state ?? body.State),
+          outcome: String(body.outcome ?? body.Outcome ?? ""),
+        };
+      }),
+    () => {
+      throw new Error("Mock 模式不支持召回");
     }
   );
 

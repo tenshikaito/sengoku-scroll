@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using SengokuScroll.Common.Types;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Helpers;
+using SengokuScroll.Strategy.Policies.UnitAi;
+using SengokuScroll.Strategy.Rules;
 using SengokuScroll.Strategy.Tests.Fixtures;
 using static SengokuScroll.Domain.Entities.Unit;
 
@@ -43,6 +45,29 @@ public class BattleAftermathRetreatTests
         Assert.Equal(start, playerUnit.Location);
         Assert.True(playerUnit.Status is UnitStatus.Waiting or UnitStatus.Fearful or UnitStatus.Routing);
         Assert.Empty(playerUnit.ActionTarget.RoutePoints);
+    }
+
+    [Fact]
+    public void ApplyDefeatRetreat_ClearsSiegeOrderSoAiCanMarch()
+    {
+        using var ctx = StrategyTestWorldFactory.Create();
+        var loser = StrategyTestWorldBuilder.CreateTestUnit(2, 2, new Point3(3, 2));
+        loser.Soldier = 500;
+        loser.SiegeMode = UnitSiegeMode.Encircle;
+        loser.ActionTarget.StrongholdId = 99;
+        loser.Directive = UnitDirective.Occupy;
+        loser.Stance = UnitStance.Surrounding;
+
+        var winner = StrategyTestWorldBuilder.CreateTestUnit(1, 1, new Point3(3, 2));
+        winner.Soldier = 800;
+
+        BattleRetreatRules.ApplyDefeatRetreat(loser, winner, commander: null, ctx.World.GameData);
+
+        Assert.Equal(UnitDirective.Retreat, loser.Directive);
+        Assert.Equal(UnitSiegeMode.None, loser.SiegeMode);
+        Assert.Equal(0, loser.ActionTarget.StrongholdId);
+        Assert.False(SiegeOrderRules.IsSiegeMovementLocked(loser));
+        Assert.False(UnitAiSkipBehaviorRegistry.ShouldSkipDailyAi(loser));
     }
 
     [Fact]

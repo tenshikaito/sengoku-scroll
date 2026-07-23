@@ -7,6 +7,13 @@ const POLICY_CATEGORIES = new Set([
   "PolicyApplied",
   "PolicyDispatched",
   "PolicyDelivered",
+  "TaxRateApplied",
+  "TaxRateDispatched",
+  "TaxRateDelivered",
+  "GovernancePriorityApplied",
+  "GovernancePriorityDispatched",
+  "GovernancePriorityDelivered",
+  "RecruitTaskCompleted",
 ]);
 
 const BATTLE_CATEGORIES = new Set([

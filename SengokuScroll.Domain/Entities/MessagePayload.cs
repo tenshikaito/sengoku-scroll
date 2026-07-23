@@ -12,7 +12,11 @@ public class MessagePayload
     /// <summary>目标军事单位 Id；方针/指令类载荷的接收方。</summary>
     public int TargetUnitId { get; set; }
 
-    /// <summary>目标据点 Id；<see cref="MessagePayloadType.TaxRateChange"/> 时使用。</summary>
+    /// <summary>
+    /// 目标据点 Id；
+    /// <see cref="MessagePayloadType.TaxRateChange"/> 或
+    /// <see cref="MessagePayloadType.GovernancePriorityChange"/> 时使用。
+    /// </summary>
     public int TargetStrongholdId { get; set; }
 
     /// <summary>
@@ -26,4 +30,10 @@ public class MessagePayload
 
     /// <summary>待投递税率（<see cref="MessagePayloadType.TaxRateChange"/> 时有效）。</summary>
     public PendingStrongholdTaxChange? PendingTaxChange { get; set; }
+
+    /// <summary>待投递政务方针（<see cref="MessagePayloadType.GovernancePriorityChange"/> 时有效）。</summary>
+    public PendingStrongholdGovernanceChange? PendingGovernanceChange { get; set; }
+
+    /// <summary>召回目标角色 Id；<see cref="MessagePayloadType.CharacterRecall"/> 时使用。</summary>
+    public int TargetCharacterId { get; set; }
 }

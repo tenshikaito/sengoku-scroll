@@ -117,11 +117,26 @@ class StrategicReportArrivedBehavior extends EventNotificationBehavior {
   }
 }
 
+class RecruitTaskCompletedBehavior extends EventNotificationBehavior {
+  readonly category = "RecruitTaskCompleted";
+
+  buildNotification(ctx: EventNotificationContext): StrategyPendingNotification {
+    return {
+      id: ctx.nextId(),
+      kind: "message",
+      icon: "📋",
+      brief: ctx.briefText(ctx.event),
+      event: ctx.event,
+    };
+  }
+}
+
 const ORDERED_BEHAVIORS: EventNotificationBehavior[] = [
   new InstantEventSummaryBehavior(),
   new BattleReportArrivedBehavior(),
   new SettlementEventBehavior(),
   new StrategicReportArrivedBehavior(),
+  new RecruitTaskCompletedBehavior(),
 ];
 
 export class EventNotificationRegistry {

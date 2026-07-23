@@ -36,5 +36,18 @@ export function strongholdGovernanceBadge(
     : base;
 }
 
+/** 据点政务方针显示名。 */
+export function governancePriorityLabel(priority: string | undefined): string {
+  switch (priority) {
+    case "Military":
+      return "军事优先";
+    case "Domestic":
+      return "内政优先";
+    case "Autonomous":
+    default:
+      return "自由决策";
+  }
+}
+
 /** @deprecated 使用 isGovernanceResidence */
 export const resolveIsLordResidence = isGovernanceResidence;

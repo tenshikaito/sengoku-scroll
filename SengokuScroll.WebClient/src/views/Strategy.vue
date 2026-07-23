@@ -17,8 +17,14 @@ import {
   deployFromStronghold,
   recordEspionageIntel,
   setStrongholdTaxRates,
+  setStrongholdGovernancePriority,
   recruitAtStronghold,
+  mercenaryRecruitAtStronghold,
+  personalRecruit,
+  personalMercenaryRecruit,
   appointStrongholdLord,
+  transferCharacterToStronghold,
+  recallCharacter,
   moveUnit,
   leaveStrongholdAsCharacter,
   moveCharacter,
@@ -58,14 +64,21 @@ import StrategyDirectiveDialog from "@/components/strategy/StrategyDirectiveDial
 import StrategySplitDialog from "@/components/strategy/StrategySplitDialog.vue";
 import StrategyExpeditionDialog from "@/components/strategy/StrategyExpeditionDialog.vue";
 import StrategyTaxRateDialog from "@/components/strategy/StrategyTaxRateDialog.vue";
+import StrategyStrongholdGovernanceDialog, {
+  type StrongholdGovernancePriorityValue,
+} from "@/components/strategy/StrategyStrongholdGovernanceDialog.vue";
 import StrategyRecruitDialog from "@/components/strategy/StrategyRecruitDialog.vue";
+import StrategyMercenaryRecruitDialog from "@/components/strategy/StrategyMercenaryRecruitDialog.vue";
 import StrategyAppointLordDialog from "@/components/strategy/StrategyAppointLordDialog.vue";
+import StrategyTransferCharacterDialog from "@/components/strategy/StrategyTransferCharacterDialog.vue";
+import StrategyRecallCharacterDialog from "@/components/strategy/StrategyRecallCharacterDialog.vue";
 import StrategyEventFeed from "@/components/strategy/StrategyEventFeed.vue";
 import StrategyNotificationTray, {
   type StrategyPendingNotification,
 } from "@/components/strategy/StrategyNotificationTray.vue";
 import StrategyMessageFeedToolbar from "@/components/strategy/StrategyMessageFeedToolbar.vue";
 import StrategyMessageDialog from "@/components/strategy/StrategyMessageDialog.vue";
+import StrategyRecruitReportBubble from "@/components/strategy/StrategyRecruitReportBubble.vue";
 import {
   filterEventsByMessageScope,
 } from "@/utils/strategyMessageScope";
@@ -136,8 +149,13 @@ import {
   resolveLordResidenceStronghold,
 } from "@/utils/strategyLordCommands";
 import {
+  canConfigureStrongholdGovernancePolicy,
+  governancePolicyBlockReason,
+} from "@/utils/strategyGovernancePolicy";
+import {
   canCharacterEspionageAtCell,
   canEnterStrongholdAtCell,
+  canExecutePersonalStrongholdCommands,
   canLordCommandStronghold,
   canShowStrongholdDirectiveButton,
   countOtherCharactersInStronghold,
@@ -148,11 +166,13 @@ import {
   isLordOnMap,
   isStrongholdBesieged,
   resolveCharacterGateStronghold,
+  resolveCharacterStronghold,
   resolvePlayerLordCharacterId,
   strongholdAtLordCell,
 } from "@/utils/strategyPlayerCharacter";
 import {
   notificationFromEvent,
+  recruitCompletionBubbleMessage,
   strategicReportDetailText,
 } from "@/utils/strategyNotifications";
 import { messageCategoryLabel } from "@/utils/messageCategories";
@@ -286,14 +306,27 @@ const eventDetailText = ref("");
 const hoverIntelAnchorSide = ref<AnchorSide>("right");
 const hoverIntelVerticalAlign = ref<AnchorVerticalAlign>("start");
 const messageDialogVisible = ref(false);
+interface RecruitReportBubbleState {
+  characterName: string;
+  message: string;
+  event?: StrategyEvent;
+}
+const recruitReportBubble = ref<RecruitReportBubbleState | null>(null);
+let recruitReportBubbleTimer: ReturnType<typeof setTimeout> | null = null;
 const showPlayerMessages = ref(true);
 const showWorldMessages = ref(true);
 const directiveDialogVisible = ref(false);
 const splitDialogVisible = ref(false);
 const expeditionDialogVisible = ref(false);
 const taxRateDialogVisible = ref(false);
+const governancePolicyDialogVisible = ref(false);
 const recruitDialogVisible = ref(false);
+const mercenaryRecruitDialogVisible = ref(false);
+const recruitDialogMode = ref<"assign" | "personal">("assign");
+const mercenaryRecruitDialogMode = ref<"assign" | "personal">("assign");
 const appointLordDialogVisible = ref(false);
+const transferCharacterDialogVisible = ref(false);
+const recallCharacterDialogVisible = ref(false);
 const pendingSplitUnitName = ref<string | undefined>(undefined);
 const intelSystemVisible = ref(false);
 const intelSystemInitialTab = ref("force");
@@ -381,6 +414,31 @@ const lordStrongholdAtCell = computed(() =>
 const activeCharacterStronghold = computed(
   () => selectedStronghold.value ?? lordStrongholdAtCell.value ?? popupStronghold.value,
 );
+
+const activeCharacterForCommands = computed(() => {
+  const ws = state.value;
+  if (!ws) return null;
+  const characterId =
+    menuPopupMode.value === "characterCommand"
+      ? selectedCharacterId.value ?? resolvePlayerLordCharacterId(ws)
+      : resolvePlayerLordCharacterId(ws);
+  if (characterId == null) return null;
+  return ws.characters?.find((c) => c.id === characterId) ?? null;
+});
+
+const activeCharacterStrongholdForCommands = computed(() => {
+  const ws = state.value;
+  const character = activeCharacterForCommands.value;
+  if (!ws || !character) return null;
+  return resolveCharacterStronghold(ws, character.id);
+});
+
+const canExecutePersonalCommands = computed(() => {
+  if (!state.value || menuPopupMode.value !== "characterCommand") return false;
+  const characterId =
+    selectedCharacterId.value ?? resolvePlayerLordCharacterId(state.value);
+  return canExecutePersonalStrongholdCommands(state.value, characterId);
+});
 
 const lordAp = computed(() => state.value?.lord.ap ?? 0);
 
@@ -488,13 +546,20 @@ const taxRateTooltip = computed(() => {
   return "仅直辖城可调整税率；税令将从当主居城派出信使，抵达后生效";
 });
 
-const maxRecruitableSoldiers = computed(() => {
+const canSetGovernancePolicyStronghold = computed(() => {
   const sh = activeStrongholdForCommands.value;
-  if (!sh) return 0;
-  const byMoney = Math.floor(sh.money / 100);
-  const byFood = Math.floor(sh.food / 50);
-  const byPopulation = Math.floor(sh.population / 2);
-  return Math.min(500, byMoney, byFood, byPopulation);
+  if (!sh || state.value == null) return false;
+  return canConfigureStrongholdGovernancePolicy(state.value, sh);
+});
+
+const governancePolicyTooltip = computed(() => {
+  if (!canLordCommandActiveStronghold.value) return LORD_AT_RESIDENCE_REQUIRED_TIP;
+  const sh = activeStrongholdForCommands.value;
+  if (!sh || state.value == null) return LORD_AT_RESIDENCE_REQUIRED_TIP;
+  if (!canConfigureStrongholdGovernancePolicy(state.value, sh)) {
+    return governancePolicyBlockReason(state.value, sh);
+  }
+  return "设定自由决策/军事/内政优先；每月 1 日向待命将领自动发布任务令";
 });
 
 const canEspionageStronghold = computed(() => {
@@ -1558,26 +1623,120 @@ function handleBeginTaxRate() {
   taxRateDialogVisible.value = true;
 }
 
+function handleBeginGovernancePolicy() {
+  const sh = activeStrongholdForCommands.value;
+  if (!sh || !canSetGovernancePolicyStronghold.value) {
+    void notifyActionBlocked("无法设置方针", governancePolicyTooltip.value);
+    return;
+  }
+  if (!canLordCommandActiveStronghold.value) {
+    void notifyActionBlocked("无法设置方针", LORD_AT_RESIDENCE_REQUIRED_TIP);
+    return;
+  }
+  governancePolicyDialogVisible.value = true;
+}
+
+function handleBeginMercenaryRecruit() {
+  if (!canLordCommandActiveStronghold.value) {
+    void notifyActionBlocked("无法募兵", LORD_AT_RESIDENCE_REQUIRED_TIP);
+    return;
+  }
+  mercenaryRecruitDialogMode.value = "assign";
+  mercenaryRecruitDialogVisible.value = true;
+}
+
+function handleBeginPersonalMercenaryRecruit() {
+  if (!canExecutePersonalCommands.value) {
+    void notifyActionBlocked("无法募兵", "须在城内且为当主、领主或代官方可执行个人指令");
+    return;
+  }
+  mercenaryRecruitDialogMode.value = "personal";
+  mercenaryRecruitDialogVisible.value = true;
+}
+
 function handleBeginRecruit() {
   if (!canLordCommandActiveStronghold.value) {
     void notifyActionBlocked("无法征兵", LORD_AT_RESIDENCE_REQUIRED_TIP);
     return;
   }
+  recruitDialogMode.value = "assign";
   recruitDialogVisible.value = true;
 }
 
-async function handleRecruitConfirm(payload: { soldiers: number }) {
-  const sh = activeStrongholdForCommands.value;
+function handleBeginPersonalRecruit() {
+  if (!canExecutePersonalCommands.value) {
+    void notifyActionBlocked("无法征兵", "须在城内且为当主、领主或代官方可执行个人指令");
+    return;
+  }
+  recruitDialogMode.value = "personal";
+  recruitDialogVisible.value = true;
+}
+
+async function handleRecruitConfirm(payload: { characterId: number }) {
+  const isPersonal = recruitDialogMode.value === "personal";
+  const sh = isPersonal
+    ? activeCharacterStrongholdForCommands.value
+    : activeStrongholdForCommands.value;
   if (!sh || !state.value) return;
 
   loading.value = true;
   error.value = "";
   try {
-    state.value = await recruitAtStronghold(sh.id, payload.soldiers);
-    info.value = `已在 ${sh.name} 征兵 ${payload.soldiers} 人`;
+    state.value = isPersonal
+      ? await personalRecruit(payload.characterId)
+      : await recruitAtStronghold(sh.id, payload.characterId);
+    const general = state.value.characters?.find((c) => c.id === payload.characterId);
+    if (general) {
+      showRecruitSpeechBubble(
+        general.name,
+        recruitAssignmentBubbleMessage("conscript", sh.name, isPersonal ? "personal" : "assign"),
+      );
+    }
+    info.value = general
+      ? isPersonal
+        ? `${general.name} 已在 ${sh.name} 执行个人征兵任务（60 日期限）`
+        : `已向 ${general.name} 发布 ${sh.name} 征兵任务（将领抵达后执行）`
+      : isPersonal
+        ? `已在 ${sh.name} 派发个人征兵任务`
+        : `已在 ${sh.name} 派发征兵任务`;
     onCancel();
   } catch (e) {
     error.value = e instanceof Error ? e.message : "征兵失败";
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleMercenaryRecruitConfirm(payload: { characterId: number; budgetMoney: number }) {
+  const isPersonal = mercenaryRecruitDialogMode.value === "personal";
+  const sh = isPersonal
+    ? activeCharacterStrongholdForCommands.value
+    : activeStrongholdForCommands.value;
+  if (!sh || !state.value) return;
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = isPersonal
+      ? await personalMercenaryRecruit(payload.characterId, payload.budgetMoney)
+      : await mercenaryRecruitAtStronghold(sh.id, payload.characterId, payload.budgetMoney);
+    const general = state.value.characters?.find((c) => c.id === payload.characterId);
+    if (general) {
+      showRecruitSpeechBubble(
+        general.name,
+        recruitAssignmentBubbleMessage("mercenary", sh.name, isPersonal ? "personal" : "assign"),
+      );
+    }
+    info.value = general
+      ? isPersonal
+        ? `${general.name} 已以 ${payload.budgetMoney.toLocaleString()} 文在 ${sh.name} 个人募兵（60 日期限）`
+        : `已向 ${general.name} 发布 ${sh.name} 募兵任务（预算 ${payload.budgetMoney.toLocaleString()} 文，将领抵达后执行）`
+      : isPersonal
+        ? `已在 ${sh.name} 派发个人募兵任务`
+        : `已在 ${sh.name} 发布募兵任务`;
+    onCancel();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "募兵失败";
   } finally {
     loading.value = false;
   }
@@ -1610,6 +1769,46 @@ async function handleTaxRateConfirm(payload: {
     onCancel();
   } catch (e) {
     const message = e instanceof Error ? e.message : "税率调整失败";
+    await handleStrategyApiError(message, message, {
+      lordNotAtResidenceMessage: LORD_AT_RESIDENCE_REQUIRED_TIP,
+    });
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleGovernancePolicyConfirm(priority: StrongholdGovernancePriorityValue) {
+  const sh = activeStrongholdForCommands.value ?? popupStronghold.value ?? selectedStronghold.value;
+  if (!sh || !state.value) return;
+
+  loading.value = true;
+  error.value = "";
+  try {
+    const response = await setStrongholdGovernancePriority(sh.id, priority);
+    state.value = response.state;
+    const priorityLabel =
+      priority === "Military"
+        ? "军事优先"
+        : priority === "Domestic"
+          ? "内政优先"
+          : "自由决策";
+    info.value =
+      response.outcome === "CarrierDispatched" ||
+      response.outcome === "MessengerDispatched"
+        ? `方针令已从当主居城派出信使，抵达 ${sh.name} 后生效（${priorityLabel}）`
+        : `${sh.name} 方针已即时生效（${priorityLabel}）`;
+    if (response.outcome === "AppliedImmediately") {
+      appendEvents([
+        { category: "GovernancePriorityApplied", message: `✅ ${sh.name} 方针已即时生效：${priorityLabel}` },
+      ]);
+    } else {
+      appendEvents([
+        { category: "GovernancePriorityDispatched", message: `📨 方针信使已出发，目标 ${sh.name}（${priorityLabel}）` },
+      ]);
+    }
+    onCancel();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "方针设置失败";
     await handleStrategyApiError(message, message, {
       lordNotAtResidenceMessage: LORD_AT_RESIDENCE_REQUIRED_TIP,
     });
@@ -1651,6 +1850,14 @@ function handleBeginAppointLord() {
   appointLordDialogVisible.value = true;
 }
 
+function handleBeginTransferCharacter() {
+  if (!canLordCommandActiveStronghold.value) {
+    showUnavailableActionTip(LORD_COMMAND_STRONGHOLD_TIP);
+    return;
+  }
+  transferCharacterDialogVisible.value = true;
+}
+
 async function handleAppointLordConfirm(payload: {
   strongholdId: number;
   characterId: number;
@@ -1680,6 +1887,90 @@ async function handleAppointLordConfirm(payload: {
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : "任命失败";
+    await handleStrategyApiError(message, message, {
+      lordNotAtResidenceMessage: LORD_COMMAND_STRONGHOLD_TIP,
+    });
+  } finally {
+    loading.value = false;
+  }
+}
+
+function handleBeginRecallCharacter() {
+  if (!canLordCommandActiveStronghold.value) {
+    showUnavailableActionTip(LORD_COMMAND_STRONGHOLD_TIP);
+    return;
+  }
+  recallCharacterDialogVisible.value = true;
+}
+
+async function handleTransferCharacterConfirm(payload: {
+  mode: "dispatch" | "summon";
+  strongholdId: number;
+  destinationStrongholdId?: number;
+  characterId: number;
+  closeAfter: boolean;
+}) {
+  if (!state.value) return;
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await transferCharacterToStronghold(payload.strongholdId, {
+      characterId: payload.characterId,
+      mode: payload.mode,
+      destinationStrongholdId: payload.destinationStrongholdId,
+    });
+    const general = state.value.characters?.find((c) => c.id === payload.characterId);
+    if (payload.mode === "dispatch") {
+      const dest = state.value.strongholds.find((s) => s.id === payload.destinationStrongholdId);
+      info.value = general
+        ? `已派遣 ${general.name} 前往 ${dest?.name ?? "目标据点"}`
+        : `已派遣将领前往 ${dest?.name ?? "目标据点"}`;
+    } else {
+      const sh = state.value.strongholds.find((s) => s.id === payload.strongholdId);
+      info.value = general
+        ? `已下令 ${general.name} 前往 ${sh?.name ?? "目标据点"}`
+        : `已下令将领前往 ${sh?.name ?? "目标据点"}`;
+    }
+    if (payload.closeAfter) {
+      onCancel();
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "调动失败";
+    await handleStrategyApiError(message, message, {
+      lordNotAtResidenceMessage: LORD_COMMAND_STRONGHOLD_TIP,
+    });
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleRecallCharacterConfirm(payload: {
+  strongholdId: number;
+  characterId: number;
+  closeAfter: boolean;
+}) {
+  if (!state.value) return;
+  loading.value = true;
+  error.value = "";
+  try {
+    const response = await recallCharacter(payload.strongholdId, payload.characterId);
+    const nextState = response.state;
+    state.value = nextState;
+    const general = nextState.characters?.find((c) => c.id === payload.characterId);
+    if (response.outcome === "AppliedImmediately") {
+      info.value = general
+        ? `召回令已传达，${general.name} 正尽快回城`
+        : "召回令已传达，将领正尽快回城";
+    } else {
+      info.value = general
+        ? `已派出信使向 ${general.name} 传达召回令`
+        : "已派出信使传达召回令";
+    }
+    if (payload.closeAfter) {
+      onCancel();
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "召回失败";
     await handleStrategyApiError(message, message, {
       lordNotAtResidenceMessage: LORD_COMMAND_STRONGHOLD_TIP,
     });
@@ -2108,12 +2399,14 @@ function openEventDetailDialog(event: StrategyEvent) {
         : event.detailCategory === "SiegeAssault"
           ? "强攻开始"
           : messageCategoryLabel(event.detailCategory)
-      : messageCategoryLabel(event.category);
+      : event.category === "RecruitTaskCompleted"
+        ? event.title?.trim() || event.brief?.trim() || "募兵/征兵汇报"
+        : messageCategoryLabel(event.category);
   eventDetailTitle.value = category;
   eventDetailText.value =
     event.category === "StrategicReportArrived"
       ? strategicReportDetailText(event)
-      : event.message;
+      : event.detailMessage?.trim() || event.message;
   eventDetailVisible.value = true;
 }
 
@@ -2335,6 +2628,7 @@ function resetMapSessionUi() {
   intelDialogVisible.value = false;
   eventFeed.value = [];
   pendingNotifications.value = [];
+  dismissRecruitReportBubble();
   settlementDialogVisible.value = false;
   settlementDetail.value = null;
   mapInteraction.reset();
@@ -2434,6 +2728,7 @@ async function fetchGameState() {
     intelDialogVisible.value = false;
     eventFeed.value = [];
     pendingNotifications.value = [];
+    dismissRecruitReportBubble();
     settlementDialogVisible.value = false;
     settlementDetail.value = null;
     mapInteraction.reset();
@@ -2474,9 +2769,76 @@ function appendEvents(events: StrategyEvent[]) {
   eventFeed.value = [...eventFeed.value, ...events].slice(-80);
   const playerForceId = state.value?.playerForceId;
   for (const evt of events) {
+    if (evt.category === "RecruitTaskCompleted") {
+      showRecruitReportBubble(evt);
+    }
     const trayItem = notificationFromEvent(evt, playerForceId, state.value ?? undefined);
     if (trayItem) pushNotification(trayItem);
   }
+}
+
+function recruitAssignmentBubbleMessage(
+  kind: "conscript" | "mercenary",
+  strongholdName: string,
+  mode: "assign" | "personal",
+): string {
+  const kindLabel = kind === "mercenary" ? "募兵" : "征兵";
+  if (mode === "personal") {
+    return `主公，我这就开始在${strongholdName}${kindLabel}！`;
+  }
+  return `主公，遵命！我这就前往${strongholdName}执行${kindLabel}任务。`;
+}
+
+function showRecruitSpeechBubble(
+  characterName: string,
+  message: string,
+  event?: StrategyEvent,
+) {
+  if (recruitReportBubbleTimer) {
+    clearTimeout(recruitReportBubbleTimer);
+    recruitReportBubbleTimer = null;
+  }
+  recruitReportBubble.value = {
+    characterName: characterName.trim() || "将领",
+    message: message.trim() || "遵命！",
+    event,
+  };
+  recruitReportBubbleTimer = setTimeout(() => {
+    recruitReportBubble.value = null;
+    recruitReportBubbleTimer = null;
+  }, 12000);
+}
+
+function showRecruitReportBubble(evt: StrategyEvent) {
+  showRecruitSpeechBubble(
+    evt.characterName?.trim() || "将领",
+    recruitCompletionBubbleMessage(evt),
+    evt,
+  );
+}
+
+function dismissRecruitReportBubble() {
+  if (recruitReportBubbleTimer) {
+    clearTimeout(recruitReportBubbleTimer);
+    recruitReportBubbleTimer = null;
+  }
+  recruitReportBubble.value = null;
+}
+
+function dismissRecruitReportNotification(event: StrategyEvent) {
+  pendingNotifications.value = pendingNotifications.value.filter(
+    (n) =>
+      !(
+        n.event?.category === "RecruitTaskCompleted"
+        && n.event?.characterId === event.characterId
+      ),
+  );
+}
+
+function openRecruitReportFromBubble(event: StrategyEvent) {
+  openEventDetailDialog(event);
+  dismissRecruitReportBubble();
+  dismissRecruitReportNotification(event);
 }
 
 async function onAdvanceDay() {
@@ -2799,6 +3161,16 @@ watch(
                     @open-dialog="messageDialogVisible = true"
                   />
                   <StrategyEventFeed :events="scopedEventFeed" />
+                  <div v-if="recruitReportBubble" class="recruit-report-slot">
+                    <StrategyRecruitReportBubble
+                      :visible="!!recruitReportBubble"
+                      :character-name="recruitReportBubble.characterName"
+                      :message="recruitReportBubble.message"
+                      :event="recruitReportBubble.event"
+                      @open-detail="openRecruitReportFromBubble"
+                      @dismiss="dismissRecruitReportBubble"
+                    />
+                  </div>
                 </div>
               </div>
               <div
@@ -2960,6 +3332,8 @@ watch(
             :stronghold-commands-tooltip="LORD_COMMAND_STRONGHOLD_TIP"
             :can-adjust-tax="canAdjustTaxStronghold"
             :tax-rate-tooltip="taxRateTooltip"
+            :can-set-governance-policy="canSetGovernancePolicyStronghold"
+            :governance-policy-tooltip="governancePolicyTooltip"
             :can-espionage="canEspionageStronghold"
             :show-stronghold-directive="showStrongholdDirectiveButton"
             :stronghold-directive-only="strongholdDirectiveOnlyMenu"
@@ -2973,6 +3347,7 @@ watch(
             :gate-ap-cost="CHARACTER_GATE_AP_COST"
             :lord-ap="lordAp"
             :is-stronghold-besieged="menuPopupBesieged"
+            :can-execute-personal-commands="canExecutePersonalCommands"
             @begin-move="handleBeginMove"
             @begin-attack="handleBeginAttack"
             @begin-directive="handleBeginDirective"
@@ -2980,9 +3355,15 @@ watch(
             @begin-split="handleBeginSplit"
             @begin-expedition="handleBeginExpedition"
             @begin-tax-rate="handleBeginTaxRate"
+            @begin-governance-policy="handleBeginGovernancePolicy"
+            @begin-mercenary-recruit="handleBeginMercenaryRecruit"
             @begin-recruit="handleBeginRecruit"
+            @begin-personal-mercenary-recruit="handleBeginPersonalMercenaryRecruit"
+            @begin-personal-recruit="handleBeginPersonalRecruit"
             @begin-espionage="handleBeginEspionage"
             @begin-appoint-lord="handleBeginAppointLord"
+            @begin-transfer-character="handleBeginTransferCharacter"
+            @begin-recall-character="handleBeginRecallCharacter"
             @begin-leave-stronghold="handleBeginLeaveStronghold"
             @begin-enter-stronghold="handleBeginEnterStronghold"
             @begin-visit="handleBeginVisit"
@@ -3094,11 +3475,39 @@ watch(
       @update:visible="taxRateDialogVisible = $event"
       @confirm="handleTaxRateConfirm"
     />
+    <StrategyStrongholdGovernanceDialog
+      v-if="state"
+      :visible="governancePolicyDialogVisible"
+      :stronghold="activeStrongholdForCommands"
+      :world-state="state"
+      @update:visible="governancePolicyDialogVisible = $event"
+      @confirm="handleGovernancePolicyConfirm"
+    />
+    <StrategyMercenaryRecruitDialog
+      v-if="state"
+      :visible="mercenaryRecruitDialogVisible"
+      :mode="mercenaryRecruitDialogMode"
+      :stronghold="
+        mercenaryRecruitDialogMode === 'personal'
+          ? activeCharacterStrongholdForCommands
+          : activeStrongholdForCommands
+      "
+      :acting-character-id="activeCharacterForCommands?.id ?? null"
+      :world-state="state"
+      @update:visible="mercenaryRecruitDialogVisible = $event"
+      @confirm="handleMercenaryRecruitConfirm"
+    />
     <StrategyRecruitDialog
       v-if="state"
       :visible="recruitDialogVisible"
-      :stronghold="activeStrongholdForCommands"
-      :max-recruitable="maxRecruitableSoldiers"
+      :mode="recruitDialogMode"
+      :stronghold="
+        recruitDialogMode === 'personal'
+          ? activeCharacterStrongholdForCommands
+          : activeStrongholdForCommands
+      "
+      :acting-character-id="activeCharacterForCommands?.id ?? null"
+      :world-state="state"
       @update:visible="recruitDialogVisible = $event"
       @confirm="handleRecruitConfirm"
     />
@@ -3109,6 +3518,22 @@ watch(
       :world-state="state"
       @update:visible="appointLordDialogVisible = $event"
       @confirm="handleAppointLordConfirm"
+    />
+    <StrategyTransferCharacterDialog
+      v-if="state"
+      :visible="transferCharacterDialogVisible"
+      :initial-stronghold="activeStrongholdForCommands"
+      :world-state="state"
+      @update:visible="transferCharacterDialogVisible = $event"
+      @confirm="handleTransferCharacterConfirm"
+    />
+    <StrategyRecallCharacterDialog
+      v-if="state"
+      :visible="recallCharacterDialogVisible"
+      :initial-stronghold="activeStrongholdForCommands"
+      :world-state="state"
+      @update:visible="recallCharacterDialogVisible = $event"
+      @confirm="handleRecallCharacterConfirm"
     />
     <StrategyIntelSystemDialog
       :visible="intelSystemVisible"
@@ -3197,7 +3622,7 @@ watch(
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-  width: 20em;
+  width: 24em;
   flex-shrink: 0;
   min-width: 0;
 }
@@ -3381,6 +3806,11 @@ watch(
 }
 
 .map-message-zone :deep(.message-feed-toolbar) {
+  pointer-events: auto;
+}
+
+.recruit-report-slot {
+  display: block;
   pointer-events: auto;
 }
 

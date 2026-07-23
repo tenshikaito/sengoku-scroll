@@ -14,6 +14,7 @@ export interface GameStartOptionUiRules {
 
 export interface LordUnitControlContext {
   lordUnitId: number | null | undefined;
+  lordCharacterId: number | null | undefined;
   lordX: number;
   lordY: number;
   lordCharacterLocationType?: string | null;

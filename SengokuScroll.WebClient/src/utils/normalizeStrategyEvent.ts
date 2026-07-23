@@ -135,6 +135,10 @@ export function normalizeStrategyEvent(raw: unknown): StrategyEvent {
   const battleRaw = pick(evt, "battleResult", "BattleResult");
   const detailCategory = optionalString(pick(evt, "detailCategory", "DetailCategory"));
   const detailMessage = optionalString(pick(evt, "detailMessage", "DetailMessage"));
+  const characterIdRaw = pick(evt, "characterId", "CharacterId");
+  const characterId = characterIdRaw == null ? undefined : safeInt(characterIdRaw);
+  const characterName = optionalString(pick(evt, "characterName", "CharacterName"));
+  const title = optionalString(pick(evt, "title", "Title"));
 
   return {
     category,
@@ -144,5 +148,8 @@ export function normalizeStrategyEvent(raw: unknown): StrategyEvent {
     battleResult: battleRaw ? normalizeBattleResult(battleRaw) : undefined,
     detailCategory,
     detailMessage,
+    characterId: characterId && characterId > 0 ? characterId : undefined,
+    characterName,
+    title,
   };
 }

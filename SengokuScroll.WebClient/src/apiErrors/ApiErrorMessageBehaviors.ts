@@ -87,6 +87,38 @@ class CharacterIsForceLordErrorBehavior extends ApiErrorMessageBehavior {
   }
 }
 
+class CharacterIsStrongholdMayorErrorBehavior extends ApiErrorMessageBehavior {
+  readonly code = "CharacterIsStrongholdMayor";
+
+  resolve(): ApiErrorResolution {
+    return { type: "message", message: "该将领已担任据点代官，无法调动" };
+  }
+}
+
+class CharacterAlreadyAtStrongholdErrorBehavior extends ApiErrorMessageBehavior {
+  readonly code = "CharacterAlreadyAtStronghold";
+
+  resolve(): ApiErrorResolution {
+    return { type: "message", message: "该将领已在目标据点" };
+  }
+}
+
+class CharacterHasActiveTaskErrorBehavior extends ApiErrorMessageBehavior {
+  readonly code = "CharacterHasActiveTask";
+
+  resolve(): ApiErrorResolution {
+    return { type: "message", message: "该将领已有任务，无法调动" };
+  }
+}
+
+class CharacterNotOnRecallableTaskErrorBehavior extends ApiErrorMessageBehavior {
+  readonly code = "CharacterNotOnRecallableTask";
+
+  resolve(): ApiErrorResolution {
+    return { type: "message", message: "该将领当前没有可召回的外派任务" };
+  }
+}
+
 class ApNotEnoughErrorBehavior extends ApiErrorMessageBehavior {
   readonly code = "ApNotEnough";
 
@@ -141,6 +173,10 @@ const API_ERROR_BEHAVIORS: ApiErrorMessageBehavior[] = [
   new CharacterNotAtResidenceErrorBehavior(),
   new CharacterIsStrongholdLordErrorBehavior(),
   new CharacterIsForceLordErrorBehavior(),
+  new CharacterIsStrongholdMayorErrorBehavior(),
+  new CharacterAlreadyAtStrongholdErrorBehavior(),
+  new CharacterHasActiveTaskErrorBehavior(),
+  new CharacterNotOnRecallableTaskErrorBehavior(),
   new ApNotEnoughErrorBehavior(),
   new StrongholdBlockadedErrorBehavior(),
   new UnitNotDirectlyControllableErrorBehavior(),

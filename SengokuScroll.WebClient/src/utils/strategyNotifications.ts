@@ -14,7 +14,31 @@ export function nextNotificationId(): string {
   return `notify-${Date.now()}-${notificationSeq}`;
 }
 
+/** 募兵/征兵完成汇报：气泡与通知 tooltip 固定口语「主公…」，不用 Title。 */
+export function recruitCompletionBubbleMessage(event: StrategyEvent): string {
+  const brief = event.brief?.trim();
+  const title = event.title?.trim();
+  if (brief?.startsWith("主公")) return brief;
+  if (brief && brief !== title) return brief;
+
+  const detail = event.detailMessage?.trim() || event.message;
+  const taskMatch = detail.match(/已完成\s+(.+?)\s+(募兵|征兵)任务/);
+  const soldiersMatch = detail.match(/获得兵士\s+([\d,]+)\s*人/);
+  if (taskMatch && soldiersMatch) {
+    const soldiers = Number(soldiersMatch[1]!.replace(/,/g, ""));
+    if (Number.isFinite(soldiers) && soldiers > 0) {
+      return `主公，${taskMatch[1]}的${taskMatch[2]}完成了！共得 ${soldiers.toLocaleString()} 人。`;
+    }
+    return `主公，${taskMatch[1]}的${taskMatch[2]}任务已结束，未能募得兵士。`;
+  }
+
+  return "主公，任务已完成！";
+}
+
 export function eventBriefText(event: StrategyEvent): string {
+  if (event.category === "RecruitTaskCompleted") {
+    return event.title?.trim() || event.brief?.trim() || event.message;
+  }
   return event.brief?.trim() || event.message;
 }
 
@@ -51,6 +75,7 @@ export function isSettlementEvent(event: StrategyEvent): boolean {
 export function eventHasDetail(event: StrategyEvent): boolean {
   if (isSettlementEvent(event)) return true;
   if (event.category === "InstantEventSummary") return true;
+  if (event.category === "RecruitTaskCompleted") return true;
   if (event.category === "BattleReportArrived" && event.battleResult) return true;
   if (event.category === "StrategicReportArrived") return true;
   return false;
@@ -103,7 +128,10 @@ export function notificationFromEvent(
 
 export function messengerFeedBrief(event: StrategyEvent): string {
   const label = messageCategoryLabel(event.category);
-  const brief = event.brief?.trim();
+  const brief =
+    event.category === "RecruitTaskCompleted"
+      ? event.title?.trim() || event.brief?.trim()
+      : event.brief?.trim();
   if (brief) return `[${label}] ${brief}`;
   return `[${label}] ${simplifyLegacyMessage(event)}`;
 }

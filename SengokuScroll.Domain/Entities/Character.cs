@@ -37,10 +37,19 @@ public class Character : CharacterDefinition, IMovable
     /// </summary>
     public int Salary { get; set; }
 
+    /// <summary>个人金库储蓄（文）。</summary>
+    public int Money { get; set; }
+
     /// <summary>
     /// 声望
     /// </summary>
     public int Popular { get; set; }
+
+    /// <summary>进行中的募兵/征兵任务；无任务时为 null。</summary>
+    public CharacterRecruitTask? RecruitTask { get; set; }
+
+    /// <summary>据点发布的募兵/征兵任务令；抵达目标后由 AI 转为执行任务。</summary>
+    public CharacterRecruitAssignment? RecruitAssignment { get; set; }
 
     /// <summary>
     /// 恶名

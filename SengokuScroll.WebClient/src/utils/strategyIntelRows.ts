@@ -48,6 +48,7 @@ import {
   UNKNOWN_INTEL,
 } from "@/utils/strategyIntelDisplay";
 import { formatStrongholdCityGenerals } from "@/utils/strategyIntelSystemData";
+import { governancePriorityLabel } from "@/utils/strategyStrongholdLabels";
 
 export interface IntelFieldRow {
   label: string;
@@ -302,6 +303,12 @@ function strongholdCoreIntelRows(
     {
       label: "代官",
       value: obscurePersonnel ? UNKNOWN_INTEL : (stronghold.mayorName?.trim() || "—"),
+    },
+    {
+      label: "方针",
+      value: obscurePersonnel
+        ? UNKNOWN_INTEL
+        : governancePriorityLabel(stronghold.governancePriority),
     },
     {
       label: "现任",
