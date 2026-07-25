@@ -1,6 +1,6 @@
 # SengokuScroll 游戏概念词典（Game Concepts Reference）
 
-> 版本：1.7 | 日期：2026-07-22 | 索引：[设计文档索引](./README.md)
+> 版本：1.8 | 日期：2026-07-25 | 索引：[设计文档索引](./README.md)
 
 本文档是 **游戏中所有已定义概念的权威清单**：每个概念给出中英名称、一句话定义、实装状态与关键代码/设计引用。
 
@@ -66,6 +66,7 @@
 
 | 日期 | 版本 | 变更摘要 |
 |------|------|----------|
+| 2026-07-25 | 1.8 | **Unit–SubUnit–InStronghold 模型**：组建/入城/出城/解散；Support 仅方针；笼城不占图；市场做市 vs 单位砸单；备队大将；废除 Support 守军 materialize |
 | 2026-07-22 | 1.7 | 实体看法/影响/任务：EntityEffect、CharacterRelationship、IntelTasks；势力/人物看法 Tab；详见 shared §1.2.1a、strategy §6.5c |
 | 2026-07-21 | 1.6 | 谍报台账（2 月过期、scope/精度）；溃灭将领地图逐日回城；进行/倍速自动推进 UI；ForceIntel 不再因视野自动模糊兵数 |
 | 2026-07-19 | 1.5 | 战争迷雾/情报：`GameStartOptions`、三层视野、Known 据点、InstantEventMessages 双通道；详见 [`strategy-fog-of-war-design.md`](strategy-fog-of-war-design.md) |
@@ -89,13 +90,18 @@
 | CRR | 角色关系 CharacterRelationship | §1.3.1 | ✅ |
 | CIT | 情报任务 CharacterIntelTask | §1.3.1 | ✅ |
 | SH | 据点 Stronghold | §1.4 | ✅ |
-| UNT | 地图单位 Unit | §1.5 | ✅ |
-| SUB | 子编制 SubUnit | §1.5 | ✅ |
+| UNT | 地图单位 Unit | §1.5 | 🟡 |
+| SUB | 子编制 SubUnit | §1.5 | 🟡 |
+| UKD | 单位种类 UnitKind | §1.5 | 🟡 |
+| ISH | 城内状态 InStronghold | §1.5 | 🟡 |
+| CMP | 组建 Compose | §1.5 | 🟡 |
+| DSB | 解散 Disband | §1.5 | 🟡 |
+| SHP | 商店 Shop (MerchantActor) | §4.3 | 🟡 |
 | MOV | 可移动抽象 IMoveable | §1.8 | 📋 |
 | STK | 同格堆叠 Stacking | §3.0 | 📋 |
 | BFD | 战场容器 Battlefield | §3.0 | 📋 |
 | WAR | 战争 War | §5.5 | 📋 |
-| GAR | 城内驻军 City Garrison | §6 | ✅ |
+| GAR | 城内驻军 City Garrison | §6 | 🟡 |
 | DIR | 单位方针 UnitDirective | §2.1 | ✅ |
 | STA | 单位姿态 UnitStance | §2.2 | ✅ |
 | STS | 单位状态 UnitStatus | §2.3 | ✅ |
@@ -195,18 +201,58 @@
 | **经济设施 EconomyFacilityIds** | Market、奢侈品工坊等。 | ✅ | `EconomyFacilityRules.cs` |
 | **据点类型 StrongholdType** | 平城/平山城/山城等地形建造限制。 | 📋 | `Types/StrongholdType.cs` |
 
-### 1.5 地图单位 Unit 与子编制 SubUnit
+### 1.5 地图单位 Unit、子编制 SubUnit 与城内状态
+
+> **地图最小行动单位永远是 Unit**。SubUnit 只描述兵种构成，**不能**单独出现在地图或友城；未编入 Unit 的 SubUnit 仅存在于 **Home 据点** 的 ForceActor 列表中。
 
 | 概念 | 定义 | 状态 | 相关文件 |
 |------|------|------|----------|
-| **地图单位 Unit** | 地图上可移动的「队」实体（`IMoveable`）；军事兵团为默认形态；**特殊队一律归 Unit**（运输、商队、流民等），用 kind/职责区分。 | ✅→📋 | `Unit.cs` |
-| **子编制 SubUnit** | 兵种段（足轻/弓/骑/铁炮）；挂于 `Unit.SubUnitIds`，不独立占格。 | ✅ | `SubUnit.cs` |
-| **总将 LeaderId** | 出征编组时确定的战略层唯一下令对象（Character）。 | ✅ | `Unit.cs` |
-| **守城单位** | 普通军事 `Unit`，方针 `Support`，驻守据点格；与城内兵数可并存；**盟友不得入城成建制协防**（解围见 §6）。 | ✅ | `StrongholdGarrisonRules.cs` |
-| **行动目标 UnitActionTarget** | 目标势力/据点/单位/角色 + 路径队列 `RoutePoints`；Support 时可挂目标单位同格跟随。 | ✅→📋 | `Unit.cs` |
-| **Actor 基类** | 钱粮物资、兵数、士气、训练度、伤兵等通用字段。 | ✅ | `Actor.cs` |
-| **非军事标记 IsMilitary** | `false`：运输/商队等；遇敌军格仍触发遭遇（缴获/俘），见 §3.0。 | ✅→📋 | `Unit.cs` / `SupplyConvoy.cs` |
-| **单位种类 UnitKind（目标）** | `Military` / `Convoy` / `Merchant` / `Migrant` 等；玩家默认可选中军事。 | 📋 | 设计规格 |
+| **地图单位 Unit** | 一切「队」的统一实体：军事 / 运输 `Convoy` / 贸易 `Merchant` / 移民 `Migrant` 等；**UnitKind** 决定菜单与战斗规则。 | 🟡 | `Unit.cs` · `UnitKind.cs` |
+| **UnitKind** | `Military` / `Convoy` / `Merchant` / `Migrant` …；指令集与是否可做市 **挂在 Unit 上**，不在 SubUnit 上。 | 🟡 | `UnitKind.cs` |
+| **子编制 SubUnit** | 兵种段（足轻一队/二队等 **独立队名**）；挂于 `Unit.SubUnitIds` 或 Home 据点 `ForceActor.SubUnitIds`（`UnitId=0`）。 | 🟡 | `SubUnit.cs` |
+| **TotalSoldiers** | Unit / Actor 上的 **总兵数**（SubUnit 合计；与 `SubUnit.Soldier` 语义对齐）。 | 🟡 | `Actor.cs` · `Unit.cs` |
+| **LeaderId** | 出征/组建时绑定的将领 Character；`0` 表示 **备队大将**（占位，见 §6.4）。 | 🟡 | `Unit.cs` |
+| **InStronghold** | `true`：Unit **在城内**，**不占** `GameMapData.Units` 格索引；视野仍按据点格计算。 | 🟡 | `Unit.cs` · `MapLocationActions.cs` |
+| **HomeStrongholdId** | 编制归属据点；**仅在此城** 可执行 **建制解散**（SubUnit 回列表、物资归城）。 | 🟡 | `Unit.cs` |
+| **LocationStrongholdId** | 当前驻留据点（协防友城时 ≠ Home）；非 Home **禁止** 手动解散。 | 🟡 | `Unit.cs` |
+| **行动目标 UnitActionTarget** | 目标势力/据点/单位/角色 + `RoutePoints`；与 **UnitDirective** 配合。 | ✅ | `Unit.cs` |
+| **IMoveable** | 地图上需移动的实体：**Unit**（`InStronghold=false` 时占格）与 **Character**。 | 🟡 | 设计规格 |
+
+#### 1.5.1 组建 Compose（原「出征」）
+
+从 **Home 据点** 的 SubUnit 列表 **组建 Unit**（非从抽象数字 spawn 无关队）：
+
+1. 选择 SubUnit 段、将领（可选）、队名  
+2. **组建后动作**（默认 **在城中**）：  
+   - **在城中** → `InStronghold=true`，不占图  
+   - **出城** → `InStronghold=false`，占据点/接敌格  
+
+同一势力、同一据点可有多支 **`InStronghold` Unit**（区分不同 Home 来的援军）。
+
+**关键文件**：`UnitComposeActions.cs` · `UnitComposeRules.cs`
+
+#### 1.5.2 入城 / 出城
+
+| 指令 | 效果 |
+|------|------|
+| **入城** | 到达己方/战时同盟据点 → `InStronghold=true`，`LocationStrongholdId=该城`，从格索引移除 |
+| **出城** | `InStronghold=false`，出现在据点格（同格接敌规则不变）；协防结束后 **原路离开**，不得在友城 **建制解散** |
+
+#### 1.5.3 解散 Disband
+
+| 类型 | 触发 | 地点 | 结果 |
+|------|------|------|------|
+| **建制解散** | 玩家/AI 指令 | **仅 HomeStrongholdId** | 销毁 Unit；SubUnit 回 Home 列表；粮钱归城；将领 `Idle`+`Stronghold` |
+| **强制解散** | 钱粮耗尽 → 士气归零 | **任意** | 建制崩溃、物资哄抢；**不** orderly 回 Home；信使回报本家（消息区+图标） |
+
+**关键文件**：`UnitStrongholdPresenceActions.cs` · `UnitMoraleRules.cs`（待接）
+
+#### 1.5.4 贸易 Unit 与运输 Unit
+
+- **Merchant / Convoy** 均为 Unit + UnitKind；SubUnit 可含 **少量足轻**（整队移速取最慢段）。  
+- **贸易队须 InStronghold 才能卸货/砸单交易**；**不能**在订单簿挂单（见 §4.3）。  
+- **TradePolicy**（任务层，非 UnitDirective）：轮询行情，价格满足时 **市价砸单**（与限价等待同义）。  
+- **SupplyConvoy** 实体 **迁移中** → 目标为 UnitKind.Convoy/Merchant。
 
 ### 1.6 地图与地理
 
@@ -241,7 +287,7 @@
 | `Move` | 移动 | 按路径行军，非主动接敌。 | ✅ |
 | `Occupy` | 占领 | 进攻性目标（含攻城）；会主动接敌。 | ✅ |
 | `Raid` | 劫掠 | 进攻性；接敌规则同 Occupy。 | ✅ |
-| `Support` | 支援 | 防御/待命；**同格且 `TargetUnitId` 有效时跟随目标移动**，目标入战场则同侧挂入；决战时偏坚守。 | ✅→📋 |
+| `Support` | 支援 | **战略方针**：支援某 **Unit** 或某 **Stronghold**；不表示实体类型。围城时外援须 **Unit 先入城** 方能参战；方针只指导行动，**不强制**入城（高级 AI 远期）。决战时偏坚守。 | 🟡 |
 | `Retreat` | 撤退 | 尝试脱离；阻断强袭 Commit；战后败方默认方针。 | ✅ |
 
 **关键文件**：`Unit.cs` · `MoveEngagementRules.cs` · `BattleDirectiveRules.cs`
@@ -427,12 +473,18 @@
 
 **关键文件**：`EconomyCalculator.cs` · `TariffEconomyActions.cs`
 
-### 4.3 市场 Market
+### 4.3 市场 Market 与商店
 
 | 概念 | 定义 | 状态 | 关键文件 |
 |------|------|------|----------|
-| **连续撮合** | 日推进中、单位移动前独立相位。 | ✅ | `StrategyMarketSystem.cs` |
-| **挂单 MarketOrder** | Buy/Sell；主体为 Actor。 | ✅ | `StrongholdMarket.cs` |
+| **连续撮合** | 日推进中、单位移动前独立相位；**AI 与 Actor 挂单** 互相成交。 | ✅ | `StrategyMarketSystem.cs` |
+| **做市商** | 挂单主体为城内 **Actor**（官府 ForceActor、MerchantActor 等）。 | 🟡 | `StrongholdMarket.cs` |
+| **商店 Shop** | **1 商店 = 1 个 MerchantActor**；**同一商人势力在同一据点最多 1 店**；创立商店 **不要求** Market 设施，**不要求势力许可**（商业值≥20；史实许可规则 📋）。 | 🟡 | `StrongholdShopActions.cs` |
+| **单位交易** | 贸易 **Unit** 在 **InStronghold** 时仅 **砸单瞬时成交**（吃簿），**不可挂单**；成交进 Unit 的 Food/Money。 | 🟡 | 设计规格 |
+| **TradePolicy** | Unit 任务层：轮询至价格满足再砸单（等价「限价/到位才买卖」）。 | 🟡 | 设计规格 |
+| **关税** | 运输 Unit 过境含征税据点时 **自动扣税**；须在 **左上角消息区** 通知。 | 🟡 | `TariffEconomyActions.cs` |
+| **UI 入口** | 官府菜单→市场（**仅当主**）；单位菜单→市场（**该贸易 Unit**）；非当主个人仅可看行情。 | 🟡 | 设计规格 |
+| **挂单 MarketOrder** | Buy/Sell；主体为 Actor（做市）。 | ✅ | `StrongholdMarket.cs` |
 | **商品 MarketCommodityType** | `Food` / `Luxury`。 | ✅ | `MarketCommodityType.cs` |
 | **日 K 线 DailyPriceBar** | OHLC，保留约 2 年。 | ✅ | `StrongholdMarket.cs` |
 
@@ -505,23 +557,28 @@
 
 ---
 
-## 6. 驻军系统（Garrison）
+## 6. 驻军与城内编制（Garrison & InStronghold）
+
+> **守备真相 = SubUnit 列表 + InStronghold 的 Unit**。笼城时 **不** 长期以 Support 占格；开战时 **以 Unit 进入 Battlefield**。
 
 | 概念 | 定义 | 状态 | 关键文件 |
 |------|------|------|----------|
-| **城内驻军 City Garrison** | `Stronghold.ForceActor.Soldier`；未编入地图单位的部分。剧本字段 `garrisonSoldiers`。 | ✅ | `StrongholdGarrisonRules.cs` |
-| **守城单位** | 普通 `Unit`，方针 `Support` + 同格据守；无单独实体类型。 | ✅ | `StrongholdGarrisonRules.IsGarrisonUnit` |
-| **总驻军** | 城内兵数 + 同格守城单位兵数。 | ✅ | `CountTotalGarrisonAt` |
-| **EnsureDefenderUnit** | 攻城需接敌且仅有城内兵时，编组一支 Support 守城单位。 | ✅ | `StrongholdGarrisonActions.cs` |
-| **威胁占格** | 敌对军事逼近时，日初可编组本势力 Support 守城单位；与堆叠/同格接敌规格对齐时再调邻域。 | ✅→📋 | `GarrisonBehaviorRules.TryPrepareGarrisonOnThreat` |
-| **城下入城** | 城下野战击溃守城单位后，胜方进入据点格；空城占城，仍有城内兵则同格接敌。 | ✅ | `BattleAftermathHelper.TryAdvanceWinnerIntoStrongholdAfterGarrisonFight` |
-| **封锁 / 包围充分度** | **仅下达攻城令**才算包围；`siegePressure = 同格围城侧（含共战盟友）兵力 / 据点规模必要兵力`。充分（≥1）可满额士气/粮压并 **禁出城野战**；不充分可出城野战，压制减弱；出城/入城支援类信使与运输成功率随 pressure 加深而降。站城格无令 ≠ 包围。 | ✅→📋 | `GarrisonBehaviorRules`（待改） |
-| **占城条件 Capture** | 须持攻城指令（强攻/包围）+ 正确位置 + 守备崩溃（城内兵/士气或守城单位归零）。禁止踩格占城。 | ✅ | `StrongholdCaptureRules.CanTransferOwnership` |
-| **占城诊断 CaptureDiagnostic** | 占城被拒绝时写入日事件，含 rejectReason 与守备快照。 | ✅ | `StrongholdCaptureHelper.CaptureStronghold` |
-| **出城野战 / 解围** | 不充分包围时可编队上图野战。盟友协防 **仅方案 2**：外来与围城军同格开战解围，**不允许入城**成建制协防。城内仍以本势力兵数 + Support 为主。 | ✅→📋 | 设计规格 |
-| **驻军崩溃 Garrison Broken** | 城内兵数 ≤0 且无敌方守城单位 → 可占空城。 | ✅ | `IsCityGarrisonBroken` / `IsAnyGarrisonPresent` |
+| **城内 SubUnit 列表** | 未编入 Unit 的备兵，存于 **Home 据点** `ForceActor.SubUnitIds`（按队名，不按类型合并）。 | 🟡 | `StrongholdMilitaryBootstrapHelper.cs` |
+| **InStronghold Unit** | 已组建、在城内待命；**不占地图格**；可多支/多势力（各自 Unit）。 | 🟡 | `Unit.cs` |
+| **协防入城** | **战时同盟** Unit 可 **入城**（`InStronghold`）；**不可能** 仅有 SubUnit 在友城（最小行动单位是 Unit）。 | 🟡 | `UnitStrongholdPresenceRules.cs` |
+| **同盟不自动组 Unit** | 攻城开战时 **不为同盟** 自动组建；同盟须 **已 Unit 入城等待**。 | 🟡 | `SiegeDefenderFormationRules.cs` |
+| **城主自动组 Unit** | 攻城触发且 **本势力无 InStronghold/地图守军 Unit**，但有 SubUnit/农兵 → **自动 1 支 Unit**（尽量含全部本势力 SubUnit+农兵）；**仅本势力 ForceId**。 | 🟡 | `SiegeDefenderFormationRules.cs` |
+| **将领优先级** | 自动组时：当主/领主在场 → 代官 → 其他 Idle 将领 → 无将则 **备队大将**（LeaderId=0）。 | 🟡 | `ReserveCommanderRules.cs` |
+| **备队大将** | 占位指挥官名；将领入城后可 **自动替换**；本城代官/领主归来可 **再替换**。 | 🟡 | `ReserveCommanderRules.cs` |
+| **笼城** | 决策笼城后应 **提前组建 Unit**；平时 **不** materialize 占格 Support 队。 | 🟡 | 设计规格 |
+| **接敌（同格）** | 敌军踩 **城格** 且格上有 **我方地图 Unit** → **野战**；格上无我 Unit 但据点仍有 SubUnit/农兵 → **Siege BF**（无 Unit 则城主方自动组，见上）。 | 🟡 | `MoveEngagementRules.cs` |
+| **视野** | `InStronghold` Unit 仍按 **据点格** 贡献视野（否则城内仅 1 格）。 | 🟡 | `StrategyVisionRules.cs` |
+| **封锁 / 包围充分度** | 仅 **攻城令** 算包围；`siegePressure` = 同格围城侧兵力 / 必要兵力。 | ✅→📋 | `GarrisonBehaviorRules` |
+| **占城条件 Capture** | 攻城令 + 位置 + 守备崩溃。 | ✅ | `StrongholdCaptureRules` |
+| **战败** | BF 内击溃 → 失去建制（强制解散类）；撤出 → 撤退（野外跑或入城）。 | ✅ | `BattleRetreatRules.cs` |
+| **已废除** | ~~Support 守军类型~~ · ~~EnsureDefenderUnit materialize~~ · ~~TryDissolveGarrisonWhenSafe 自动解散~~ | ❌ | 旧 `StrongholdGarrisonActions` |
 
-**DTO**：`StrategyStrongholdStateDto.GarrisonSoldiers`（仅城内兵数；守城单位见 units 列表）
+**DTO**：`InStronghold` / `HomeStrongholdId` / 城内 Unit 列表与 SubUnit 池分开展示（待 DTO 更新）
 
 ---
 

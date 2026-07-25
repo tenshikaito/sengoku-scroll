@@ -13,7 +13,9 @@ export function resolveIntelColumnLabel(col: IntelTableColumnDef): string {
   const auto = t(autoKey);
   if (auto !== autoKey) return auto;
 
-  return col.label ?? col.prop;
+  if (col.label !== undefined) return col.label;
+
+  return col.prop;
 }
 
 export function resolveIntelTabLabel(scope: string, name: string, fallback?: string): string {

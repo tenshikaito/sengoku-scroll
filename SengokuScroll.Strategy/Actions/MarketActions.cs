@@ -154,6 +154,9 @@ public static class MarketActions
         });
     }
 
+    public static bool TryGetActorPublic(Stronghold stronghold, int actorId, out StrongholdActor actor)
+        => TryGetActor(stronghold, actorId, out actor);
+
     private static bool TryGetActor(Stronghold stronghold, int actorId, out StrongholdActor actor)
     {
         if (stronghold.ForceActor.Id == actorId)

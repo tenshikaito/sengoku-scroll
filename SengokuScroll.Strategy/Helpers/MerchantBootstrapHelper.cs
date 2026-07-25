@@ -34,7 +34,7 @@ public static class MerchantBootstrapHelper
     private static bool HasNonNanbanMerchant(Stronghold stronghold)
         => stronghold.MerchantActors.Any(m => !OrganizationForceHelper.IsNanbanMerchantName(m.Name));
 
-    private static string ResolvePrimaryHouseName(int strongholdId)
+    public static string ResolvePrimaryHouseName(int strongholdId)
         => PrimaryHouseNames[Math.Max(0, strongholdId - 1) % PrimaryHouseNames.Length];
 
     internal static string ResolveDefaultLeaderName(string houseName)

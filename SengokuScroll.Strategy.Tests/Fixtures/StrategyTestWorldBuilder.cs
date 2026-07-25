@@ -111,6 +111,7 @@ public static class StrategyTestWorldBuilder
         var world = BuildMinimalWorld();
         var location = unitLocation ?? new Point3(3, 0);
         var stronghold = CreateTestStronghold(1, 1, new Point3(0, 0), food: 10_000);
+        stronghold.ForceActor.Soldier = 0;
 
         world.GameData.Strongholds[1] = stronghold;
         world.GameData.Units[1] = CreateTestUnit(1, 1, location, food: unitFood);

@@ -699,6 +699,20 @@ public static class StrategyUnitAIRules
             if (unit.Location.IsSameTile(target.Location))
             {
                 unit.ActionTarget.StrongholdId = target.Id;
+                if (!unit.InStronghold
+                    && worldContext is not null
+                    && UnitStrongholdPresenceRules.CanEnterStronghold(unit, target, gameData))
+                {
+                    UnitStrongholdPresenceActions.EnterStronghold(
+                        worldContext, unit, target, gameData, meta);
+                    thought.Add("援防入城 {0}", target.Name);
+                    return StrategyAiDecision.Ok(
+                        "SupportEnteredStronghold",
+                        $"援防入城 {target.Name}",
+                        thought,
+                        targetStrongholdId: target.Id);
+                }
+
                 thought.Add("已抵达援防目标 {0}", target.Name);
                 return StrategyAiDecision.Ok(
                     "ReliefArrived",

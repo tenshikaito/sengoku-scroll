@@ -28,7 +28,8 @@ public class StrategyEconomySystem(
     MerchantTaxLedger merchantTaxLedger,
     TariffTaxLedger tariffTaxLedger,
     MonthlyTaxCollectionLedger monthlyTaxCollectionLedger,
-    SupplyConvoyDispatchHelper dispatchHelper) : IStrategyEconomySystem
+    SupplyConvoyDispatchHelper dispatchHelper,
+    BattleReportDeliveryHelper battleReportDeliveryHelper) : IStrategyEconomySystem
 {
     /// <summary>在市场系统之后、后勤系统之前执行。</summary>
     public int Order { get; } = 10;
@@ -121,14 +122,22 @@ public class StrategyEconomySystem(
             }
         }
 
-        // 阶段3：逐军事单位扣除携行粮
+        // 强制解散：需连续断粮多日且士气归零（见 Unit.SupplyCollapseDays）
         foreach (var unit in context.GameWorldContext.EachUnit())
         {
             if (!EconomyRules.ShouldConsumeDailyFood(unit))
                 continue;
 
             UnitEconomyActions.ApplyDailyFoodConsumption(unit);
+            UnitMoraleRules.ApplyDailySupplyCollapseTracking(unit, gameData);
         }
+
+        UnitMoraleRules.ProcessForcedDisbands(
+            context.GameWorldContext,
+            gameData,
+            scenarioMeta,
+            dayOutcomeBuffer,
+            battleReportDeliveryHelper);
 
         // 阶段4：月初势力维持费与玩家收支报告；1 月追加年度人口与年报
         if (!EconomyRules.IsMonthlySettlementDay(gameDate))

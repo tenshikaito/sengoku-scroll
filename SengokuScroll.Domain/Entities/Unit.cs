@@ -1,6 +1,7 @@
 ﻿using SengokuScroll.Common.Types;
 using SengokuScroll.Domain.Entities.Abstraction;
 using SengokuScroll.Domain.Enums;
+using SengokuScroll.Domain.Entities.Types;
 using static SengokuScroll.Domain.Entities.Character;
 
 namespace SengokuScroll.Domain.Entities;
@@ -77,6 +78,30 @@ public class Unit : Actor, IUnit
 
     /// <summary>是否为军事单位（恒为 true；用于与同格非军事实体区分）。</summary>
     public bool IsMilitary { get; set; }
+
+    /// <summary>单位种类（军事/运输/贸易/移民等）。</summary>
+    public UnitKind Kind { get; set; } = UnitKind.Military;
+
+    /// <summary>是否在城内待命；为 true 时不占 <see cref="GameMapData.Units"/> 格索引。</summary>
+    public bool InStronghold { get; set; }
+
+    /// <summary>编制归属据点；仅在此城可建制解散。</summary>
+    public int HomeStrongholdId { get; set; }
+
+    /// <summary>当前驻留据点（协防友城时可与 Home 不同）。</summary>
+    public int LocationStrongholdId { get; set; }
+
+    /// <summary>连续断粮日数（携行粮为 0 且补给 CutOff 时递增）。</summary>
+    public int SupplyCollapseDays { get; set; }
+
+    /// <summary>贸易任务策略（非 UnitDirective）。</summary>
+    public UnitTradePolicy TradePolicy { get; set; }
+
+    /// <summary>贸易限价（文/合）；WaitBuy 为最高可接受买价，WaitSell 为最低可接受卖价。</summary>
+    public int TradeLimitPriceMoneyPerGo { get; set; }
+
+    /// <summary>贸易目标数量（合）；0 表示尽可能成交。</summary>
+    public int TradeQuantityGo { get; set; }
 
     public Direction4 Direction { get; set; }
 

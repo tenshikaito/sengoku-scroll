@@ -2,7 +2,9 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
+using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Actions;
@@ -17,9 +19,10 @@ public static class TariffEconomyActions
     public static int TryAssessTransitTariff(
         SupplyConvoy convoy,
         Stronghold stronghold,
-        TariffTaxLedger ledger)
+        TariffTaxLedger ledger,
+        StrategyDayOutcomeBuffer? dayOutcomeBuffer = null,
+        StrategyScenarioMeta? meta = null)
     {
-        // 业务：仅贸易去程、异势力据点、且未重复计征时征收过境关税
         if (convoy.Purpose != TransportPurpose.Trade)
             return 0;
 
@@ -49,10 +52,24 @@ public static class TariffEconomyActions
         if (tariffDue <= 0)
             return 0;
 
-        // 业务：按目的地市价折算粮货价值后计征关税，不足则从载货现款扣
         var paid = Math.Min(tariffDue, convoy.CargoMoney);
         convoy.CargoMoney -= paid;
         ledger.Accrue(stronghold.Id, paid);
+
+        if (paid > 0
+            && dayOutcomeBuffer is not null
+            && meta is not null
+            && convoy.ForceId == meta.PlayerForceId)
+        {
+            dayOutcomeBuffer.AddEvent(new StrategyEventDto
+            {
+                Category = "TariffTransitCharged",
+                Brief = $"🛃 {stronghold.Name} 过境关税 {paid:N0} 文",
+                Message =
+                    $"贸易队「{convoy.Name}」途经 {stronghold.Name}，缴纳过境关税 {paid:N0} 文（载货估值 {cargoValue:N0} 文）。"
+            });
+        }
+
         return paid;
     }
 

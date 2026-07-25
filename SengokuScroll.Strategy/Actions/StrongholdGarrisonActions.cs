@@ -13,35 +13,18 @@ using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Actions;
 
-/// <summary>从城内兵数编组守城单位（普通 Unit，方针 Support）。</summary>
+/// <summary>从城内 SubUnit 池编组 InStronghold 守军；废除 Support 占格 materialize。</summary>
 public static class StrongholdGarrisonActions
 {
     /// <summary>
-    /// 攻城/接敌需要守军实体时：优先返回已有守城单位，否则从城内兵数编组一支。
+    /// 攻城/接敌需要守军实体时：返回已有 InStronghold 守军，否则城主方自动组建一支（仅本势力）。
     /// </summary>
     public static Unit? EnsureDefenderUnit(
         IGameWorldContext context,
         Stronghold stronghold,
         GameData gameData,
         StrategyScenarioMeta? meta = null)
-    {
-        var existing = StrongholdGarrisonRules.FindGarrisonUnit(stronghold, gameData);
-        if (existing is not null)
-            return existing;
-
-        if (!StrongholdGarrisonRules.HasCityGarrison(stronghold))
-            return null;
-
-        // 业务：笼城待援时仅用城内数字驻军，不 materialize 地图单位
-        if (meta is not null && GarrisonBehaviorRules.ShouldHoldInCityAwaitingRelief(stronghold, gameData, meta))
-            return null;
-
-        // 业务：一格一军——敌已占城格则无法 materialize 守军
-        if (!GarrisonBehaviorRules.CanMaterializeGarrisonOnTile(stronghold, gameData, meta))
-            return null;
-
-        return MaterializeGarrisonUnit(context, stronghold, gameData, stronghold.ForceActor.Soldier, meta);
-    }
+        => SiegeDefenderFormationRules.TryEnsureOwnerDefenderUnit(context, stronghold, gameData, meta);
 
     /// <summary>
     /// 封锁下从城内出兵打击相邻敌军：不登记地图格点，伤亡写回 <see cref="Stronghold.ForceActor"/>。
@@ -126,14 +109,15 @@ public static class StrongholdGarrisonActions
         }
     }
 
-    /// <summary>守城单位被击溃时，同步据点士气并将剩余兵力收回城内。</summary>
+    /// <summary>守城单位被击溃时，同步据点士气并将剩余兵力收回城内农兵池。</summary>
     public static void OnGarrisonUnitDestroyed(Unit unit, GameData gameData)
     {
-        if (unit.Directive != UnitDirective.Support)
+        if (!unit.InStronghold && unit.Directive != UnitDirective.Support)
             return;
 
         var stronghold = gameData.Strongholds.Values.FirstOrDefault(s =>
-            s.ForceId == unit.ForceId && s.Location.IsSameTile(unit.Location));
+            unit.LocationStrongholdId == s.Id
+            || (unit.LocationStrongholdId == 0 && s.ForceId == unit.ForceId && s.Location.IsSameTile(unit.Location)));
 
         if (stronghold is null)
             return;
@@ -144,7 +128,7 @@ public static class StrongholdGarrisonActions
         StrongholdGarrisonRules.SyncCityMoraleFromUnit(stronghold, unit);
     }
 
-    /// <summary>将地图守城单位解散回城内兵（Absorb + RemoveUnit）。</summary>
+    /// <summary>将 InStronghold 守军建制解散回 SubUnit 池。</summary>
     public static bool DissolveGarrisonUnitToCity(
         IGameWorldContext context,
         Stronghold stronghold,
@@ -154,13 +138,7 @@ public static class StrongholdGarrisonActions
         if (garrison is null)
             return false;
 
-        if (garrison.Soldier > 0)
-            StrongholdGarrisonRules.AbsorbSoldiersIntoCity(stronghold, garrison.Soldier);
-
-        StrongholdGarrisonRules.SyncCityMoraleFromUnit(stronghold, garrison);
-        MapLocationActions.RemoveUnit(context, garrison);
-        gameData.Units.Remove(garrison.Id);
-        return true;
+        return UnitStrongholdPresenceActions.OrganizationalDisband(context, garrison, gameData).IsSuccess;
     }
 
     /// <summary>
@@ -196,56 +174,5 @@ public static class StrongholdGarrisonActions
         gameData.Units.Remove(garrisonUnit.Id);
         absorbedSoldiers = survivors;
         return true;
-    }
-
-    private static Unit MaterializeGarrisonUnit(
-        IGameWorldContext context,
-        Stronghold stronghold,
-        GameData gameData,
-        int soldiers,
-        StrategyScenarioMeta? meta = null)
-    {
-        soldiers = Math.Min(soldiers, StrongholdGarrisonRules.GetCityGarrisonSoldiers(stronghold));
-        if (soldiers <= 0)
-            return null!;
-
-        if (!GarrisonBehaviorRules.CanMaterializeGarrisonOnTile(stronghold, gameData, meta))
-            return null!;
-
-        var unitId = gameData.Units.Keys.Where(id => id > 0).DefaultIfEmpty(100).Max() + 1;
-        stronghold.ForceActor.Soldier -= soldiers;
-
-        var unit = new Unit
-        {
-            Id = unitId,
-            Name = $"{stronghold.Name}守军",
-            ForceId = stronghold.ForceId,
-            Location = stronghold.Location,
-            Soldier = soldiers,
-            Food = Math.Min(stronghold.ForceActor.Food / 4, soldiers * 2000),
-            Money = 0,
-            Morale = stronghold.ForceActor.Morale,
-            Training = stronghold.ForceActor.Training,
-            Movement = 8,
-            Ap = 8,
-            IsMilitary = true,
-            Directive = UnitDirective.Support,
-            Stance = UnitStance.Hold,
-            Status = UnitStatus.Waiting,
-            ActionTarget = new Unit.UnitActionTarget
-            {
-                ForceId = stronghold.ForceId,
-                StrongholdId = stronghold.Id,
-                RoutePoints = new Queue<Point2>()
-            },
-            SubUnitIds = []
-        };
-
-        if (stronghold.LeaderId > 0)
-            unit.LeaderId = stronghold.LeaderId;
-
-        gameData.Units[unitId] = unit;
-        MapLocationActions.RegisterUnit(context.GameWorld, unit);
-        return unit;
     }
 }

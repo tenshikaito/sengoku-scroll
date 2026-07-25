@@ -42,26 +42,6 @@ public static class TechnologyIntelHelper
         UpsertTechnology(stronghold.Technologies, technologyId: 2, completed: agriculture.KnowsTripleCrop);
     }
 
-    public static void SyncForceTechnologiesFromResidence(
-        Force force,
-        Stronghold? residence,
-        GameData gameData)
-    {
-        force.Technologies.Clear();
-        if (residence is null)
-            return;
-
-        SyncStrongholdTechnologiesFromAgriculture(residence);
-        foreach (var tech in residence.Technologies)
-        {
-            force.Technologies.Add(new EntityTechnology
-            {
-                TechnologyId = tech.TechnologyId,
-                Status = tech.Status,
-            });
-        }
-    }
-
     private static void UpsertTechnology(
         IList<EntityTechnology> technologies,
         int technologyId,

@@ -1,28 +1,32 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Extensions;
-using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
 
 namespace SengokuScroll.Strategy.Rules;
 
-/// <summary>居城出征校验：农兵池与驻城专业队。</summary>
-public static class StrongholdDeployRules
+/// <summary>从居城 SubUnit 池组建 Unit 的校验。</summary>
+public static class UnitComposeRules
 {
-    public static GameResult ValidateDeploy(
+    public static GameResult ValidateCompose(
         Stronghold stronghold,
         StrategyScenarioMeta meta,
         GameData gameData,
         int playerForceId,
         int commanderId,
-        IReadOnlyList<StrategyDeployCompositionEntry> composition)
+        IReadOnlyList<StrategyDeployCompositionEntry> composition,
+        bool deployToMap,
+        bool requireLordResidence = true)
     {
         if (stronghold.ForceId != playerForceId)
             return GameError.DiplomacyError.NotSelfForce;
 
-        if (!StrategyStrongholdLordHelper.IsForceLordResidence(stronghold, meta, gameData))
+        if (requireLordResidence
+            && !StrategyStrongholdLordHelper.IsForceLordResidence(stronghold, meta, gameData))
+        {
             return GameError.StrongholdError.StrongholdNotFound;
+        }
 
         if (composition.Count == 0)
             return GameError.DataNotFound;
@@ -44,32 +48,28 @@ public static class StrongholdDeployRules
                 return GameError.StrongholdError.InsufficientGarrisonTroops;
         }
 
-        if (gameData.Units.Values.Any(u =>
+        if (deployToMap
+            && gameData.Units.Values.Any(u =>
                 u.IsMilitary
                 && u.Soldier > 0
                 && !u.InStronghold
                 && u.Location.IsSameTile(stronghold.Location)))
+        {
             return GameError.MovementError.UnitAlreadyExistsInTile;
+        }
 
-        if (!gameData.Characters.TryGetValue(commanderId, out var commander))
-            return GameError.CharacterError.CharacterNotFound;
+        if (commanderId > 0)
+        {
+            if (!gameData.Characters.TryGetValue(commanderId, out var commander))
+                return GameError.CharacterError.CharacterNotFound;
 
-        if (commander.ForceId != playerForceId
-            || !UnitCommanderHelper.IsAvailableForDeployment(commander, stronghold.Id))
-            return GameError.CharacterError.CharacterNotFound;
+            if (commander.ForceId != playerForceId
+                || !UnitCommanderHelper.IsAvailableForDeployment(commander, stronghold.Id))
+            {
+                return GameError.CharacterError.CharacterNotFound;
+            }
+        }
 
         return GameResult.Ok();
     }
-}
-
-/// <summary>出征编组条目（API/Host 共用）。</summary>
-public sealed class StrategyDeployCompositionEntry
-{
-    public required int TypeId { get; init; }
-
-    public string? TypeName { get; init; }
-
-    public required int Soldiers { get; init; }
-
-    public int? CommanderId { get; init; }
 }

@@ -61,6 +61,17 @@ const props = defineProps<{
   canUnitMove?: boolean;
   /** 本家直属兵队可攻城 */
   canUnitSiege?: boolean;
+  /** 单位可入城（同格据点） */
+  canUnitEnterStronghold?: boolean;
+  /** 单位可出城 */
+  canUnitExitStronghold?: boolean;
+  /** 单位可建制解散（Home 据点） */
+  canUnitDisband?: boolean;
+  /** 单位可在城内贸易 */
+  canUnitTrade?: boolean;
+  /** 据点可创立商店 */
+  canCreateShop?: boolean;
+  createShopTooltip?: string;
   /** 角色在城内可执行个人军事/内政指令（领主/代官/当主） */
   canExecutePersonalCommands?: boolean;
 }>();
@@ -87,6 +98,12 @@ const emit = defineEmits<{
   beginVisit: [];
   siegeAssault: [];
   siegeEncircle: [];
+  beginUnitEnterStronghold: [];
+  beginUnitExitStronghold: [];
+  beginUnitDisband: [];
+  beginUnitSmashBuyFood: [];
+  beginUnitTradePolicy: [];
+  beginCreateShop: [];
   showIntel: [];
   cancel: [];
 }>();
@@ -197,7 +214,7 @@ const expeditionUnavailable = computed(
 );
 const expeditionTip = computed(() => {
   if (besieged.value && props.mode === "strongholdCommand") return strongholdBesiegedBlockTip;
-  return props.expeditionTooltip ?? "从当主居城分配城内兵与将领出征（据点格生成部队）";
+  return props.expeditionTooltip ?? "从当主居城分配 SubUnit 与将领组建部队（默认在城中）";
 });
 
 const besieged = computed(() => props.isStrongholdBesieged === true);
@@ -468,6 +485,51 @@ function onCharacterEspionageClick() {
         >
           🏴 军团
         </StrategyMapActionButton>
+        <StrategyMapActionButton
+          v-if="canUnitEnterStronghold"
+          variant="primary"
+          :tooltip-side="tooltipSide"
+          tooltip="进入同格据点，不占地图格"
+          @click="emit('beginUnitEnterStronghold')"
+        >
+          🏯 入城
+        </StrategyMapActionButton>
+        <StrategyMapActionButton
+          v-if="canUnitExitStronghold"
+          variant="primary"
+          :tooltip-side="tooltipSide"
+          tooltip="离开据点，出现在地图格上"
+          @click="emit('beginUnitExitStronghold')"
+        >
+          🚪 出城
+        </StrategyMapActionButton>
+        <StrategyMapActionButton
+          v-if="canUnitDisband"
+          variant="primary"
+          :tooltip-side="tooltipSide"
+          tooltip="在 Home 据点建制解散，兵力与物资归还据点"
+          @click="emit('beginUnitDisband')"
+        >
+          📤 解散
+        </StrategyMapActionButton>
+        <StrategyMapActionButton
+          v-if="canUnitTrade"
+          variant="primary"
+          :tooltip-side="tooltipSide"
+          tooltip="按市价上限砸单买入粮食"
+          @click="emit('beginUnitSmashBuyFood')"
+        >
+          🌾 购粮
+        </StrategyMapActionButton>
+        <StrategyMapActionButton
+          v-if="canUnitTrade"
+          variant="primary"
+          :tooltip-side="tooltipSide"
+          tooltip="设定等待购粮/卖粮策略（日末自动执行）"
+          @click="emit('beginUnitTradePolicy')"
+        >
+          📈 贸易
+        </StrategyMapActionButton>
         <div class="divider" />
         <button type="button" class="map-action map-action--default" @click.stop="emit('showIntel')">
           📋 情报
@@ -693,7 +755,7 @@ function onCharacterEspionageClick() {
             :tooltip="expeditionTip"
             @click="onExpeditionClick"
           >
-            🚩 出征
+            🚩 组建
           </StrategyMapActionButton>
           <StrategyMapActionButton
             :variant="strongholdCommandsUnavailable ? 'muted' : 'primary'"
@@ -724,6 +786,14 @@ function onCharacterEspionageClick() {
             @click="onTaxRateClick"
           >
             💰 税率
+          </StrategyMapActionButton>
+          <StrategyMapActionButton
+            :variant="canCreateShop ? 'primary' : 'muted'"
+            :tooltip-side="tooltipSide"
+            :tooltip="canCreateShop ? '在本城创立商人商店（无需许可；商业值≥20，每商人势力每城限 1 店）' : (createShopTooltip || '当前无法创立商店')"
+            @click="canCreateShop ? emit('beginCreateShop') : showUnavailableTip(createShopTooltip || '当前无法创立商店')"
+          >
+            🏪 商店
           </StrategyMapActionButton>
           <StrategyMapActionButton
             variant="muted"

@@ -56,6 +56,8 @@ public class StrategyMarketSystem(
 
             MaybeRecordPriceIntel(stronghold, date, previousClose, result.SessionClose);
         }
+
+        UnitTradeActions.ProcessAutoTradePolicies(gameData, taxLedger);
     }
 
     private void MaybeRecordPriceIntel(

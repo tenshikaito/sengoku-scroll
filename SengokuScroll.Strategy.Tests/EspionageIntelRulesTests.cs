@@ -90,7 +90,8 @@ public class EspionageIntelRulesTests
             SupplyStatus = "Sufficient",
             FoodDaysRemaining = 10,
             InTransitSupplies = [],
-            MapVisible = true
+            MapVisible = true,
+            UnitKind = "Military"
         };
 
     [Fact]

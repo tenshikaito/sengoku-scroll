@@ -564,6 +564,15 @@ export interface StrategyUnitState {
   inTransitSupplies: StrategyInTransitSupply[];
   /** 是否在地图层绘制（迷雾外己方单位可在侧栏列出）。 */
   mapVisible?: boolean;
+  /** 是否在城内（不占地图格）。 */
+  inStronghold?: boolean;
+  homeStrongholdId?: number;
+  locationStrongholdId?: number;
+  unitKind?: string;
+  /** None | WaitBuyFood | WaitSellFood */
+  tradePolicy?: string;
+  tradeLimitPriceMoneyPerGo?: number;
+  tradeQuantityGo?: number;
   /** 情报模糊兵数（**** / 3***）。 */
   soldiersDisplay?: string | null;
   moraleBand?: string | null;
@@ -584,6 +593,9 @@ export interface StrategyUnitRosterEntry {
   supplyStatus: string;
   commanderName?: string | null;
   offMap: boolean;
+  inStronghold?: boolean;
+  locationStrongholdId?: number;
+  homeStrongholdId?: number;
 }
 
 /** 战场内按势力汇总的参战摘要。 */
@@ -645,6 +657,8 @@ export interface StrategyDeployFromStrongholdRequest {
   composition: StrategyDeployCompositionEntry[];
   food?: number;
   money?: number;
+  /** false=组建后在城中（默认）；true=组建后立即出城。 */
+  deployToMap?: boolean;
 }
 
 export interface StrategyPathPreview {

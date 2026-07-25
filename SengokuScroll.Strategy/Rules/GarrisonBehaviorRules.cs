@@ -51,12 +51,6 @@ public static class GarrisonBehaviorRules
             return true;
         }
 
-        if (TryPrepareGarrisonOnThreat(context, stronghold, gameData, meta))
-        {
-            actionCode = "GarrisonOccupyTile";
-            return true;
-        }
-
         if (TryAbstractSally(context, stronghold, gameData, meta, out var sallyMessage))
         {
             actionCode = "GarrisonAbstractSally";
@@ -66,47 +60,32 @@ public static class GarrisonBehaviorRules
         return false;
     }
 
-    /// <summary>野战威胁下兵力劣势：将已占格的守军撤回城内，笼城待援。</summary>
+    /// <summary>野战威胁下兵力劣势：将城格上的己方地图单位撤回 InStronghold。</summary>
     public static bool TryRetreatGarrisonToCityWhenOutnumbered(
         IGameWorldContext context,
         Stronghold stronghold,
         GameData gameData,
         StrategyScenarioMeta meta)
     {
-        if (StrongholdGarrisonRules.FindGarrisonUnit(stronghold, gameData) is null)
+        var fieldUnit = gameData.Units.Values.FirstOrDefault(u =>
+            UnitStrongholdPresenceRules.IsOwnerMapDefenderOnTile(u, stronghold));
+        if (fieldUnit is null)
             return false;
 
         if (!ShouldHoldInCityAwaitingRelief(stronghold, gameData, meta))
             return false;
 
-        return StrongholdGarrisonActions.DissolveGarrisonUnitToCity(context, stronghold, gameData);
+        return UnitStrongholdPresenceActions.EnterStronghold(context, fieldUnit, stronghold, gameData, meta)
+            .IsSuccess;
     }
 
+    [Obsolete("废除威胁占格 materialize；笼城须提前组建 InStronghold Unit。")]
     public static bool TryPrepareGarrisonOnThreat(
         IGameWorldContext context,
         Stronghold stronghold,
         GameData gameData,
         StrategyScenarioMeta meta)
-    {
-        if (StrongholdGarrisonRules.FindGarrisonUnit(stronghold, gameData) is not null)
-            return false;
-
-        if (!StrongholdGarrisonRules.HasCityGarrison(stronghold))
-            return false;
-
-        // 业务：威胁占格——敌已先入城格则来不及抢先 materialize（与攻城同格接敌不同）
-        if (!CanPreemptivelyMaterializeGarrisonOnTile(stronghold, gameData))
-            return false;
-
-        if (!HasFieldBattleProximityThreat(stronghold, gameData))
-            return false;
-
-        // 业务：笼城——仅用城内兵防守，不编组地图单位触发野战
-        if (ShouldHoldInCityAwaitingRelief(stronghold, gameData, meta))
-            return StrongholdGarrisonRules.HasCityGarrison(stronghold);
-
-        return StrongholdGarrisonActions.EnsureDefenderUnit(context, stronghold, gameData, meta) is not null;
-    }
+        => false;
 
     /// <summary>
     /// 城外野战威胁且守军总兵力不足：笼城待援（含敌军已踩城格，仍比较邻域总兵力）。
@@ -117,7 +96,7 @@ public static class GarrisonBehaviorRules
         GameData gameData,
         StrategyScenarioMeta? meta = null)
     {
-        if (!StrongholdGarrisonRules.HasCityGarrison(stronghold)
+        if (!StrongholdGarrisonRules.HasCityGarrison(stronghold, gameData)
             && StrongholdGarrisonRules.FindGarrisonUnit(stronghold, gameData) is null)
             return false;
 
@@ -210,7 +189,7 @@ public static class GarrisonBehaviorRules
             return false;
 
         var enemyTotal = adjacentEnemies.Sum(u => u.Soldier);
-        var garrisonUnit = StrongholdGarrisonRules.FindGarrisonUnit(stronghold, gameData);
+        var garrisonUnit = StrongholdGarrisonRules.FindActiveDefenderUnit(stronghold, gameData);
         var citySoldiers = StrongholdGarrisonRules.GetCityGarrisonSoldiers(stronghold);
         var defenderTotal = (garrisonUnit?.Soldier ?? 0) + citySoldiers;
 
@@ -223,8 +202,9 @@ public static class GarrisonBehaviorRules
 
         var target = adjacentEnemies.OrderBy(u => u.Soldier).First();
 
-        // 业务：已有守城单位且城格未被敌占——由该单位在城格上接敌，不移动到城外格
+        // 业务：已有地图守军且城格未被敌占——由该单位在城格上接敌
         if (garrisonUnit is not null
+            && !garrisonUnit.InStronghold
             && !IsEnemyOccupyingStrongholdTile(stronghold, gameData, out _)
             && garrisonUnit.Stance != UnitStance.Attacking
             && garrisonUnit.Status != UnitStatus.Standoff)
@@ -298,7 +278,7 @@ public static class GarrisonBehaviorRules
         if (IsEnemyOccupyingStrongholdTile(stronghold, gameData, out _))
             return true;
 
-        var garrison = StrongholdGarrisonRules.FindGarrisonUnit(stronghold, gameData);
+        var garrison = StrongholdGarrisonRules.FindActiveDefenderUnit(stronghold, gameData);
         if (garrison?.Status == UnitStatus.BeingSurround)
             return true;
 
@@ -413,25 +393,12 @@ public static class GarrisonBehaviorRules
     /// <summary>
     /// 无野战威胁且未被封锁，且附近无敌方/无友军野战单位时，将 materialize 守军解散回城内兵。
     /// </summary>
+    [Obsolete("InStronghold 守军不再自动解散回池。")]
     public static bool TryDissolveGarrisonWhenSafe(
         IGameWorldContext context,
         Stronghold stronghold,
         GameData gameData)
-    {
-        if (StrongholdGarrisonRules.FindGarrisonUnit(stronghold, gameData) is null)
-            return false;
-
-        if (HasFieldBattleProximityThreat(stronghold, gameData))
-            return false;
-
-        if (IsStrongholdBlockaded(stronghold, gameData))
-            return false;
-
-        if (HasFriendlyFieldPresenceNear(stronghold, gameData))
-            return false;
-
-        return StrongholdGarrisonActions.DissolveGarrisonUnitToCity(context, stronghold, gameData);
-    }
+        => false;
 
     /// <summary>据点 threat 范围内是否有己方非 Support 野战部队。</summary>
     public static bool HasFriendlyFieldPresenceNear(Stronghold stronghold, GameData gameData)

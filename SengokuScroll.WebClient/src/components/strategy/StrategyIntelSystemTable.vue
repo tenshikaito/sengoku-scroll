@@ -5,6 +5,11 @@ import { resolveIntelBandTone } from "@/utils/strategyIntelDisplay";
 import { diplomacyStatusCellClassName, intelRelationTierClass } from "@/intelDisplay/IntelDisplayBehaviors";
 import { resolveIntelColumnLabel } from "@/i18n/intelColumns";
 import { useI18n } from "@/i18n";
+import {
+  resolveIntelCellNavigateTarget,
+  type IntelExcludeEntity,
+  type IntelNavigateTarget,
+} from "@/utils/strategyIntelNavigation";
 
 const props = defineProps<{
   rows: Array<Record<string, unknown>>;
@@ -19,10 +24,13 @@ const props = defineProps<{
   scrollWrap?: boolean;
   /** 表格铺满容器宽度（消除 el-scrollbar__view 右侧空白）。 */
   fillWidth?: boolean;
+  /** 不为当前正在查看的实体生成链接。 */
+  excludeEntity?: IntelExcludeEntity | null;
 }>();
 
 const emit = defineEmits<{
   "current-change": [row: Record<string, unknown> | null];
+  navigate: [target: IntelNavigateTarget];
 }>();
 
 const { t, locale } = useI18n();
@@ -96,6 +104,19 @@ function columnLabel(col: IntelTableColumnDef): string {
   locale.value;
   return resolveIntelColumnLabel(col);
 }
+
+function cellNavigateTarget(
+  row: Record<string, unknown>,
+  col: IntelTableColumnDef,
+): IntelNavigateTarget | null {
+  return resolveIntelCellNavigateTarget(row, col, props.excludeEntity);
+}
+
+function onCellLinkClick(row: Record<string, unknown>, col: IntelTableColumnDef) {
+  const target = cellNavigateTarget(row, col);
+  if (!target) return;
+  emit("navigate", target);
+}
 </script>
 
 <template>
@@ -131,7 +152,16 @@ function columnLabel(col: IntelTableColumnDef): string {
         show-overflow-tooltip
       >
         <template #default="{ row }">
-          <span :class="resolveCellClass(row, col)">
+          <button
+            v-if="cellNavigateTarget(row, col)"
+            type="button"
+            class="intel-cell-link"
+            :class="resolveCellClass(row, col)"
+            @click.stop="onCellLinkClick(row, col)"
+          >
+            {{ row[col.prop] }}
+          </button>
+          <span v-else :class="resolveCellClass(row, col)">
             {{ row[col.prop] }}
           </span>
         </template>
@@ -224,5 +254,26 @@ function columnLabel(col: IntelTableColumnDef): string {
 :deep(.intel-tier--close) {
   color: #16a34a;
   font-weight: normal;
+}
+
+.intel-cell-link {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.intel-cell-link:hover {
+  color: #1d4ed8;
+}
+
+.intel-cell-link:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
 }
 </style>

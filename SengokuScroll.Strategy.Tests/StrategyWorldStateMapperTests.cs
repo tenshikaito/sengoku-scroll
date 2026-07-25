@@ -1,6 +1,7 @@
 using SengokuScroll.Strategy.Data;
 using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Tests.Fixtures;
+using SengokuScroll.Strategy.Vision;
 
 namespace SengokuScroll.Strategy.Tests;
 
@@ -103,5 +104,32 @@ public class StrategyWorldStateMapperTests
         var kiyosu = dto.Strongholds.First(s => s.Id == 1);
 
         Assert.Null(kiyosu.MayorName);
+    }
+
+    [Fact]
+    public void ToDto_OwnUnitRoster_IncludesInStrongholdMetadata()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Maps", "mini_kanto.json");
+        var loaded = StrategyScenarioLoader.LoadFromFile(path);
+        var unit = loaded.World.GameData.Units[1];
+        var home = loaded.World.GameData.Strongholds[1];
+        unit.InStronghold = true;
+        unit.LocationStrongholdId = home.Id;
+        unit.HomeStrongholdId = home.Id;
+        unit.Location = home.Location;
+
+        var meta = loaded.Meta;
+        var ledger = new StrategyVisibilityLedger();
+        ledger.Initialize(loaded.World, meta);
+        ledger.GetOrCreate(meta.PlayerForceId).VisibleCells.Clear();
+
+        var dto = StrategyWorldStateMapper.ToDto(loaded.World, "mini_kanto", meta, ledger);
+
+        var rosterEntry = dto.OwnUnitRoster.FirstOrDefault(u => u.Id == unit.Id);
+        Assert.NotNull(rosterEntry);
+        Assert.True(rosterEntry!.InStronghold);
+        Assert.Equal(home.Id, rosterEntry.LocationStrongholdId);
+        Assert.Equal(home.Id, rosterEntry.HomeStrongholdId);
+        Assert.DoesNotContain(dto.Units, u => u.Id == unit.Id);
     }
 }

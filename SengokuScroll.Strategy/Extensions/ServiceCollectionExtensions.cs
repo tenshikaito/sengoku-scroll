@@ -61,6 +61,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<StrategyMarketSystem>();
         services.AddSingleton<IStrategyMarketSystem>(sp => sp.GetRequiredService<StrategyMarketSystem>());
 
+        services.AddSingleton<StrategyReserveCommanderSystem>();
+        services.AddSingleton<IStrategyReserveCommanderSystem>(
+            sp => sp.GetRequiredService<StrategyReserveCommanderSystem>());
+
         services.AddSingleton<StrategyEconomySystem>();
         services.AddSingleton<IStrategyEconomySystem>(sp => sp.GetRequiredService<StrategyEconomySystem>());
         services.AddSingleton<IEconomySystem>(sp => sp.GetRequiredService<StrategyEconomySystem>());
@@ -128,6 +132,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IStrategyTimeSystem>(),
             sp.GetRequiredService<IClimateSystem>(),
             sp.GetRequiredService<IStrategyMarketSystem>(),
+            sp.GetRequiredService<IStrategyReserveCommanderSystem>(),
             sp.GetRequiredService<IEconomySystem>(),
             sp.GetRequiredService<IStrategyMigrantSystem>(),
             sp.GetRequiredService<IStrategySupplySystem>(),

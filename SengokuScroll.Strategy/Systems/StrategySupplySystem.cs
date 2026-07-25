@@ -5,6 +5,7 @@ using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Extensions;
 using SengokuScroll.Domain.Systems;
 using SengokuScroll.Strategy.Actions;
+using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Rules;
@@ -23,7 +24,9 @@ public interface IStrategySupplySystem : IGameSystem
 public class StrategySupplySystem(
     IGameContext context,
     SupplyConvoyDispatchHelper dispatchHelper,
-    TariffTaxLedger tariffTaxLedger) : IStrategySupplySystem
+    TariffTaxLedger tariffTaxLedger,
+    StrategyScenarioMeta scenarioMeta,
+    StrategyDayOutcomeBuffer dayOutcomeBuffer) : IStrategySupplySystem
 {
     /// <summary>在经济系统之后、军事单位系统之前执行。</summary>
     public int Order { get; } = 15;
@@ -86,7 +89,8 @@ public class StrategySupplySystem(
                 var location = new Point2(convoy.Location.X, convoy.Location.Y);
                 var stronghold = context.GameWorldContext.GetStrongholdOrDefault(location);
                 if (stronghold is not null)
-                    TariffEconomyActions.TryAssessTransitTariff(convoy, stronghold, tariffTaxLedger);
+                    TariffEconomyActions.TryAssessTransitTariff(
+                        convoy, stronghold, tariffTaxLedger, dayOutcomeBuffer, scenarioMeta);
             }
         }
 

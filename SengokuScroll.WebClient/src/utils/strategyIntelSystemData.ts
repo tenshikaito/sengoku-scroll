@@ -60,6 +60,7 @@ import {
 import type { IntelFieldRow } from "@/utils/strategyIntelRows";
 import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
 import { isPersonIntelVisible } from "@/utils/strategyIntelVisibility";
+import { intelFieldLinkFromId } from "@/utils/strategyIntelNavigation";
 
 export interface IntelDataOptions {
   realmFilter?: IntelRealmFilterMode;
@@ -110,6 +111,12 @@ export interface IntelForceRow {
   arrearsFood: string;
   isPlayer: boolean;
   isOwnRealm: boolean;
+  lordNameLinkId?: number;
+  residenceNameLinkId?: number;
+  suzerainNameLinkId?: number;
+  successorNameLinkId?: number;
+  cultureNameLinkId?: number;
+  religionNameLinkId?: number;
 }
 
 function mapForceCategoryToIntelType(category?: string): IntelForceCategory {
@@ -120,6 +127,12 @@ function mapForceCategoryToIntelType(category?: string): IntelForceCategory {
 
 function isOrganizationForceCategory(category?: string): boolean {
   return category === "Merchant" || category === "Religion";
+}
+
+/** 是否为城内组织势力（商人/寺社）。 */
+export function isOrganizationForce(worldState: StrategyWorldState, forceId: number): boolean {
+  const force = worldState.forces.find((item) => item.id === forceId);
+  return isOrganizationForceCategory(force?.category);
 }
 
 function isOrganizationActorKind(kind: string | undefined): boolean {
@@ -256,6 +269,11 @@ export interface IntelStrongholdRow {
   standingProfessional: string;
   /** 城内伤兵。 */
   standingWounded: string;
+  forceNameLinkId?: number;
+  lordNameLinkId?: number;
+  mayorNameLinkId?: number;
+  cultureNameLinkId?: number;
+  religionNameLinkId?: number;
 }
 
 export interface IntelPersonRow {
@@ -316,6 +334,11 @@ export interface IntelPersonRow {
   skillCourt: string;
   skillSociality: string;
   skillHealing: string;
+  forceNameLinkId?: number;
+  strongholdNameLinkId?: number;
+  superiorLinkId?: number;
+  cultureNameLinkId?: number;
+  religionNameLinkId?: number;
 }
 
 export interface IntelDefenseFacilityRow {
@@ -352,6 +375,30 @@ export interface IntelCityActorRow {
   typeLabel: string;
   branchLabel: string;
   characterCount: string;
+  primaryLeaderNameLinkId?: number;
+  secondaryLeaderNameLinkId?: number;
+  tertiaryLeaderNameLinkId?: number;
+}
+
+/** 势力据点 Tab · 跨据点组织 Actor 汇总行（非官府）。 */
+export interface IntelForceOrgActorRow {
+  id: number;
+  /** 名称后接所在据点。 */
+  nameWithStronghold: string;
+  primaryLeaderName: string;
+  secondaryLeaderName: string;
+  branchLabel: string;
+  hostForceName: string;
+  hostLordName: string;
+  money: string;
+  food: string;
+  luxuryGoods: string;
+  characterCount: string;
+  nameWithStrongholdLinkId?: number;
+  hostForceNameLinkId?: number;
+  hostLordNameLinkId?: number;
+  primaryLeaderNameLinkId?: number;
+  secondaryLeaderNameLinkId?: number;
 }
 
 
@@ -371,6 +418,7 @@ export interface IntelStrongholdTechnologyRow {
   status: string;
   condition: string;
   forceName?: string;
+  forceNameLinkId?: number;
 }
 
 export interface IntelDiplomacyRow {
@@ -390,6 +438,7 @@ export interface IntelDiplomacyRow {
   arrearsFood: string;
   /** 行着色：allied | enemy | neutral */
   diplomacyTone: string;
+  lordNameLinkId?: number;
 }
 
 export interface IntelPersonTaskRow {
@@ -399,6 +448,7 @@ export interface IntelPersonTaskRow {
   target: string;
   status: string;
   remaining: string;
+  targetLinkId?: number;
 }
 
 export type IntelPersonCategory = "武家" | "商人" | "寺社" | "浪人";
@@ -655,6 +705,42 @@ function lookupMasterReligion(
   const name = religionName?.trim();
   if (!name || !worldState.masterData?.religions?.length) return null;
   return worldState.masterData.religions.find((r) => r.name?.trim() === name) ?? null;
+}
+
+function lookupMasterCultureGroupId(
+  worldState: StrategyWorldState,
+  groupName: string | undefined | null
+): number | null {
+  const name = groupName?.trim();
+  if (!name || name === "—" || !worldState.masterData?.cultureGroups?.length) return null;
+  const entry = worldState.masterData.cultureGroups.find((item) => item.name?.trim() === name);
+  return entry?.id && entry.id > 0 ? entry.id : null;
+}
+
+function lookupMasterReligionGroupId(
+  worldState: StrategyWorldState,
+  groupName: string | undefined | null
+): number | null {
+  const name = groupName?.trim();
+  if (!name || name === "—" || !worldState.masterData?.religionGroups?.length) return null;
+  const entry = worldState.masterData.religionGroups.find((item) => item.name?.trim() === name);
+  return entry?.id && entry.id > 0 ? entry.id : null;
+}
+
+function resolveMasterCultureLinkId(
+  worldState: StrategyWorldState,
+  cultureName: string | undefined | null
+): number | undefined {
+  const entry = lookupMasterCulture(worldState, cultureName);
+  return entry?.id && entry.id > 0 ? entry.id : undefined;
+}
+
+function resolveMasterReligionLinkId(
+  worldState: StrategyWorldState,
+  religionName: string | undefined | null
+): number | undefined {
+  const entry = lookupMasterReligion(worldState, religionName);
+  return entry?.id && entry.id > 0 ? entry.id : undefined;
 }
 
 /** 占位：灾害/瘟疫/丰收等增减益（据点级）。 */
@@ -925,8 +1011,14 @@ export function cultureDetailIntelRows(
     ];
   }
   return [
-    { label: "文化", value: entry.name },
-    { label: "文化圈", value: entry.group?.trim() || "—" },
+    intelFieldLinkFromId("文化", entry.name, "masterData", entry.id, { masterPreset: "cultures" }),
+    intelFieldLinkFromId(
+      "文化圈",
+      entry.group?.trim() || "—",
+      "masterData",
+      lookupMasterCultureGroupId(worldState, entry.group),
+      { masterPreset: "cultureGroups" },
+    ),
     { label: "说明", value: entry.description?.trim() || "—" },
   ];
 }
@@ -943,8 +1035,14 @@ export function religionDetailIntelRows(
     ];
   }
   const rows: IntelFieldRow[] = [
-    { label: "信仰", value: entry.name },
-    { label: "宗教", value: entry.group?.trim() || "—" },
+    intelFieldLinkFromId("信仰", entry.name, "masterData", entry.id, { masterPreset: "religions" }),
+    intelFieldLinkFromId(
+      "宗教",
+      entry.group?.trim() || "—",
+      "masterData",
+      lookupMasterReligionGroupId(worldState, entry.group),
+      { masterPreset: "religionGroups" },
+    ),
     { label: "说明", value: entry.description?.trim() || "—" },
   ];
   if (entry.extra?.trim()) {
@@ -1221,6 +1319,61 @@ function resolveOrganizationHostForceName(
   return forceName(worldState, residence.forceId);
 }
 
+function resolveOrganizationHostForceId(
+  worldState: StrategyWorldState,
+  force: StrategyForceState
+): number | null {
+  const residenceId = resolveOrganizationHeadquarterStrongholdId(worldState, force);
+  if (!residenceId) return null;
+  const residence = worldState.strongholds.find((item) => item.id === residenceId);
+  if (!residence?.forceId || residence.forceId <= 0) return null;
+  return residence.forceId;
+}
+
+function resolveForceLordCharacterId(
+  worldState: StrategyWorldState,
+  forceId: number
+): number | null {
+  if (forceId <= 0) return null;
+  if (forceId === worldState.playerForceId) {
+    return resolvePlayerLordCharacterId(worldState);
+  }
+
+  const force = worldState.forces.find((item) => item.id === forceId);
+  if (!force) return null;
+
+  if (isOrganizationForceCategory(force.category)) {
+    if (force.lordResidenceStrongholdId) {
+      const residence = worldState.strongholds.find(
+        (item) => item.id === force.lordResidenceStrongholdId
+      );
+      for (const actor of residence?.cityActors ?? []) {
+        if (actor.forceId !== forceId || !isOrganizationActorKind(actor.kind)) continue;
+        const leaderId = actor.characterIds?.find((id) => id > 0);
+        if (leaderId) return leaderId;
+      }
+    }
+
+    const orgCharacter = worldState.characters?.find(
+      (character) => !character.isDead && character.forceId === forceId && character.name?.trim()
+    );
+    return orgCharacter?.id ?? null;
+  }
+
+  const residenceId = resolveForceLordResidenceStrongholdId(worldState, forceId);
+  if (residenceId) {
+    const residence = worldState.strongholds.find((item) => item.id === residenceId);
+    if (residence?.lordId && residence.lordId > 0) return residence.lordId;
+  }
+
+  const directRule = worldState.strongholds.find(
+    (item) => item.forceId === forceId && item.isDirectRule
+  );
+  if (directRule?.lordId && directRule.lordId > 0) return directRule.lordId;
+
+  return null;
+}
+
 function resolveForceResidenceName(
   worldState: StrategyWorldState,
   force: StrategyForceState
@@ -1359,6 +1512,7 @@ function buildDiplomacyRow(
     forceId: force.id,
     forceName: forceName(worldState, force.id),
     lordName: resolveForceLordName(worldState, force.id),
+    lordNameLinkId: resolveForceLordCharacterId(worldState, force.id) ?? undefined,
     forceCategory: resolveDiplomacyForceCategory(worldState, force.id),
     relation: diplomacyAffinityTierLabel(dip?.relationship, relation),
     trust: diplomacyTrustTierLabel(dip?.trust, relation),
@@ -1382,6 +1536,7 @@ function buildInnerVassalDiplomacyRow(
       forceId: force.id,
       forceName: forceName(worldState, force.id),
       lordName: force.lordName?.trim() || resolveForceLordName(worldState, force.id),
+      lordNameLinkId: resolveForceLordCharacterId(worldState, force.id) ?? undefined,
       forceCategory: "武家",
       relation: diplomacyAffinityTierLabel(dip.relationship, dip.relation),
       trust: diplomacyTrustTierLabel(dip.trust, dip.relation),
@@ -1397,6 +1552,7 @@ function buildInnerVassalDiplomacyRow(
     forceId: force.id,
     forceName: forceName(worldState, force.id),
     lordName: resolveForceLordName(worldState, force.id),
+    lordNameLinkId: resolveForceLordCharacterId(worldState, force.id) ?? undefined,
     forceCategory: "武家",
     relation: "友好",
     trust: "信任",
@@ -1502,6 +1658,74 @@ function personSuperiorLabel(
   }
 
   return resolveForceLordDisplayName(worldState, character.forceId);
+}
+
+function resolvePersonSuperiorCharacterId(
+  worldState: StrategyWorldState,
+  character: StrategyCharacterSummaryState
+): number | null {
+  const role = personRoleLabel(worldState, character);
+  if (role === "当主" || role === "俘虏") return null;
+
+  if (character.leaderId && character.leaderId > 0) {
+    return character.leaderId;
+  }
+
+  if (role === "代官") {
+    const strongholdId = character.strongholdId ?? 0;
+    const stronghold = worldState.strongholds.find((item) => item.id === strongholdId);
+    if (stronghold?.lordId && stronghold.lordId > 0) return stronghold.lordId;
+  }
+
+  if (role === "将") {
+    const unit = findUnitLedByCharacter(worldState, character.id);
+    if (unit?.commanderId && unit.commanderId !== character.id) {
+      return unit.commanderId;
+    }
+  }
+
+  return resolveForceLordCharacterId(worldState, character.forceId);
+}
+
+function resolvePersonStrongholdLinkId(
+  worldState: StrategyWorldState,
+  character: StrategyCharacterSummaryState
+): number | null {
+  const strongholdId = character.strongholdId ?? 0;
+  if (strongholdId > 0) return strongholdId;
+
+  const label = personStrongholdName(worldState, character);
+  if (label === "—") return null;
+  const match = worldState.strongholds.find((item) => item.name?.trim() === label);
+  return match?.id ?? null;
+}
+
+function resolveCityActorRoleLinkIds(
+  worldState: StrategyWorldState,
+  actor: StrategyStrongholdCityActorState,
+  stronghold?: StrategyStrongholdState
+): {
+  primaryLeaderNameLinkId?: number;
+  secondaryLeaderNameLinkId?: number;
+  tertiaryLeaderNameLinkId?: number;
+} {
+  if (actor.kind === "Government") {
+    return {
+      primaryLeaderNameLinkId:
+        resolveForceLordCharacterId(worldState, stronghold?.forceId ?? 0) ?? undefined,
+      secondaryLeaderNameLinkId:
+        stronghold?.lordId && stronghold.lordId > 0 ? stronghold.lordId : undefined,
+      tertiaryLeaderNameLinkId:
+        stronghold?.mayorId && stronghold.mayorId > 0 ? stronghold.mayorId : undefined,
+    };
+  }
+
+  const ids = (actor.characterIds ?? []).filter((id) => id > 0);
+  return {
+    primaryLeaderNameLinkId: ids[0],
+    secondaryLeaderNameLinkId: ids[1],
+    tertiaryLeaderNameLinkId: ids[2],
+  };
 }
 
 function resolvePlayerLordCharacterId(worldState: StrategyWorldState): number | null {
@@ -1615,21 +1839,45 @@ export function forceIntelListRows(
       const isOwnRealm =
         isPlayerRealmForce(force.id, playerForceId, forces) ||
         (isOrg && matchesOrganizationForceIntelFilter(worldState, force.id, "realm"));
+      const residenceStrongholdId = resolveForceLordResidenceStrongholdId(worldState, force.id);
+      const lordNameLinkId = resolveForceLordCharacterId(worldState, force.id);
+      const suzerainForceId =
+        !isOrg && force.suzerainForceId != null && force.suzerainForceId > 0
+          ? force.suzerainForceId
+          : isOrg
+            ? resolveOrganizationHostForceId(worldState, force)
+            : null;
 
       return {
         id: force.id,
         name: force.name,
         lordName: force.lordName?.trim() || resolveForceLordName(worldState, force.id),
+        lordNameLinkId: lordNameLinkId ?? undefined,
         forceType,
         residenceName: resolveForceResidenceName(worldState, force),
+        residenceNameLinkId:
+          residenceStrongholdId && residenceStrongholdId > 0 ? residenceStrongholdId : undefined,
         cultureName: isOrg
           ? resolveOrganizationForceCultureName(worldState, force)
           : force.cultureName?.trim() || resolveForceCultureName(worldState, force.id),
+        cultureNameLinkId: resolveMasterCultureLinkId(
+          worldState,
+          isOrg
+            ? resolveOrganizationForceCultureName(worldState, force)
+            : force.cultureName?.trim() || resolveForceCultureName(worldState, force.id),
+        ),
         religionName: isOrg
           ? resolveOrganizationForceReligionName(worldState, force)
           : force.religionName?.trim() || resolveForceReligionName(worldState, force.id),
+        religionNameLinkId: resolveMasterReligionLinkId(
+          worldState,
+          isOrg
+            ? resolveOrganizationForceReligionName(worldState, force)
+            : force.religionName?.trim() || resolveForceReligionName(worldState, force.id),
+        ),
         status: forcePoliticalStatusLabel(force.status),
         suzerainName,
+        suzerainNameLinkId: suzerainForceId ?? undefined,
         relation: forceRelationToPlayer(worldState, force.id),
         strongholdCount:
           !isOwnRealm && isRestrictedIntelMode(worldState)
@@ -1655,6 +1903,10 @@ export function forceIntelListRows(
           ? "—"
           : formatForeignForceStatValue(force.orthodoxy, worldState, isOwnRealm),
         successorName: isOrg ? "—" : resolveSuccessorName(worldState, force.id),
+        successorNameLinkId:
+          !isOrg && force.successorId != null && force.successorId > 0
+            ? force.successorId
+            : undefined,
         arrearsMoney: isOrg ? "—" : formatMoney(force.internalArrearsMoney ?? 0),
         arrearsFood: isOrg ? "—" : formatFoodGo(force.internalArrearsFoodGo ?? 0),
         isPlayer: force.id === playerForceId,
@@ -1683,6 +1935,7 @@ export function strongholdIntelRows(
         id: sh.id,
         name: sh.name,
         forceName: forceName(worldState, sh.forceId),
+        forceNameLinkId: sh.forceId > 0 ? sh.forceId : undefined,
         position: `(${sh.x}, ${sh.y})`,
         category: strongholdTypeLabel(sh, worldState),
         scale: strongholdHoverFieldValue(
@@ -1692,7 +1945,11 @@ export function strongholdIntelRows(
           resolveStrongholdScaleLabel(sh.scale, sh.population)
         ),
         lordName: obscurePersonnel ? UNKNOWN_INTEL : (sh.lordName?.trim() || "—"),
+        lordNameLinkId:
+          !obscurePersonnel && sh.lordId > 0 ? sh.lordId : undefined,
         mayorName: obscurePersonnel ? UNKNOWN_INTEL : (sh.mayorName?.trim() || "—"),
+        mayorNameLinkId:
+          !obscurePersonnel && sh.mayorId != null && sh.mayorId > 0 ? sh.mayorId : undefined,
         population: strongholdHoverFieldValue(worldState, sh, "人口", safePopulation(sh.population)),
         stability: strongholdHoverFieldValue(worldState, sh, "治安", statPercent(sh.stability)),
         popularFeelings: strongholdHoverFieldValue(worldState, sh, "民心", statPercent(sh.popularFeelings)),
@@ -1712,7 +1969,9 @@ export function strongholdIntelRows(
         morale: strongholdHoverFieldValue(worldState, sh, "士气", statPercent(sh.morale)),
         training: strongholdHoverFieldValue(worldState, sh, "训练度", statPercent(sh.training)),
         cultureName: strongholdHoverFieldValue(worldState, sh, "文化", sh.cultureName?.trim() || "—"),
+        cultureNameLinkId: resolveMasterCultureLinkId(worldState, sh.cultureName),
         religionName: strongholdHoverFieldValue(worldState, sh, "信仰", sh.religionName?.trim() || "—"),
+        religionNameLinkId: resolveMasterReligionLinkId(worldState, sh.religionName),
         defense: strongholdHoverFieldValue(worldState, sh, "城防", formatDefense(sh.defense)),
         garrisonTotal: strongholdHoverFieldValue(worldState, sh, "兵力", formatSoldiers(garrison)),
         money: strongholdHoverFieldValue(worldState, sh, "金钱", formatMoney(sh.money)),
@@ -2002,10 +2261,13 @@ function mapPersonIntelRow(
     personType: resolvePersonType(worldState, character),
     personCategory: resolvePersonCategory(worldState, character),
     forceName: resolvePersonForceName(worldState, character),
+    forceNameLinkId: character.forceId > 0 ? character.forceId : undefined,
     strongholdName: personStrongholdName(worldState, character),
+    strongholdNameLinkId: resolvePersonStrongholdLinkId(worldState, character) ?? undefined,
     isFamily: oxMark(personIsFamilyMember(worldState, character)),
     role: personRoleLabel(worldState, character),
     superior: personSuperiorLabel(worldState, character),
+    superiorLinkId: resolvePersonSuperiorCharacterId(worldState, character) ?? undefined,
     location: personLocationLabel(worldState, character),
     locationType: personLocationTypeLabel(character.locationType),
     leadership: formatPersonStatValue(character.leadership, worldState, intelDebugMode),
@@ -2022,7 +2284,9 @@ function mapPersonIntelRow(
     taskRemainingDays: formatTaskRemainingDays(character),
     yearsInForce: formatYearsInForce(character.yearsInForce),
     cultureName: character.cultureName?.trim() || "—",
+    cultureNameLinkId: resolveMasterCultureLinkId(worldState, character.cultureName),
     religionName: character.religionName?.trim() || "—",
+    religionNameLinkId: resolveMasterReligionLinkId(worldState, character.religionName),
     sex: sexLabel(character.sex),
     age: statPercent(character.age),
     birthType: birthTypeLabel(character.birthType),
@@ -2165,12 +2429,16 @@ export function forceDetailIntelRows(
     return [
       { label: "名称", value: row.name },
       { label: "类型", value: row.forceType },
-      { label: primaryLabel, value: row.lordName },
-      { label: "居城", value: row.residenceName },
-      { label: "文化", value: row.cultureName },
-      { label: "信仰", value: row.religionName },
+      intelFieldLinkFromId(primaryLabel, row.lordName, "person", row.lordNameLinkId),
+      intelFieldLinkFromId("居城", row.residenceName, "stronghold", row.residenceNameLinkId),
+      intelFieldLinkFromId("文化", row.cultureName, "masterData", row.cultureNameLinkId, {
+        masterPreset: "cultures",
+      }),
+      intelFieldLinkFromId("信仰", row.religionName, "masterData", row.religionNameLinkId, {
+        masterPreset: "religions",
+      }),
       { label: "状态", value: row.status },
-      { label: "领内", value: row.suzerainName },
+      intelFieldLinkFromId("领内", row.suzerainName, "force", row.suzerainNameLinkId),
       { label: "店数", value: row.strongholdCount },
       { label: "人数", value: row.characterCount },
       { label: "金钱", value: row.money },
@@ -2181,13 +2449,17 @@ export function forceDetailIntelRows(
   return [
     { label: "名称", value: row.name },
     { label: "类型", value: row.forceType },
-    { label: "当主", value: row.lordName },
-    { label: "居城", value: row.residenceName },
-    { label: "文化", value: row.cultureName },
-    { label: "信仰", value: row.religionName },
+    intelFieldLinkFromId("当主", row.lordName, "person", row.lordNameLinkId),
+    intelFieldLinkFromId("居城", row.residenceName, "stronghold", row.residenceNameLinkId),
+    intelFieldLinkFromId("文化", row.cultureName, "masterData", row.cultureNameLinkId, {
+      masterPreset: "cultures",
+    }),
+    intelFieldLinkFromId("信仰", row.religionName, "masterData", row.religionNameLinkId, {
+      masterPreset: "religions",
+    }),
     { label: "状态", value: row.status },
-    { label: "宗主", value: row.suzerainName },
-    { label: "继承人", value: row.successorName },
+    intelFieldLinkFromId("宗主", row.suzerainName, "force", row.suzerainNameLinkId),
+    intelFieldLinkFromId("继承人", row.successorName, "person", row.successorNameLinkId),
     { label: "总兵力", value: row.soldiers },
     { label: "驻军", value: formatSoldiers(resolveForceGarrisonSoldiers(worldState, forceId)) },
     { label: "农兵", value: formatSoldiers(resolveForceMilitiaSoldiers(worldState, forceId)) },
@@ -2293,7 +2565,12 @@ export function strongholdTechnologyTableRows(
   if (!stronghold) return [];
 
   const forceNameLabel = options?.forceName ?? forceName(worldState, stronghold.forceId);
-  const entityRows = mapEntityTechnologyRows(stronghold.technologies, forceNameLabel);
+  const forceNameLinkId = stronghold.forceId > 0 ? stronghold.forceId : undefined;
+  const entityRows = mapEntityTechnologyRows(
+    stronghold.technologies,
+    forceNameLabel,
+    forceNameLinkId,
+  );
   if (entityRows.length > 0) return entityRows;
 
   const localDouble = stronghold.knowsDoubleCrop === true;
@@ -2314,6 +2591,7 @@ export function strongholdTechnologyTableRows(
       category: "农业",
       status: localDouble ? "已掌握" : "未掌握",
       forceName: forceNameLabel,
+      forceNameLinkId,
       condition: effectiveDouble
         ? "可用"
         : !localDouble && !forceTech.knowsDouble
@@ -2328,6 +2606,7 @@ export function strongholdTechnologyTableRows(
       category: "农业",
       status: localTriple ? "已掌握" : "未掌握",
       forceName: forceNameLabel,
+      forceNameLinkId,
       condition: effectiveTriple
         ? "可用"
         : !localTriple && !forceTech.knowsTriple
@@ -2342,6 +2621,7 @@ export function strongholdTechnologyTableRows(
       category: "农业",
       status: cropPatternLabel(effectivePattern),
       forceName: forceNameLabel,
+      forceNameLinkId,
       condition: "势力与据点技术交集",
     },
   ];
@@ -2374,6 +2654,7 @@ function resolveForceTechnologyFlags(
 function mapEntityTechnologyRows(
   technologies: StrategyEntityTechnologyState[] | undefined,
   forceNameLabel: string,
+  forceNameLinkId?: number | null,
 ): IntelStrongholdTechnologyRow[] {
   if (!technologies?.length) return [];
   return technologies.map((tech) => ({
@@ -2382,6 +2663,7 @@ function mapEntityTechnologyRows(
     category: tech.category,
     status: tech.status === 1 ? "已完成" : "研究中",
     forceName: forceNameLabel,
+    forceNameLinkId: forceNameLinkId && forceNameLinkId > 0 ? forceNameLinkId : undefined,
     condition:
       tech.target && tech.effectivity != null
         ? `${tech.target} ${tech.effectivity >= 0 ? "+" : ""}${tech.effectivity}`
@@ -2389,25 +2671,17 @@ function mapEntityTechnologyRows(
   }));
 }
 
-/** 势力详情 · 技术表（势力居城掌握的技术）。 */
+/** 势力详情 · 技术表（仅读势力自身 Technologies，与据点无关）。 */
 export function forceTechnologyTableRows(
   worldState: StrategyWorldState,
   forceId: number,
   options?: ForceDetailScopeOptions & { showForceColumn?: boolean }
 ): IntelStrongholdTechnologyRow[] {
-  const row = findForceRow(worldState, forceId);
-  if (!row) return [];
-
   const force = worldState.forces.find((item) => item.id === forceId);
-  const directTechRows = mapEntityTechnologyRows(force?.technologies, force?.name ?? forceName(worldState, forceId));
-  if (directTechRows.length > 0) return directTechRows;
+  if (!force) return [];
 
-  if (isOrganizationForceCategory(force?.category)) {
-    const residenceId = force?.lordResidenceStrongholdId;
-    if (!residenceId) return [];
-    return strongholdTechnologyTableRows(worldState, residenceId, {
-      forceName: force?.name,
-    });
+  if (isOrganizationForceCategory(force.category)) {
+    return mapEntityTechnologyRows(force.technologies, force.name, force.id);
   }
 
   const scopeIds = collectForceScopeIds(
@@ -2415,32 +2689,51 @@ export function forceTechnologyTableRows(
     forceId,
     options?.includeInnerVassals === true
   );
-  const strongholdIds = worldState.strongholds
-    .filter((stronghold) => scopeIds.has(stronghold.forceId))
-    .map((stronghold) => stronghold.id);
+  const merged = new Map<number, IntelStrongholdTechnologyRow>();
 
-  if (strongholdIds.length === 0) {
-    const residenceId = resolveForceLordResidenceStrongholdId(worldState, forceId);
-    if (residenceId == null) return [];
-    return strongholdTechnologyTableRows(worldState, residenceId, {
-      forceName: options?.showForceColumn ? forceName(worldState, forceId) : undefined,
-    });
+  for (const scopedForceId of scopeIds) {
+    const scopedForce = worldState.forces.find((item) => item.id === scopedForceId);
+    const label = forceName(worldState, scopedForceId);
+    for (const row of mapEntityTechnologyRows(scopedForce?.technologies, label, scopedForceId)) {
+      if (merged.has(row.id)) continue;
+      merged.set(row.id, {
+        ...row,
+        forceName: options?.showForceColumn ? label : row.forceName,
+        forceNameLinkId: options?.showForceColumn ? scopedForceId : row.forceNameLinkId,
+      });
+    }
   }
 
-  const rows: IntelStrongholdTechnologyRow[] = [];
+  return [...merged.values()].sort((a, b) => a.id - b.id);
+}
+
+/** 势力详情 · 据点 Tab：该组织在所有相关据点内的 Actor 情报（一次性汇总，非官府）。 */
+export function forceAllStrongholdCityActorRows(
+  worldState: StrategyWorldState,
+  forceId: number,
+  options?: ForceDetailScopeOptions
+): IntelForceOrgActorRow[] {
+  const force = worldState.forces.find((item) => item.id === forceId);
+  if (!force || !isOrganizationForceCategory(force.category)) return [];
+
+  const kind = force.category === "Merchant" ? "Merchant" : "Religion";
+  const strongholdIds = forceStrongholdTableRows(worldState, forceId, options).map((row) => row.id);
+  const rows: IntelForceOrgActorRow[] = [];
+
   for (const strongholdId of strongholdIds) {
     const stronghold = worldState.strongholds.find((item) => item.id === strongholdId);
     if (!stronghold) continue;
-    const baseId = strongholdId * 10;
-    rows.push(
-      ...strongholdTechnologyTableRows(worldState, strongholdId, {
-        forceName: options?.showForceColumn
-          ? forceName(worldState, stronghold.forceId)
-          : undefined,
-      }).map((item, index) => ({ ...item, id: baseId + index }))
-    );
+
+    for (const actor of stronghold.cityActors ?? []) {
+      if (actor.kind === "Government") continue;
+      if (actor.forceId !== forceId || actor.kind !== kind) continue;
+      rows.push(mapForceOrgActorIntelRow(worldState, actor, stronghold));
+    }
   }
-  return rows;
+
+  return rows.sort((a, b) =>
+    a.nameWithStronghold.localeCompare(b.nameWithStronghold, "zh-CN")
+  );
 }
 
 /** 某势力视角的外交列表（封地根势力展示全表，他势力仅展示与己关系）。 */
@@ -2480,6 +2773,7 @@ export function diplomacyForForceRows(
       forceId: playerRoot,
       forceName: forceName(worldState, playerRoot),
       lordName: resolveForceLordName(worldState, playerRoot),
+      lordNameLinkId: resolveForceLordCharacterId(worldState, playerRoot) ?? undefined,
       forceCategory: resolveDiplomacyForceCategory(worldState, playerRoot),
       relation: diplomacyAffinityTierLabel(diplomacy?.relationship, relation),
       trust: diplomacyTrustTierLabel(diplomacy?.trust, relation),
@@ -2891,14 +3185,42 @@ function mapCityActorIntelRow(
   stronghold: StrategyStrongholdState
 ): IntelCityActorRow {
   const roles = resolveCityActorRoleHolders(worldState, actor, stronghold);
+  const roleLinkIds = resolveCityActorRoleLinkIds(worldState, actor, stronghold);
   return {
     id: actor.id,
     name: actor.name,
     primaryLeaderName: roles.primary,
     secondaryLeaderName: roles.secondary,
     tertiaryLeaderName: roles.tertiary,
+    ...roleLinkIds,
     typeLabel: cityActorKindLabel(actor.kind),
     branchLabel: resolveCityActorBranchLabel(worldState, actor, stronghold.id),
+    characterCount: String(Math.max(0, actor.characterCount)),
+  };
+}
+
+function mapForceOrgActorIntelRow(
+  worldState: StrategyWorldState,
+  actor: StrategyStrongholdCityActorState,
+  stronghold: StrategyStrongholdState
+): IntelForceOrgActorRow {
+  const roles = resolveCityActorRoleHolders(worldState, actor, stronghold);
+  const roleLinkIds = resolveCityActorRoleLinkIds(worldState, actor, stronghold);
+  return {
+    id: stronghold.id * 10000 + actor.id,
+    nameWithStronghold: `${actor.name}　${stronghold.name}`,
+    nameWithStrongholdLinkId: stronghold.id,
+    primaryLeaderName: roles.primary,
+    secondaryLeaderName: roles.secondary,
+    branchLabel: resolveCityActorBranchLabel(worldState, actor, stronghold.id),
+    ...roleLinkIds,
+    hostForceName: forceName(worldState, stronghold.forceId),
+    hostForceNameLinkId: stronghold.forceId > 0 ? stronghold.forceId : undefined,
+    hostLordName: stronghold.lordName?.trim() || "—",
+    hostLordNameLinkId: stronghold.lordId > 0 ? stronghold.lordId : undefined,
+    money: formatMoney(actor.money),
+    food: formatFoodGo(actor.food),
+    luxuryGoods: String(Math.max(0, actor.luxuryGoods ?? 0)),
     characterCount: String(Math.max(0, actor.characterCount)),
   };
 }
@@ -3043,12 +3365,17 @@ export function personDetailIntelRows(
   const character = worldState.characters?.find((item) => item.id === personId);
   const rows: IntelFieldRow[] = [
     { label: "姓名", value: row.name },
-    { label: "势力", value: row.forceName },
-    { label: "据点", value: row.strongholdName },
+    intelFieldLinkFromId("势力", row.forceName, "force", row.forceNameLinkId),
+    intelFieldLinkFromId("据点", row.strongholdName, "stronghold", row.strongholdNameLinkId),
     { label: "职位", value: row.role },
     { label: "一门", value: row.isFamily },
     { label: "仕官", value: row.yearsInForce },
-    { label: "所在", value: row.location },
+    intelFieldLinkFromId(
+      "所在",
+      row.location,
+      "stronghold",
+      character ? resolvePersonStrongholdLinkId(worldState, character) : null,
+    ),
     { label: "位置类型", value: row.locationType },
     { label: "状态", value: row.status },
     { label: "健康", value: row.healthStatus },
@@ -3061,8 +3388,12 @@ export function personDetailIntelRows(
   rows.push(
     { label: "命令对象", value: row.commandTarget },
     { label: "出身", value: row.birthType },
-    { label: "文化", value: row.cultureName },
-    { label: "信仰", value: row.religionName },
+    intelFieldLinkFromId("文化", row.cultureName, "masterData", row.cultureNameLinkId, {
+      masterPreset: "cultures",
+    }),
+    intelFieldLinkFromId("信仰", row.religionName, "masterData", row.religionNameLinkId, {
+      masterPreset: "religions",
+    }),
     { label: "性别", value: row.sex },
     { label: "年龄", value: row.age }
   );
@@ -3078,12 +3409,15 @@ export function personTaskTableRows(
   const character = worldState.characters?.find((item) => item.id === personId);
   if (!character) return [];
 
+  const defaultTargetLinkId = resolvePersonStrongholdLinkId(worldState, character) ?? undefined;
+
   if (character.activeTasks?.length) {
     return character.activeTasks.map((task, index) => ({
       id: index + 1,
       taskType: taskCategoryLabel(task.taskCategory),
       name: task.name,
       target: task.target,
+      targetLinkId: defaultTargetLinkId,
       status: task.status,
       remaining: task.remaining,
     }));
@@ -3101,6 +3435,7 @@ export function personTaskTableRows(
       taskType: "势力",
       name: "任务",
       target: personStrongholdName(worldState, character),
+      targetLinkId: defaultTargetLinkId,
       status: personStatusLabel(character.forceStatus),
       remaining: formatTaskRemainingDays(character),
     });
@@ -3208,6 +3543,7 @@ export interface IntelPersonRelationRow {
   relationType: string;
   relationTone: string;
   characterName: string;
+  characterNameLinkId?: number;
 }
 
 /** 人物详情 · 人际关系表格行。 */
@@ -3223,6 +3559,7 @@ export function personRelationshipTableRows(
     relationType: rel.relationType,
     relationTone: rel.relationTone?.trim() || "—",
     characterName: rel.characterName,
+    characterNameLinkId: rel.characterId > 0 ? rel.characterId : undefined,
   }));
 }
 

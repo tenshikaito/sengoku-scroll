@@ -4,6 +4,7 @@ import type { StrategyWorldState } from "@/api/strategy";
 import StrategyIntelBasicDescriptions from "../StrategyIntelBasicDescriptions.vue";
 import StrategyIntelSystemTable from "../StrategyIntelSystemTable.vue";
 import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
+import type { IntelNavigateRequest, IntelNavigateTarget } from "@/utils/strategyIntelNavigation";
 import {
   cityActorTableColumns,
   STRONGHOLD_CROP_CYCLE_COLUMNS,
@@ -40,6 +41,12 @@ const props = defineProps<{
   initialSelectedId?: number | null;
   /** 仅显示详情二级 Tab（隐藏列表）。 */
   detailOnly?: boolean;
+  /** 对话框内跨 Tab 跳转请求。 */
+  navigateRequest?: IntelNavigateRequest | null;
+}>();
+
+const emit = defineEmits<{
+  navigate: [target: IntelNavigateTarget];
 }>();
 
 const listPreset = ref<StrongholdListPreset>("status");
@@ -184,6 +191,12 @@ const introText = computed(() =>
     : "请在上方列表选择据点。"
 );
 
+const excludeEntity = computed(() =>
+  selectedStrongholdId.value != null
+    ? { kind: "stronghold" as const, entityId: selectedStrongholdId.value }
+    : null,
+);
+
 const cityActorEmptyLabel = computed(() =>
   detailTab.value === "merchants" ? "暂无商家" : "暂无寺社"
 );
@@ -285,9 +298,21 @@ function onSelectCityActorRow(row: Record<string, unknown> | null) {
   selectedCityActorId.value = Number(row.id);
 }
 
+function onIntelNavigate(target: IntelNavigateTarget) {
+  emit("navigate", target);
+}
+
 function rowClass(row: Record<string, unknown>) {
   return (row as unknown as IntelStrongholdRow).isLordResidence === "○" ? "is-lord-row" : "";
 }
+watch(
+  () => props.navigateRequest,
+  (request) => {
+    if (!request || request.kind !== "stronghold") return;
+    selectedStrongholdId.value = request.entityId;
+    detailTab.value = "basic";
+  },
+);
 </script>
 
 <template>
@@ -306,6 +331,7 @@ function rowClass(row: Record<string, unknown>) {
         empty-text="暂无据点数据"
         :row-class-name="rowClass"
         @current-change="onSelectRow"
+        @navigate="onIntelNavigate"
       />
     </template>
 
@@ -325,7 +351,12 @@ function rowClass(row: Record<string, unknown>) {
       </el-tabs>
 
       <div v-if="detailTab === 'basic'" class="detail-body detail-body--basic">
-        <StrategyIntelBasicDescriptions v-if="basicRows.length" :rows="basicRows" />
+        <StrategyIntelBasicDescriptions
+          v-if="basicRows.length"
+          :rows="basicRows"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
         <p v-else class="placeholder">请选择据点。</p>
       </div>
 
@@ -370,6 +401,8 @@ function rowClass(row: Record<string, unknown>) {
           :empty-text="cityActorEmptyLabel"
           :max-height="160"
           @current-change="onSelectCityActorRow"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
         />
 
         <div class="city-actor-subsection">
@@ -388,6 +421,8 @@ function rowClass(row: Record<string, unknown>) {
               scroll-wrap
               fill-width
               :max-height="220"
+              :exclude-entity="excludeEntity"
+              @navigate="onIntelNavigate"
             />
             <p v-else class="placeholder">
               {{
@@ -423,12 +458,24 @@ function rowClass(row: Record<string, unknown>) {
       </div>
 
       <div v-else-if="detailTab === 'culture'" class="detail-body">
-        <StrategyIntelBasicDescriptions v-if="cultureRows.length" :rows="cultureRows" :column="1" />
+        <StrategyIntelBasicDescriptions
+          v-if="cultureRows.length"
+          :rows="cultureRows"
+          :column="1"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
         <p v-else class="placeholder">请选择据点。</p>
       </div>
 
       <div v-else-if="detailTab === 'religion'" class="detail-body">
-        <StrategyIntelBasicDescriptions v-if="religionRows.length" :rows="religionRows" :column="1" />
+        <StrategyIntelBasicDescriptions
+          v-if="religionRows.length"
+          :rows="religionRows"
+          :column="1"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
         <p v-else class="placeholder">请选择据点。</p>
       </div>
 
@@ -439,11 +486,17 @@ function rowClass(row: Record<string, unknown>) {
           :highlight-current="false"
           empty-text="暂无技术数据"
           :max-height="220"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
         />
       </div>
 
       <div v-else-if="detailTab === 'effects'" class="detail-body">
-        <StrategyIntelBasicDescriptions :rows="effectsRows" />
+        <StrategyIntelBasicDescriptions
+          :rows="effectsRows"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
       </div>
 
       <div v-else class="detail-body">

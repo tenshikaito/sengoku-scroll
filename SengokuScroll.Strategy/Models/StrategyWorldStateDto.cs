@@ -918,6 +918,25 @@ public sealed record StrategyUnitStateDto
     /// <summary>是否在地图层渲染（迷雾外己方单位仍可在侧栏列出）。</summary>
     public bool MapVisible { get; init; } = true;
 
+    /// <summary>是否在城内（不占地图格）。</summary>
+    public bool InStronghold { get; init; }
+
+    /// <summary>编制归属据点 Id。</summary>
+    public int HomeStrongholdId { get; init; }
+
+    /// <summary>当前驻留据点 Id。</summary>
+    public int LocationStrongholdId { get; init; }
+
+    /// <summary>单位种类（Military / Convoy / Merchant / …）。</summary>
+    public required string UnitKind { get; init; }
+
+    /// <summary>贸易策略（None / WaitBuyFood / WaitSellFood）。</summary>
+    public string TradePolicy { get; init; } = "None";
+
+    public int TradeLimitPriceMoneyPerGo { get; init; }
+
+    public int TradeQuantityGo { get; init; }
+
     /// <summary>情报模糊兵数（如 **** / 3***）；为空则显示 <see cref="Soldiers"/>。</summary>
     public string? SoldiersDisplay { get; init; }
 
@@ -955,6 +974,13 @@ public sealed record StrategyUnitRosterEntryDto
 
     /// <summary>当前不在玩家视野内。</summary>
     public required bool OffMap { get; init; }
+
+    /// <summary>是否在城内待命。</summary>
+    public bool InStronghold { get; init; }
+
+    public int LocationStrongholdId { get; init; }
+
+    public int HomeStrongholdId { get; init; }
 }
 
 /// <summary>战场内按势力汇总的参战摘要（悬浮框用）。</summary>
@@ -1786,7 +1812,17 @@ public static class StrategyWorldStateMapper
                     Id = x.Id,
                     Name = x.Name,
                     Description = x.Description,
-                    Fields = MasterFields(("description", x.Description))
+                    Fields = MasterFields(
+                        ("description", x.Description),
+                        ("climateId", x.ClimateId.ToString()),
+                        ("typhoonRate", x.TyphoonRate.ToString()),
+                        ("earthquakeRate", x.EarthquakeRate.ToString()),
+                        ("droughtRate", x.DroughtRate.ToString()),
+                        ("coldWaveRate", x.ColdWaveRate.ToString()),
+                        ("snowstormRate", x.SnowstormRate.ToString()),
+                        ("floodRate", x.FloodRate.ToString()),
+                        ("stormRate", x.StormRate.ToString()),
+                        ("locustRate", x.LocustRate.ToString()))
                 })
                 .OrderBy(x => x.Id)],
             Roads = [.. mapMaster.Roads.Values
@@ -2364,7 +2400,10 @@ public static class StrategyWorldStateMapper
             Ap = unit.Ap,
             SupplyStatus = SupplyStatusEvaluator.EvaluateStatus(unit, gameData),
             CommanderName = string.IsNullOrWhiteSpace(commander) ? null : commander,
-            OffMap = true
+            OffMap = true,
+            InStronghold = unit.InStronghold,
+            LocationStrongholdId = unit.LocationStrongholdId,
+            HomeStrongholdId = unit.HomeStrongholdId
         };
     }
 
@@ -2374,6 +2413,8 @@ public static class StrategyWorldStateMapper
         var commander = overlay?.CommanderName;
         if (u.LeaderId > 0 && gameData.Characters.TryGetValue(u.LeaderId, out var commanderCharacter))
             commander = commanderCharacter.Name;
+        else if (ReserveCommanderRules.IsReserveCommander(u))
+            commander = ReserveCommanderRules.ReserveCommanderDisplayName;
         else if (string.IsNullOrWhiteSpace(commander) && meta.LordUnitId == u.Id)
             commander = meta.LordName;
 
@@ -2408,7 +2449,15 @@ public static class StrategyWorldStateMapper
             Composition = MapUnitComposition(u, gameData),
             SupplyStatus = SupplyStatusEvaluator.EvaluateStatus(u, gameData),
             FoodDaysRemaining = SupplyStatusEvaluator.EstimateFoodDaysRemaining(u),
-            InTransitSupplies = MapInTransitSupplies(u, gameData)
+            InTransitSupplies = MapInTransitSupplies(u, gameData),
+            MapVisible = !u.InStronghold,
+            InStronghold = u.InStronghold,
+            HomeStrongholdId = u.HomeStrongholdId,
+            LocationStrongholdId = u.LocationStrongholdId,
+            UnitKind = u.Kind.ToString(),
+            TradePolicy = u.TradePolicy.ToString(),
+            TradeLimitPriceMoneyPerGo = u.TradeLimitPriceMoneyPerGo,
+            TradeQuantityGo = u.TradeQuantityGo
         };
     }
 

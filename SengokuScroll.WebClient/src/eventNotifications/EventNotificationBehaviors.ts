@@ -98,6 +98,10 @@ const STRATEGIC_DETAIL_ICONS: StrategicDetailIconBehavior[] = [
     detailCategory = "UnitFledToStronghold";
     icon = "🏯";
   })(), {}),
+  Object.assign(new (class extends StrategicDetailIconBehavior {
+    detailCategory = "UnitForcedDisband";
+    icon = "💥";
+  })(), {}),
 ];
 
 class StrategicReportArrivedBehavior extends EventNotificationBehavior {
@@ -131,12 +135,27 @@ class RecruitTaskCompletedBehavior extends EventNotificationBehavior {
   }
 }
 
+class TariffTransitChargedBehavior extends EventNotificationBehavior {
+  readonly category = "TariffTransitCharged";
+
+  buildNotification(ctx: EventNotificationContext): StrategyPendingNotification {
+    return {
+      id: ctx.nextId(),
+      kind: "message",
+      icon: "🛃",
+      brief: ctx.briefText(ctx.event),
+      event: ctx.event,
+    };
+  }
+}
+
 const ORDERED_BEHAVIORS: EventNotificationBehavior[] = [
   new InstantEventSummaryBehavior(),
   new BattleReportArrivedBehavior(),
   new SettlementEventBehavior(),
   new StrategicReportArrivedBehavior(),
   new RecruitTaskCompletedBehavior(),
+  new TariffTransitChargedBehavior(),
 ];
 
 export class EventNotificationRegistry {
@@ -159,6 +178,7 @@ const LEGACY_MESSAGE_TEXT: Record<string, string> = {
   BattleReportArrived: "战报信使抵达",
   InstantEventSummary: "事件摘要",
   StrategicReportArrived: "情报信使抵达",
+  TariffTransitCharged: "过境关税",
   MessengerArrived: "信使抵达",
 };
 

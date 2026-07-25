@@ -14,6 +14,12 @@ public static class MapLocationActions
     /// <summary>移动军事单位并同步 <see cref="GameMapData.Units"/> 多单位列表索引。</summary>
     public static void SetUnitLocation(IGameWorldContext context, Unit unit, Point3 newLocation)
     {
+        if (unit.InStronghold)
+        {
+            unit.Location = newLocation;
+            return;
+        }
+
         var world = context.GameWorld;
         var tileMap = world.GameMapMasterData.TileMap;
         var index = world.GameMapData.Units;
@@ -45,9 +51,30 @@ public static class MapLocationActions
 
     /// <summary>将军事单位登记到其当前坐标对应的格点列表（世界构建时调用）。</summary>
     public static void RegisterUnit(GameWorld world, Unit unit)
-        => AddUnitToTileIndex(
+    {
+        if (unit.InStronghold)
+            return;
+
+        AddUnitToTileIndex(
             world.GameMapData.Units,
             world.GameMapMasterData.TileMap,
+            unit.Location,
+            unit.Id);
+    }
+
+    /// <summary>将城内单位登记到地图索引（出城时调用）。</summary>
+    public static void RegisterUnitOnMap(IGameWorldContext context, Unit unit)
+        => AddUnitToTileIndex(
+            context.GameWorld.GameMapData.Units,
+            context.GameWorld.GameMapMasterData.TileMap,
+            unit.Location,
+            unit.Id);
+
+    /// <summary>将单位从地图格索引移除（入城时调用；不销毁实体）。</summary>
+    public static void UnregisterUnitFromMap(IGameWorldContext context, Unit unit)
+        => RemoveUnitFromTileIndex(
+            context.GameWorld.GameMapData.Units,
+            context.GameWorld.GameMapMasterData.TileMap,
             unit.Location,
             unit.Id);
 
@@ -55,11 +82,15 @@ public static class MapLocationActions
     public static void RemoveUnit(IGameWorldContext context, Unit unit)
     {
         var world = context.GameWorld;
-        RemoveUnitFromTileIndex(
-            world.GameMapData.Units,
-            world.GameMapMasterData.TileMap,
-            unit.Location,
-            unit.Id);
+        if (!unit.InStronghold)
+        {
+            RemoveUnitFromTileIndex(
+                world.GameMapData.Units,
+                world.GameMapMasterData.TileMap,
+                unit.Location,
+                unit.Id);
+        }
+
         world.GameData.Units.Remove(unit.Id);
     }
 

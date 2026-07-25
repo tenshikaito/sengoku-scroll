@@ -26,6 +26,7 @@ const PLAYER_FEED_CATEGORIES = new Set([
   "SupplyConvoyArrived",
   "EconomyMonthly",
   "EconomyAnnual",
+  "TariffTransitCharged",
 ]);
 
 /** 世界/全局类事件（战报过程等）。 */

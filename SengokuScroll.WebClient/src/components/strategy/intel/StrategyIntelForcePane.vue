@@ -11,9 +11,11 @@ import {
   FORCE_TECHNOLOGY_COLUMNS,
   STANCE_EFFECT_COLUMNS,
   STRONGHOLD_TECHNOLOGY_COLUMNS,
+  forceOrgActorTableColumns,
   type ForceListPreset,
 } from "@/utils/strategyIntelSystemColumns";
 import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
+import type { IntelNavigateRequest, IntelNavigateTarget } from "@/utils/strategyIntelNavigation";
 import {
   diplomacyForForceRows,
   filterDiplomacyRowsByCategory,
@@ -29,8 +31,10 @@ import {
   forcePersonTableRows,
   forceReligionDetailRows,
   forceStrongholdTableRows,
+  forceAllStrongholdCityActorRows,
   forceTechnologyTableRows,
   forceTheirViewEffectRows,
+  isOrganizationForce,
   INTEL_DIPLOMACY_SCOPE_FILTER_OPTIONS,
   INTEL_FORCE_CATEGORY_FILTER_OPTIONS,
   isForceRealmRoot,
@@ -49,6 +53,12 @@ const props = defineProps<{
   detailOnly?: boolean;
   /** 调试模式：显示全部人物与隐藏属性。 */
   intelDebugMode?: boolean;
+  /** 对话框内跨 Tab 跳转请求。 */
+  navigateRequest?: IntelNavigateRequest | null;
+}>();
+
+const emit = defineEmits<{
+  navigate: [target: IntelNavigateTarget];
 }>();
 
 const listPreset = ref<ForceListPreset>("status");
@@ -87,6 +97,12 @@ const showForceStanceEffectTabs = computed(() =>
   showForceStanceEffectTabsForForce(props.worldState, selectedForceId.value),
 );
 
+const excludeEntity = computed(() =>
+  selectedForceId.value != null
+    ? { kind: "force" as const, entityId: selectedForceId.value }
+    : null,
+);
+
 const listColumns = computed(() => FORCE_LIST_COLUMN_PRESETS[listPreset.value]);
 const forceRows = computed(() =>
   filterForceRowsByCategory(
@@ -112,6 +128,33 @@ const strongholdRows = computed(() =>
         detailScopeOptions.value
       )
     : []
+);
+
+const isOrganizationForceSelected = computed(() =>
+  selectedForceId.value != null
+    ? isOrganizationForce(props.worldState, selectedForceId.value)
+    : false
+);
+
+const organizationActorKind = computed((): "Merchant" | "Religion" | null => {
+  const force = props.worldState.forces.find((item) => item.id === selectedForceId.value);
+  if (force?.category === "Merchant") return "Merchant";
+  if (force?.category === "Religion") return "Religion";
+  return null;
+});
+
+const forceAllCityActorRows = computed(() =>
+  selectedForceId.value != null
+    ? forceAllStrongholdCityActorRows(
+        props.worldState,
+        selectedForceId.value,
+        detailScopeOptions.value
+      )
+    : []
+);
+
+const forceOrgActorColumns = computed(() =>
+  organizationActorKind.value ? forceOrgActorTableColumns(organizationActorKind.value) : []
 );
 
 const personRows = computed(() =>
@@ -193,6 +236,9 @@ const diplomacyRows = computed(() => {
 const strongholdListRows = computed(
   () => strongholdRows.value as unknown as Array<Record<string, unknown>>
 );
+const forceAllCityActorListRows = computed(
+  () => forceAllCityActorRows.value as unknown as Array<Record<string, unknown>>
+);
 const personListRows = computed(
   () => personRows.value as unknown as Array<Record<string, unknown>>
 );
@@ -227,11 +273,11 @@ function onSelectRow(row: Record<string, unknown> | null) {
     syncDefaultSelection();
     return;
   }
-  const nextId = Number(row.id);
-  if (selectedForceId.value !== nextId) {
-    includeInnerVassals.value = false;
-  }
-  selectedForceId.value = nextId;
+  selectedForceId.value = Number(row.id);
+}
+
+function onIntelNavigate(target: IntelNavigateTarget) {
+  emit("navigate", target);
 }
 
 watch(showForceStanceEffectTabs, (visible) => {
@@ -240,11 +286,14 @@ watch(showForceStanceEffectTabs, (visible) => {
   }
 });
 
-watch(selectedForceId, (forceId) => {
-  if (forceId == null || !showIncludeInnerVassalsOption.value) {
-    includeInnerVassals.value = false;
-  }
-});
+watch(
+  () => props.navigateRequest,
+  (request) => {
+    if (!request || request.kind !== "force") return;
+    selectedForceId.value = request.entityId;
+    detailTab.value = defaultDetailTabForForce(request.entityId);
+  },
+);
 
 function defaultForceId(): number | null {
   const playerRoot = props.worldState.playerForceId;
@@ -311,6 +360,7 @@ watch(
         :current-id="selectedForceId"
         empty-text="暂无势力数据"
         @current-change="onSelectRow"
+        @navigate="onIntelNavigate"
       />
     </template>
 
@@ -337,17 +387,37 @@ watch(
       </div>
 
       <div v-if="detailTab === 'basic'" class="detail-body">
-        <StrategyIntelBasicDescriptions v-if="basicRows.length" :rows="basicRows" />
+        <StrategyIntelBasicDescriptions
+          v-if="basicRows.length"
+          :rows="basicRows"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
         <p v-else class="placeholder">请选择势力。</p>
       </div>
 
       <div v-else-if="detailTab === 'strongholds'" class="detail-body">
         <StrategyIntelSystemTable
+          v-if="!isOrganizationForceSelected"
           :rows="strongholdListRows"
           :columns="FORCE_STRONGHOLD_COLUMNS"
           :highlight-current="false"
           empty-text="暂无据点数据"
           :max-height="240"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
+        <StrategyIntelSystemTable
+          v-else
+          :rows="forceAllCityActorListRows"
+          :columns="forceOrgActorColumns"
+          :highlight-current="false"
+          empty-text="暂无城内势力情报"
+          :max-height="320"
+          scroll-wrap
+          fill-width
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
         />
       </div>
 
@@ -358,6 +428,8 @@ watch(
           :highlight-current="false"
           empty-text="暂无现任"
           :max-height="240"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
         />
       </div>
 
@@ -400,16 +472,30 @@ watch(
           :highlight-current="false"
           empty-text="暂无外交情报"
           :max-height="200"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
         />
       </div>
 
       <div v-else-if="detailTab === 'culture'" class="detail-body">
-        <StrategyIntelBasicDescriptions v-if="cultureRows.length" :rows="cultureRows" :column="1" />
+        <StrategyIntelBasicDescriptions
+          v-if="cultureRows.length"
+          :rows="cultureRows"
+          :column="1"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
         <p v-else class="placeholder">请选择势力。</p>
       </div>
 
       <div v-else-if="detailTab === 'religion'" class="detail-body">
-        <StrategyIntelBasicDescriptions v-if="religionRows.length" :rows="religionRows" :column="1" />
+        <StrategyIntelBasicDescriptions
+          v-if="religionRows.length"
+          :rows="religionRows"
+          :column="1"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
         <p v-else class="placeholder">请选择势力。</p>
       </div>
 
@@ -420,11 +506,17 @@ watch(
           :highlight-current="false"
           empty-text="暂无技术数据"
           :max-height="200"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
         />
       </div>
 
       <div v-else-if="detailTab === 'effects'" class="detail-body">
-        <StrategyIntelBasicDescriptions :rows="effectsRows" />
+        <StrategyIntelBasicDescriptions
+          :rows="effectsRows"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
       </div>
 
       <div v-else-if="detailTab === 'ourView'" class="detail-body">

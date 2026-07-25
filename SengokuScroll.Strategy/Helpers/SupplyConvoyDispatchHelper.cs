@@ -269,6 +269,15 @@ public class SupplyConvoyDispatchHelper(
         if (GarrisonBehaviorRules.IsStrongholdBlockaded(origin, gameData))
             return false;
 
+        if (TradeConvoyMigrationRules.PreferUnitTradeConvoys)
+        {
+            return TradeConvoyUnitFactory.TryCreateMerchantTradeUnit(
+                context.GameWorldContext.GameWorld,
+                origin,
+                destination,
+                foodCargo) is not null;
+        }
+
         var path = pathfindingService.CalculatePath(
             new MapPathAgent(origin.Location, TradeMarketAiHelper.ResolvePathForceId(origin, gameData)),
             destination.Location);

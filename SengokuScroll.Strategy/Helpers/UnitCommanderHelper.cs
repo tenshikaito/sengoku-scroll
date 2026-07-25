@@ -15,6 +15,13 @@ public static class UnitCommanderHelper
         commander.ForceStatus = CharacterForceStatus.UnitAction;
     }
 
+    public static void DetachFromStronghold(Character commander, int strongholdId)
+    {
+        commander.LocationType = CharacterLocationType.Stronghold;
+        commander.StrongholdId = strongholdId;
+        commander.ForceStatus = CharacterForceStatus.Idle;
+    }
+
     public static bool IsAvailableForDeployment(Character commander, int strongholdId)
         => !commander.IsDead
            && commander.ForceStatus is CharacterForceStatus.Idle or CharacterForceStatus.Task

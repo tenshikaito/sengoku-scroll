@@ -15,6 +15,12 @@ import {
   mergeUnits,
   splitUnit,
   deployFromStronghold,
+  enterUnitStronghold,
+  exitUnitStronghold,
+  disbandUnitOrganizationally,
+  createMerchantShop,
+  unitSmashBuyFood,
+  setUnitTradePolicy,
   recordEspionageIntel,
   setStrongholdTaxRates,
   setStrongholdGovernancePriority,
@@ -184,7 +190,7 @@ import {
   strongholdsAtCellForIntel,
   unitsAtCellForIntel,
 } from "@/utils/strategyFogCell";
-import { findOperableUnit, isMapOperableUnit, operableUnitAsMapState } from "@/utils/strategyOperableUnits";
+import { findOperableUnit, isMapOperableUnit, operableUnitAsMapState, resolveOperableUnitStrongholdId } from "@/utils/strategyOperableUnits";
 import { collectMapCellEntityOptions } from "@/utils/mapCellEntityPicker";
 import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
 import {
@@ -502,6 +508,74 @@ const selectedUnitDirectlyControlled = computed(() => {
   return isLordDirectlyControlledUnit(state.value, selectedUnit.value);
 });
 
+function isPlayerAllyForce(ws: StrategyWorldState, forceId: number): boolean {
+  if (forceId === ws.playerForceId) return true;
+  return ws.diplomacies.some((d) => d.targetForceId === forceId && d.relation === "Allied");
+}
+
+const unitPopupStronghold = computed(() => {
+  const entry = selectedOperableUnit.value;
+  const ws = state.value;
+  if (!entry || !ws) return null;
+
+  const strongholdId = resolveOperableUnitStrongholdId(entry);
+  if (strongholdId != null) {
+    return ws.strongholds.find((s) => s.id === strongholdId) ?? null;
+  }
+
+  return popupStronghold.value;
+});
+
+const canUnitEnterStronghold = computed(() => {
+  const unit = selectedUnit.value;
+  const sh = popupStronghold.value;
+  const ws = state.value;
+  if (!unit || !sh || !ws || !selectedUnitDirectlyControlled.value) return false;
+  if (unit.inStronghold || unit.soldiers <= 0) return false;
+  if (unit.x !== sh.x || unit.y !== sh.y) return false;
+  return isPlayerAllyForce(ws, sh.forceId);
+});
+
+const canUnitExitStronghold = computed(() => {
+  const unit = selectedUnit.value;
+  const sh = unitPopupStronghold.value;
+  if (!unit || !sh || !selectedUnitDirectlyControlled.value) return false;
+  return unit.inStronghold === true && unit.locationStrongholdId === sh.id && unit.soldiers > 0;
+});
+
+const canUnitDisband = computed(() => {
+  const unit = selectedUnit.value;
+  const sh = unitPopupStronghold.value;
+  const ws = state.value;
+  if (!unit || !sh || !ws || !selectedUnitDirectlyControlled.value) return false;
+  return (
+    unit.inStronghold === true
+    && unit.homeStrongholdId != null
+    && unit.homeStrongholdId === sh.id
+    && unit.locationStrongholdId === sh.id
+    && sh.forceId === ws.playerForceId
+  );
+});
+
+const canUnitTrade = computed(() => {
+  const unit = selectedUnit.value;
+  const sh = unitPopupStronghold.value;
+  const ws = state.value;
+  if (!unit || !sh || !ws || !selectedUnitDirectlyControlled.value) return false;
+  if (!unit.inStronghold || unit.locationStrongholdId !== sh.id || unit.soldiers <= 0) return false;
+  return isPlayerAllyForce(ws, sh.forceId);
+});
+
+const canCreateMerchantShop = computed(
+  () => canLordCommandActiveStronghold.value && menuPopupMode.value === "strongholdCommand",
+);
+
+const createShopTooltip = computed(() => {
+  if (!isLordAtOwnResidence.value) return LORD_AT_RESIDENCE_REQUIRED_TIP;
+  if (!canLordCommandActiveStronghold.value) return LORD_COMMAND_STRONGHOLD_TIP;
+  return "";
+});
+
 const canExpeditionFromStronghold = computed(() => {
   const sh = activeStrongholdForCommands.value;
   const playerForceId = state.value?.playerForceId;
@@ -526,7 +600,7 @@ const expeditionTooltip = computed(() => {
   if (state.value?.units.some((u) => u.soldiers > 0 && u.x === sh.x && u.y === sh.y)) {
     return "据点格已有地图军，须先撤走或消灭驻留部队";
   }
-  return "从当主居城分配城内兵与将领出征（据点格生成部队）";
+  return "从当主居城分配 SubUnit 与将领组建部队（默认在城中，可选立即出城）";
 });
 
 const canAdjustTaxStronghold = computed(() => {
@@ -2006,6 +2080,7 @@ async function handleExpeditionConfirm(payload: {
   unitName?: string;
   commanderId: number;
   composition: import("@/api/strategyTypes").StrategyDeployCompositionEntry[];
+  deployToMap: boolean;
 }) {
   const sh = selectedStronghold.value;
   if (!sh) return;
@@ -2014,10 +2089,12 @@ async function handleExpeditionConfirm(payload: {
   error.value = "";
   try {
     state.value = await deployFromStronghold(sh.id, payload);
-    info.value = `已从 ${sh.name} 出征`;
+    info.value = payload.deployToMap
+      ? `已从 ${sh.name} 组建并出城`
+      : `已在 ${sh.name} 组建部队（在城中）`;
     onCancel();
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "出征失败";
+    error.value = e instanceof Error ? e.message : "组建失败";
   } finally {
     loading.value = false;
   }
@@ -2206,6 +2283,188 @@ async function handleBeginEnterStronghold() {
     selectedCharacterId.value = characterId;
   } catch (e) {
     const message = e instanceof Error ? e.message : "入城失败";
+    await handleStrategyApiError(message, message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleBeginUnitEnterStronghold() {
+  const unitId = selectedUnitId.value;
+  const sh = popupStronghold.value;
+  if (!unitId || !sh) {
+    void notifyActionBlocked("无法入城", "须在据点格上且部队在地图方可入城");
+    return;
+  }
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await enterUnitStronghold(unitId, sh.id);
+    info.value = `${selectedUnit.value?.name ?? "部队"} 已进入 ${sh.name}`;
+    onCancel();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "入城失败";
+    await handleStrategyApiError(message, message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleBeginUnitExitStronghold() {
+  const unitId = selectedUnitId.value;
+  const sh = unitPopupStronghold.value;
+  if (!unitId || !sh) {
+    void notifyActionBlocked("无法出城", "部队须在城内方可出城");
+    return;
+  }
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await exitUnitStronghold(unitId, sh.id);
+    info.value = `${selectedUnit.value?.name ?? "部队"} 已离开 ${sh.name}`;
+    onCancel();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "出城失败";
+    await handleStrategyApiError(message, message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleBeginUnitDisband() {
+  const unitId = selectedUnitId.value;
+  const unit = selectedUnit.value;
+  if (!unitId || !unit) return;
+
+  try {
+    await ElMessageBox.confirm(
+      `确定在 ${unitPopupStronghold.value?.name ?? "据点"} 建制解散「${unit.name}」？兵力与物资将归还据点。`,
+      "建制解散",
+      { type: "warning", confirmButtonText: "解散", cancelButtonText: "取消" },
+    );
+  } catch {
+    return;
+  }
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await disbandUnitOrganizationally(unitId);
+    info.value = `${unit.name} 已建制解散`;
+    selectedUnitId.value = null;
+    onCancel();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "解散失败";
+    await handleStrategyApiError(message, message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleBeginUnitSmashBuyFood() {
+  const unitId = selectedUnitId.value;
+  const unit = selectedUnit.value;
+  if (!unitId || !unit) return;
+
+  try {
+    const { value } = await ElMessageBox.prompt(
+      "输入购粮上限单价（文/石）与数量（0=尽可能多）",
+      "市价购粮",
+      {
+        confirmButtonText: "购粮",
+        cancelButtonText: "取消",
+        inputPlaceholder: "例：120,500",
+        inputValue: "100,0",
+      },
+    );
+    const parts = String(value ?? "")
+      .split(/[,，]/)
+      .map((s) => s.trim());
+    const maxPrice = Number(parts[0]);
+    const quantity = parts[1] ? Number(parts[1]) : 0;
+    if (!Number.isFinite(maxPrice) || maxPrice <= 0) {
+      void notifyActionBlocked("购粮失败", "请输入有效的单价上限");
+      return;
+    }
+
+    loading.value = true;
+    error.value = "";
+    state.value = await unitSmashBuyFood(unitId, {
+      maxPriceMoneyPerGo: maxPrice,
+      quantityGo: Number.isFinite(quantity) ? quantity : 0,
+    });
+    info.value = `${unit.name} 已执行市价购粮`;
+    onCancel();
+  } catch (e) {
+    if (e === "cancel" || e === "close") return;
+    const message = e instanceof Error ? e.message : "购粮失败";
+    await handleStrategyApiError(message, message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleBeginUnitTradePolicy() {
+  const unitId = selectedUnitId.value;
+  const unit = selectedUnit.value;
+  if (!unitId || !unit) return;
+
+  try {
+    const { value } = await ElMessageBox.prompt(
+      "输入策略与限价：WaitBuyFood 或 WaitSellFood，格式「策略,限价,数量」",
+      "贸易策略",
+      {
+        confirmButtonText: "设定",
+        cancelButtonText: "取消",
+        inputPlaceholder: "WaitBuyFood,100,500",
+        inputValue: unit.tradePolicy && unit.tradePolicy !== "None"
+          ? `${unit.tradePolicy},${unit.tradeLimitPriceMoneyPerGo ?? 100},${unit.tradeQuantityGo ?? 0}`
+          : "WaitBuyFood,100,0",
+      },
+    );
+    const parts = String(value ?? "")
+      .split(/[,，]/)
+      .map((s) => s.trim());
+    const policy = parts[0] as "None" | "WaitBuyFood" | "WaitSellFood";
+    const limitPrice = Number(parts[1]);
+    const quantity = parts[2] ? Number(parts[2]) : 0;
+    if (!["None", "WaitBuyFood", "WaitSellFood"].includes(policy) || !Number.isFinite(limitPrice)) {
+      void notifyActionBlocked("设定失败", "策略须为 None / WaitBuyFood / WaitSellFood");
+      return;
+    }
+
+    loading.value = true;
+    error.value = "";
+    state.value = await setUnitTradePolicy(unitId, {
+      policy,
+      limitPriceMoneyPerGo: limitPrice,
+      quantityGo: Number.isFinite(quantity) ? quantity : 0,
+    });
+    info.value = `${unit.name} 贸易策略已更新`;
+    onCancel();
+  } catch (e) {
+    if (e === "cancel" || e === "close") return;
+    const message = e instanceof Error ? e.message : "设定失败";
+    await handleStrategyApiError(message, message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleBeginCreateShop() {
+  const sh = activeStrongholdForCommands.value ?? popupStronghold.value;
+  if (!sh) return;
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await createMerchantShop(sh.id);
+    info.value = `已在 ${sh.name} 创立商店`;
+    onCancel();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "创立商店失败";
     await handleStrategyApiError(message, message);
   } finally {
     loading.value = false;
@@ -3339,8 +3598,14 @@ watch(
             :can-espionage="canEspionageStronghold"
             :show-stronghold-directive="showStrongholdDirectiveButton"
             :stronghold-directive-only="strongholdDirectiveOnlyMenu"
-            :can-unit-move="menuPopupMode === 'command' && selectedUnitDirectlyControlled"
-            :can-unit-siege="menuPopupMode === 'command' && selectedUnitDirectlyControlled"
+            :can-unit-move="menuPopupMode === 'command' && selectedUnitDirectlyControlled && !selectedUnit?.inStronghold"
+            :can-unit-siege="menuPopupMode === 'command' && selectedUnitDirectlyControlled && !selectedUnit?.inStronghold"
+            :can-unit-enter-stronghold="menuPopupMode === 'command' && canUnitEnterStronghold"
+            :can-unit-exit-stronghold="menuPopupMode === 'command' && canUnitExitStronghold"
+            :can-unit-disband="menuPopupMode === 'command' && canUnitDisband"
+            :can-unit-trade="menuPopupMode === 'command' && canUnitTrade"
+            :can-create-shop="canCreateMerchantShop"
+            :create-shop-tooltip="createShopTooltip"
             :can-leave-stronghold="menuPopupMode === 'characterCommand' ? characterPopupProps.canLeaveStronghold : false"
             :can-character-move="menuPopupMode === 'characterCommand' ? characterPopupProps.canCharacterMove : false"
             :can-enter-stronghold="menuPopupMode === 'characterCommand' ? characterPopupProps.canEnterStronghold : false"
@@ -3368,6 +3633,12 @@ watch(
             @begin-recall-character="handleBeginRecallCharacter"
             @begin-leave-stronghold="handleBeginLeaveStronghold"
             @begin-enter-stronghold="handleBeginEnterStronghold"
+            @begin-unit-enter-stronghold="handleBeginUnitEnterStronghold"
+            @begin-unit-exit-stronghold="handleBeginUnitExitStronghold"
+            @begin-unit-disband="handleBeginUnitDisband"
+            @begin-unit-smash-buy-food="handleBeginUnitSmashBuyFood"
+            @begin-unit-trade-policy="handleBeginUnitTradePolicy"
+            @begin-create-shop="handleBeginCreateShop"
             @begin-visit="handleBeginVisit"
             @siege-assault="handleSiegeOrder('Assault')"
             @siege-encircle="handleSiegeOrder('Encircle')"

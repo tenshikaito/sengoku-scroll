@@ -59,19 +59,20 @@ public sealed class StrongholdCaptureHelper(
         if (!SiegeOrderRules.CanCaptureViaAssaultOrder(unit, stronghold, gameData))
             return false;
 
-        // 业务：据点格仍有敌方野战单位则不可占空城
+        // 业务：仍有敌方 InStronghold/地图守军则不可占空城
         if (gameData.Units.Values.Any(u =>
                 u.Id != unit.Id
                 && u.IsMilitary
                 && u.Soldier > 0
                 && u.ForceId == stronghold.ForceId
-                && u.Location.IsSameTile(stronghold.Location)))
+                && (u.InStronghold && u.LocationStrongholdId == stronghold.Id
+                    || u.Location.IsSameTile(stronghold.Location))))
         {
             return false;
         }
 
         // 业务：城内仍有驻军则不可踩格占城
-        if (StrongholdGarrisonRules.HasCityGarrison(stronghold))
+        if (StrongholdGarrisonRules.IsAnyGarrisonPresent(stronghold, gameData))
             return false;
 
         return CaptureStronghold(unit, stronghold, stronghold.ForceId, gameData);

@@ -153,14 +153,15 @@ public sealed class StrategySimulationHost : IDisposable
         }
     }
 
-    /// <summary>从当主居城出征：扣减城内兵并在据点格生成部队。</summary>
+    /// <summary>从当主居城组建部队；默认在城中，可选出城。</summary>
     public GameResult<StrategyWorldStateDto> DeployFromStronghold(
         int strongholdId,
         string unitName,
         int commanderId,
         IReadOnlyList<StrategyDeployCompositionEntry> composition,
         int? food = null,
-        int? money = null)
+        int? money = null,
+        bool deployToMap = false)
     {
         lock (sync)
         {
@@ -182,18 +183,154 @@ public sealed class StrategySimulationHost : IDisposable
                 commanderId,
                 composition,
                 food,
-                money);
+                money,
+                deployToMap);
             if (!result.IsSuccess)
                 return result.Error!;
 
             simulation.MovementTrace.Log(
                 "StrongholdDeploy",
-                "居城出征",
+                deployToMap ? "居城出城" : "居城组建",
                 result.Value!.Id,
                 stronghold.Location,
                 stronghold.Location,
-                $"stronghold={strongholdId} commander={commanderId} soldiers={result.Value.Soldier}");
+                $"stronghold={strongholdId} commander={commanderId} soldiers={result.Value.Soldier} inStronghold={result.Value.InStronghold}");
 
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>单位入城（InStronghold）。</summary>
+    public GameResult<StrategyWorldStateDto> EnterUnitStronghold(int unitId, int strongholdId)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            var result = UnitStrongholdPresenceActions.EnterStronghold(
+                simulation.GameContext.GameWorldContext,
+                unit,
+                stronghold,
+                gameData,
+                simulation.ScenarioMeta);
+            return result.IsSuccess ? BuildStateResult() : result.Error!;
+        }
+    }
+
+    /// <summary>单位出城。</summary>
+    public GameResult<StrategyWorldStateDto> ExitUnitStronghold(int unitId, int strongholdId)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            var result = UnitStrongholdPresenceActions.ExitStronghold(
+                simulation.GameContext.GameWorldContext,
+                unit,
+                stronghold,
+                gameData);
+            return result.IsSuccess ? BuildStateResult() : result.Error!;
+        }
+    }
+
+    /// <summary>建制解散（仅 Home 据点）。</summary>
+    public GameResult<StrategyWorldStateDto> DisbandUnitOrganizationally(int unitId)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+
+            var result = UnitStrongholdPresenceActions.OrganizationalDisband(
+                simulation.GameContext.GameWorldContext,
+                unit,
+                gameData);
+            return result.IsSuccess ? BuildStateResult() : result.Error!;
+        }
+    }
+
+    /// <summary>创立商店（无需许可；商业值≥20，每商人组织每城 1 店）。</summary>
+    public GameResult<StrategyWorldStateDto> CreateMerchantShop(int strongholdId, string? houseName = null)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            var result = StrongholdShopActions.CreateShop(
+                gameData,
+                stronghold,
+                simulation.ScenarioMeta.PlayerForceId,
+                houseName);
+            return result.IsSuccess ? BuildStateResult() : result.Error!;
+        }
+    }
+
+    /// <summary>城内 Unit 市价买入粮食（砸单）。</summary>
+    public GameResult<StrategyWorldStateDto> UnitSmashBuyFood(
+        int unitId,
+        int maxPriceMoneyPerGo,
+        int quantityGo = 0)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+
+            if (!gameData.Strongholds.TryGetValue(unit.LocationStrongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            var ledger = simulation.Services.GetRequiredService<MerchantTaxLedger>();
+            var bought = UnitTradeActions.SmashBuyFood(
+                unit, stronghold, gameData, ledger, maxPriceMoneyPerGo, quantityGo);
+            return bought > 0 ? BuildStateResult() : GameError.DataNotFound;
+        }
+    }
+
+    /// <summary>设置 Unit 贸易策略（WaitBuyFood / WaitSellFood / None）。</summary>
+    public GameResult<StrategyWorldStateDto> SetUnitTradePolicy(
+        int unitId,
+        UnitTradePolicy policy,
+        int limitPriceMoneyPerGo,
+        int quantityGo = 0)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            if (!simulation.World.GameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+
+            unit.TradePolicy = policy;
+            unit.TradeLimitPriceMoneyPerGo = Math.Max(0, limitPriceMoneyPerGo);
+            unit.TradeQuantityGo = Math.Max(0, quantityGo);
             return BuildStateResult();
         }
     }

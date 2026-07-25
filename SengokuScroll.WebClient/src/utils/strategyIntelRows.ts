@@ -49,12 +49,15 @@ import {
 } from "@/utils/strategyIntelDisplay";
 import { formatStrongholdCityGenerals } from "@/utils/strategyIntelSystemData";
 import { governancePriorityLabel } from "@/utils/strategyStrongholdLabels";
+import type { IntelNavigateTarget } from "@/utils/strategyIntelNavigation";
 
 export interface IntelFieldRow {
   label: string;
   value: string;
   /** 开发阶段字段（描述列表标题格样式区分）。 */
   dev?: boolean;
+  /** 点击跳转到其他情报实体。 */
+  link?: IntelNavigateTarget;
 }
 
 function battlefieldKindLabel(kind: string | undefined | null): string {
@@ -322,14 +325,29 @@ function strongholdCoreIntelRows(
 
   const rows: IntelFieldRow[] = [
     { label: "名称", value: stronghold.name },
-    { label: "势力", value: forceName(worldState, stronghold.forceId) },
+    {
+      label: "势力",
+      value: forceName(worldState, stronghold.forceId),
+      link:
+        stronghold.forceId > 0
+          ? { kind: "force", entityId: stronghold.forceId }
+          : undefined,
+    },
     {
       label: "领主",
       value: obscurePersonnel ? UNKNOWN_INTEL : stronghold.lordName,
+      link:
+        !obscurePersonnel && stronghold.lordId > 0
+          ? { kind: "person", entityId: stronghold.lordId }
+          : undefined,
     },
     {
       label: "代官",
       value: obscurePersonnel ? UNKNOWN_INTEL : (stronghold.mayorName?.trim() || "—"),
+      link:
+        !obscurePersonnel && stronghold.mayorId != null && stronghold.mayorId > 0
+          ? { kind: "person", entityId: stronghold.mayorId }
+          : undefined,
     },
     {
       label: "方针",

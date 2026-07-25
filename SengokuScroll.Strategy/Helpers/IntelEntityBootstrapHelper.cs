@@ -53,9 +53,6 @@ public static class IntelEntityBootstrapHelper
             }
 
             ForceIntelHelper.SyncMilitaryCaches(force, gameData);
-            var residenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(force.Id, gameData, meta);
-            gameData.Strongholds.TryGetValue(residenceId, out var residence);
-            TechnologyIntelHelper.SyncForceTechnologiesFromResidence(force, residence, gameData);
         }
 
         foreach (var stronghold in gameData.Strongholds.Values)

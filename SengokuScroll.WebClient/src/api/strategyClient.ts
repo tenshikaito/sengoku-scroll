@@ -353,6 +353,93 @@ export const deployFromStronghold = (
     }
   );
 
+export const enterUnitStronghold = (unitId: number, strongholdId: number) =>
+  request(
+    "POST",
+    `/units/${unitId}/enter-stronghold/${strongholdId}`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/enter-stronghold/${strongholdId}`, {}).then(
+        normalizeStrategyWorldState,
+      ),
+    () => {
+      throw new Error("Mock 模式不支持单位入城");
+    },
+  );
+
+export const exitUnitStronghold = (unitId: number, strongholdId: number) =>
+  request(
+    "POST",
+    `/units/${unitId}/exit-stronghold/${strongholdId}`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/exit-stronghold/${strongholdId}`, {}).then(
+        normalizeStrategyWorldState,
+      ),
+    () => {
+      throw new Error("Mock 模式不支持单位出城");
+    },
+  );
+
+export const disbandUnitOrganizationally = (unitId: number) =>
+  request(
+    "POST",
+    `/units/${unitId}/disband`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/disband`, {}).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持建制解散");
+    },
+  );
+
+export const createMerchantShop = (strongholdId: number, houseName?: string) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/shops`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/shops`, { houseName }).then(
+        normalizeStrategyWorldState,
+      ),
+    () => {
+      throw new Error("Mock 模式不支持创立商店");
+    },
+  );
+
+export const unitSmashBuyFood = (
+  unitId: number,
+  payload: { maxPriceMoneyPerGo: number; quantityGo?: number },
+) =>
+  request(
+    "POST",
+    `/units/${unitId}/trade/smash-buy-food`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/trade/smash-buy-food`, {
+        maxPriceMoneyPerGo: payload.maxPriceMoneyPerGo,
+        quantityGo: payload.quantityGo ?? 0,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持贸易购粮");
+    },
+  );
+
+export type UnitTradePolicyValue = "None" | "WaitBuyFood" | "WaitSellFood";
+
+export const setUnitTradePolicy = (
+  unitId: number,
+  payload: { policy: UnitTradePolicyValue; limitPriceMoneyPerGo: number; quantityGo?: number },
+) =>
+  request(
+    "POST",
+    `/units/${unitId}/trade/policy`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/trade/policy`, {
+        policy: payload.policy,
+        limitPriceMoneyPerGo: payload.limitPriceMoneyPerGo,
+        quantityGo: payload.quantityGo ?? 0,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持贸易策略");
+    },
+  );
+
 export const recordEspionageIntel = (payload: {
   targetKind: "Stronghold" | "Unit";
   targetId: number;

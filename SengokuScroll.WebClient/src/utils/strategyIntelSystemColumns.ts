@@ -1,4 +1,5 @@
 /** 情报系统列表列定义（8 列为原则，非硬性上限）。 */
+import type { IntelColumnLink } from "@/utils/strategyIntelNavigation";
 import { MASTER_DATA_COLUMN_PRESETS } from "@/utils/strategyMasterDataColumns";
 import {
   HOBBY_CATEGORY_KEYS,
@@ -24,6 +25,8 @@ export interface IntelTableColumnDef {
   lowRedStat?: boolean;
   /** 从行数据读取 tone 字段，用于单元格着色（如外交状态列）。 */
   toneField?: string;
+  /** 单元格跳转目标（缺省时按 prop 名匹配通用规则）。 */
+  link?: IntelColumnLink;
 }
 
 export type ForceListPreset = "status" | "military";
@@ -257,6 +260,25 @@ export function cityActorTableColumns(
   ];
 }
 
+/** 势力据点 Tab · 组织 Actor 汇总表（非官府；名称后接据点）。 */
+export function forceOrgActorTableColumns(
+  kind: "Merchant" | "Religion",
+): IntelTableColumnDef[] {
+  const labels = organizationRoleLabels(kind);
+  return [
+    { prop: "nameWithStronghold", label: "名称", minWidth: 140 },
+    { prop: "primaryLeaderName", label: labels.primary, minWidth: 80 },
+    { prop: "secondaryLeaderName", label: labels.secondary, minWidth: 80 },
+    { prop: "branchLabel", label: "分支", width: 52, align: "center" },
+    { prop: "hostForceName", label: "势力", minWidth: 80 },
+    { prop: "hostLordName", label: "领主", minWidth: 80 },
+    { prop: "money", label: "金钱", width: 88, align: "right" },
+    { prop: "food", label: "粮食", width: 88, align: "right" },
+    { prop: "luxuryGoods", label: "奢侈品", width: 72, align: "right" },
+    { prop: "characterCount", label: "人数", width: 52, align: "center" },
+  ];
+}
+
 export const STRONGHOLD_FACTION_PRODUCTION_COLUMNS: IntelTableColumnDef[] = [
   { prop: "content", label: "生产内容", minWidth: 96 },
   { prop: "startTime", label: "开始", width: 72, align: "center" },
@@ -415,16 +437,17 @@ export const STRONGHOLD_FACTION_PERSON_COLUMNS: IntelTableColumnDef[] =
   PERSON_LIST_COLUMN_PRESETS.status;
 
 /** 势力详情 · 据点表。 */
-export const FORCE_STRONGHOLD_COLUMNS: IntelTableColumnDef[] = pickColumns(STRONGHOLD_ALL, [
-  "name",
-  "forceName",
-  "lordName",
-  "category",
-  "scale",
-  "population",
-  "garrisonTotal",
-  "isLordResidence",
-]);
+export const FORCE_STRONGHOLD_COLUMNS: IntelTableColumnDef[] = [
+  ...pickColumns(STRONGHOLD_ALL, ["name", "forceName"]),
+  { prop: "lordName", labelKey: "ui.intel.column.appointedLord", minWidth: 80 },
+  ...pickColumns(STRONGHOLD_ALL, [
+    "category",
+    "scale",
+    "population",
+    "garrisonTotal",
+    "isLordResidence",
+  ]),
+];
 
 /** 势力详情 · 现任人物表。 */
 export const FORCE_PERSON_COLUMNS: IntelTableColumnDef[] = pickColumns(PERSON_ALL, [
@@ -439,7 +462,7 @@ export const FORCE_PERSON_COLUMNS: IntelTableColumnDef[] = pickColumns(PERSON_AL
 ]);
 
 export const DIPLOMACY_BRIEF_COLUMNS: IntelTableColumnDef[] = [
-  { prop: "forceName", label: "势力", minWidth: 96 },
+  { prop: "forceName", label: "势力", minWidth: 96, link: { kind: "force", idField: "forceId" } },
   { prop: "lordName", label: "当主", minWidth: 80 },
   { prop: "relation", label: "关系", width: 56, align: "center" },
   { prop: "trust", label: "信赖", width: 56, align: "center" },

@@ -152,7 +152,43 @@ public class StrategyController(
                 })
                 .ToList(),
             request.Food,
-            request.Money));
+            request.Money,
+            request.DeployToMap));
+
+    /// <summary>单位入城。</summary>
+    [HttpPost("units/{unitId:int}/enter-stronghold/{strongholdId:int}")]
+    public IActionResult EnterUnitStronghold(int unitId, int strongholdId)
+        => ToActionResult(simulationHost.EnterUnitStronghold(unitId, strongholdId));
+
+    /// <summary>单位出城。</summary>
+    [HttpPost("units/{unitId:int}/exit-stronghold/{strongholdId:int}")]
+    public IActionResult ExitUnitStronghold(int unitId, int strongholdId)
+        => ToActionResult(simulationHost.ExitUnitStronghold(unitId, strongholdId));
+
+    /// <summary>建制解散（仅 Home 据点）。</summary>
+    [HttpPost("units/{unitId:int}/disband")]
+    public IActionResult DisbandUnitOrganizationally(int unitId)
+        => ToActionResult(simulationHost.DisbandUnitOrganizationally(unitId));
+
+    /// <summary>创立商店。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/shops")]
+    public IActionResult CreateMerchantShop(int strongholdId, [FromBody] CreateMerchantShopRequest? request)
+        => ToActionResult(simulationHost.CreateMerchantShop(strongholdId, request?.HouseName));
+
+    /// <summary>Unit 市价购粮。</summary>
+    [HttpPost("units/{unitId:int}/trade/smash-buy-food")]
+    public IActionResult UnitSmashBuyFood(int unitId, [FromBody] UnitSmashBuyFoodRequest request)
+        => ToActionResult(simulationHost.UnitSmashBuyFood(
+            unitId, request.MaxPriceMoneyPerGo, request.QuantityGo));
+
+    /// <summary>设置 Unit 贸易策略。</summary>
+    [HttpPost("units/{unitId:int}/trade/policy")]
+    public IActionResult SetUnitTradePolicy(int unitId, [FromBody] SetUnitTradePolicyRequest request)
+        => ToActionResult(simulationHost.SetUnitTradePolicy(
+            unitId,
+            Enum.Parse<UnitTradePolicy>(request.Policy, ignoreCase: true),
+            request.LimitPriceMoneyPerGo,
+            request.QuantityGo));
 
     /// <summary>推进 1 天。</summary>
     [HttpPost("advance-day")]

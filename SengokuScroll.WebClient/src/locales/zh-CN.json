@@ -73,6 +73,7 @@
   "enum.message.category.SiegeOrderStarted": "围城开始",
   "enum.message.category.UnitDestroyed": "部队溃灭",
   "enum.message.category.UnitFledToStronghold": "逃入据点",
+  "enum.message.category.UnitForcedDisband": "建制崩溃",
   "enum.message.category.BattleResolved": "战斗",
   "enum.message.category.BattleLog": "战斗过程",
   "enum.message.category.MessengerArrived": "信使",
@@ -81,6 +82,7 @@
   "enum.message.category.LordTributeDispatched": "贡纳运输",
   "enum.message.category.LordTributeArrived": "贡纳抵达",
   "enum.message.category.SupplyConvoyArrived": "补给抵达",
+  "enum.message.category.TariffTransitCharged": "过境关税",
 
   "enum.message.group.policy": "方针",
   "enum.message.group.battle": "战报",

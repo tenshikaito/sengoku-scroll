@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import type { StrategyWorldState } from "@/api/strategy";
 import StrategyIntelBasicDescriptions from "../StrategyIntelBasicDescriptions.vue";
 import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
+import type { IntelNavigateRequest, IntelNavigateTarget } from "@/utils/strategyIntelNavigation";
 import { resolvePlayerLordCharacterId } from "@/utils/strategyPlayerCharacter";
 import StrategyIntelPersonSkills from "../StrategyIntelPersonSkills.vue";
 import StrategyIntelPersonStats from "../StrategyIntelPersonStats.vue";
@@ -42,6 +43,12 @@ const props = defineProps<{
   detailOnly?: boolean;
   /** 调试模式：显示全部人物与隐藏属性。 */
   intelDebugMode?: boolean;
+  /** 对话框内跨 Tab 跳转请求。 */
+  navigateRequest?: IntelNavigateRequest | null;
+}>();
+
+const emit = defineEmits<{
+  navigate: [target: IntelNavigateTarget];
 }>();
 
 const listPreset = ref<PersonListPreset>("status");
@@ -159,6 +166,12 @@ const introText = computed(() =>
     : "请在上方列表选择人物。"
 );
 
+const excludeEntity = computed(() =>
+  selectedPersonId.value != null
+    ? { kind: "person" as const, entityId: selectedPersonId.value }
+    : null,
+);
+
 function defaultPersonId(): number | null {
   const rows = personRows.value;
   const lordName = props.worldState.lord.name?.trim();
@@ -211,6 +224,10 @@ watch(
   { immediate: true }
 );
 
+function onIntelNavigate(target: IntelNavigateTarget) {
+  emit("navigate", target);
+}
+
 function onSelectRow(row: Record<string, unknown> | null) {
   if (!row) {
     syncDefaultSelection();
@@ -218,6 +235,14 @@ function onSelectRow(row: Record<string, unknown> | null) {
   }
   selectedPersonId.value = Number(row.id);
 }
+watch(
+  () => props.navigateRequest,
+  (request) => {
+    if (!request || request.kind !== "person") return;
+    selectedPersonId.value = request.entityId;
+    detailTab.value = "basic";
+  },
+);
 </script>
 
 <template>
@@ -252,6 +277,7 @@ function onSelectRow(row: Record<string, unknown> | null) {
         :current-id="selectedPersonId"
         empty-text="暂无人物数据"
         @current-change="onSelectRow"
+        @navigate="onIntelNavigate"
       />
     </template>
 
@@ -269,7 +295,12 @@ function onSelectRow(row: Record<string, unknown> | null) {
       </el-tabs>
 
       <div v-if="detailTab === 'basic'" class="detail-body">
-        <StrategyIntelBasicDescriptions v-if="basicRows.length" :rows="basicRows" />
+        <StrategyIntelBasicDescriptions
+          v-if="basicRows.length"
+          :rows="basicRows"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
         <p v-else class="placeholder">请选择人物。</p>
       </div>
 
@@ -288,6 +319,8 @@ function onSelectRow(row: Record<string, unknown> | null) {
           :highlight-current="false"
           empty-text="暂无任务"
           :max-height="220"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
         />
       </div>
 
@@ -298,11 +331,17 @@ function onSelectRow(row: Record<string, unknown> | null) {
           :highlight-current="false"
           empty-text="暂无特殊人际关系"
           :max-height="220"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
         />
       </div>
 
       <div v-else-if="detailTab === 'effects'" class="detail-body">
-        <StrategyIntelBasicDescriptions :rows="effectsRows" />
+        <StrategyIntelBasicDescriptions
+          :rows="effectsRows"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
       </div>
 
       <div v-else-if="detailTab === 'viewOfCharacter'" class="detail-body">

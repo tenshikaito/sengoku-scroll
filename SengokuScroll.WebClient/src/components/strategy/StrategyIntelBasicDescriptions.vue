@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { IntelFieldRow } from "@/utils/strategyIntelRows";
+import {
+  shouldExcludeIntelLink,
+  type IntelExcludeEntity,
+  type IntelNavigateTarget,
+} from "@/utils/strategyIntelNavigation";
 
 const props = defineProps<{
   rows: IntelFieldRow[];
@@ -8,6 +13,12 @@ const props = defineProps<{
   column?: number;
   /** 开发字段标题格样式：文字更浅 / 背景更浅。 */
   devLabelStyle?: "text" | "background";
+  /** 不为当前正在查看的实体生成链接。 */
+  excludeEntity?: IntelExcludeEntity | null;
+}>();
+
+const emit = defineEmits<{
+  navigate: [target: IntelNavigateTarget];
 }>();
 
 const DESCRIPTION_COLUMNS = 3;
@@ -43,6 +54,18 @@ function reorderForColumnMajor(rows: IntelFieldRow[], cols: number): IntelFieldR
 const displayRows = computed(() =>
   reorderForColumnMajor(props.rows, descriptionColumns.value)
 );
+
+function fieldNavigateTarget(row: IntelFieldRow): IntelNavigateTarget | null {
+  if (!row.link) return null;
+  if (shouldExcludeIntelLink(row.link, props.excludeEntity)) return null;
+  return row.link;
+}
+
+function onFieldLinkClick(row: IntelFieldRow) {
+  const target = fieldNavigateTarget(row);
+  if (!target) return;
+  emit("navigate", target);
+}
 </script>
 
 <template>
@@ -62,7 +85,15 @@ const displayRows = computed(() =>
       :class-name="row.dev ? 'is-dev-field' : ''"
       :label-class-name="row.dev ? 'is-dev-field' : ''"
     >
-      {{ row.value }}
+      <button
+        v-if="fieldNavigateTarget(row)"
+        type="button"
+        class="intel-cell-link"
+        @click="onFieldLinkClick(row)"
+      >
+        {{ row.value }}
+      </button>
+      <template v-else>{{ row.value }}</template>
     </el-descriptions-item>
   </el-descriptions>
 </template>
@@ -88,5 +119,26 @@ const displayRows = computed(() =>
 
 .basic-descriptions--dev-text :deep(.el-descriptions__label.is-dev-field) {
   color: #94a3b8;
+}
+
+.intel-cell-link {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.intel-cell-link:hover {
+  color: #1d4ed8;
+}
+
+.intel-cell-link:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
 }
 </style>

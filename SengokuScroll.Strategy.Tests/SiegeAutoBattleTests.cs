@@ -102,6 +102,8 @@ public class SiegeAutoBattleTests
         attacker.Soldier = 500;
 
         var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(10, 2, castle);
+        stronghold.ForceActor.Soldier = 0;
+        stronghold.ForceActor.Morale = 0;
         ctx.World.GameData.Units[1] = attacker;
         ctx.World.GameData.Strongholds[10] = stronghold;
 

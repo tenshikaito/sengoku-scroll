@@ -22,6 +22,12 @@ export {
   mergeUnits,
   splitUnit,
   deployFromStronghold,
+  enterUnitStronghold,
+  exitUnitStronghold,
+  disbandUnitOrganizationally,
+  createMerchantShop,
+  unitSmashBuyFood,
+  setUnitTradePolicy,
   recordEspionageIntel,
   setStrongholdTaxRates,
   setStrongholdGovernancePriority,
@@ -52,7 +58,7 @@ export {
   loadStrategyFromSlot,
 } from "./strategyClient";
 
-export type { StrategyMovementTraceEntry, StrategyAiDecisionTraceEntry } from "./strategyClient";
+export type { StrategyMovementTraceEntry, StrategyAiDecisionTraceEntry, UnitTradePolicyValue } from "./strategyClient";
 export type { StrategySaveSlotSummary } from "./strategyTypes";
 export type { StrategyPathPreview, StrategyBattlePreview, StrategyBattleResult, StrategyBattleLogEntry, StrategyInstantBattleResponse, StrategyPolicyChangeResponse, StrategyAdvanceDayResponse, StrategyLordState, StrategyEvent, StrategyEconomySettlementDetail, StrategyEconomyMonthlyDetail, MapPoint } from "./strategyTypes";
 

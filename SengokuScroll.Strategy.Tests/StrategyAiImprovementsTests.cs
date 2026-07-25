@@ -180,7 +180,7 @@ public class StrategyAiImprovementsTests
     }
 
     [Fact]
-    public void TryDissolveGarrisonWhenSafe_AbsorbsSoldiersBackIntoCity()
+    public void TryDissolveGarrisonWhenSafe_NoLongerDissolvesInStrongholdGarrison()
     {
         var castle = new Point3(5, 4);
 
@@ -189,23 +189,22 @@ public class StrategyAiImprovementsTests
         var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(10, 1, castle);
         var garrison = StrategyTestWorldBuilder.CreateTestUnit(11, 1, castle);
         garrison.Soldier = 800;
+        garrison.InStronghold = true;
+        garrison.LocationStrongholdId = stronghold.Id;
+        garrison.HomeStrongholdId = stronghold.Id;
         garrison.Directive = UnitDirective.Support;
         garrison.ActionTarget.StrongholdId = stronghold.Id;
 
         world.GameData.Units[11] = garrison;
         world.GameData.Strongholds[10] = stronghold;
-        MapLocationActions.RegisterUnit(world, garrison);
         MapLocationActions.RegisterStronghold(world, stronghold);
 
         using var ctx = StrategyTestWorldFactory.CreateFromWorld(world);
         var worldContext = ctx.Services.GetRequiredService<IGameWorldContext>();
 
-        Assert.True(GarrisonBehaviorRules.TryDissolveGarrisonWhenSafe(
+        Assert.False(GarrisonBehaviorRules.TryDissolveGarrisonWhenSafe(
             worldContext, stronghold, ctx.World.GameData));
-
-        Assert.Null(StrongholdGarrisonRules.FindGarrisonUnit(stronghold, ctx.World.GameData));
-        Assert.Equal(800, stronghold.ForceActor.Soldier);
-        Assert.False(ctx.World.GameData.Units.ContainsKey(11));
+        Assert.NotNull(StrongholdGarrisonRules.FindGarrisonUnit(stronghold, ctx.World.GameData));
     }
 
     [Fact]

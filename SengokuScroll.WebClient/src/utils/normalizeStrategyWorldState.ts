@@ -198,6 +198,15 @@ function normalizeUnit(raw: unknown, lord: StrategyLordState): StrategyUnitState
       ? (pick(u, "inTransitSupplies", "InTransitSupplies") as unknown[]).map(normalizeInTransitSupply)
       : [],
     mapVisible: pick(u, "mapVisible", "MapVisible") === false ? false : true,
+    inStronghold: pick(u, "inStronghold", "InStronghold") === true,
+    homeStrongholdId: safeInt(pick(u, "homeStrongholdId", "HomeStrongholdId"), 0) || undefined,
+    locationStrongholdId:
+      safeInt(pick(u, "locationStrongholdId", "LocationStrongholdId"), 0) || undefined,
+    unitKind: optionalString(pick(u, "unitKind", "UnitKind")) ?? undefined,
+    tradePolicy: optionalString(pick(u, "tradePolicy", "TradePolicy")) ?? undefined,
+    tradeLimitPriceMoneyPerGo:
+      safeInt(pick(u, "tradeLimitPriceMoneyPerGo", "TradeLimitPriceMoneyPerGo"), 0) || undefined,
+    tradeQuantityGo: safeInt(pick(u, "tradeQuantityGo", "TradeQuantityGo"), 0) || undefined,
     soldiersDisplay: optionalString(pick(u, "soldiersDisplay", "SoldiersDisplay")),
     moraleBand: optionalString(pick(u, "moraleBand", "MoraleBand")),
     trainingBand: optionalString(pick(u, "trainingBand", "TrainingBand")),
@@ -219,6 +228,10 @@ function normalizeRosterUnit(raw: unknown) {
     supplyStatus: requiredString(pick(u, "supplyStatus", "SupplyStatus"), "Sufficient"),
     commanderName: optionalString(pick(u, "commanderName", "CommanderName")),
     offMap: pick(u, "offMap", "OffMap") !== false,
+    inStronghold: pick(u, "inStronghold", "InStronghold") === true,
+    locationStrongholdId:
+      safeInt(pick(u, "locationStrongholdId", "LocationStrongholdId"), 0) || undefined,
+    homeStrongholdId: safeInt(pick(u, "homeStrongholdId", "HomeStrongholdId"), 0) || undefined,
   };
 }
 

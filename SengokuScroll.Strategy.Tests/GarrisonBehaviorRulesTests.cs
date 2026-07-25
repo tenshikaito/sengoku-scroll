@@ -11,7 +11,7 @@ using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Tests;
 
-/// <summary>守军威胁占格、封锁与抽象出击。</summary>
+/// <summary>守军 InStronghold、封锁与抽象出击。</summary>
 public class GarrisonBehaviorRulesTests
 {
     [Fact]
@@ -46,7 +46,7 @@ public class GarrisonBehaviorRulesTests
 
         Assert.True(GarrisonBehaviorRules.HasFieldBattleProximityThreat(stronghold, ctx.World.GameData));
         Assert.True(GarrisonBehaviorRules.ShouldHoldInCityAwaitingRelief(stronghold, ctx.World.GameData, meta));
-        Assert.True(GarrisonBehaviorRules.TryPrepareGarrisonOnThreat(
+        Assert.False(GarrisonBehaviorRules.TryPrepareGarrisonOnThreat(
             worldContext, stronghold, ctx.World.GameData, meta));
         Assert.Null(StrongholdGarrisonRules.FindGarrisonUnit(stronghold, ctx.World.GameData));
         Assert.Equal(1200, stronghold.ForceActor.Soldier);
@@ -54,10 +54,9 @@ public class GarrisonBehaviorRulesTests
     }
 
     [Fact]
-    public void ThreatApproaching_WhenStrongEnough_MaterializesGarrisonOnStrongholdTile()
+    public void SiegeTrigger_WhenStrongEnough_AutoComposesInStrongholdUnit()
     {
         var castle = new Point3(5, 4);
-        var approachFrom = new Point3(3, 4);
 
         var world = StrategyTestWorldBuilder.BuildMinimalWorld();
         world.GameData.Units.Remove(1);
@@ -69,34 +68,25 @@ public class GarrisonBehaviorRulesTests
         stronghold.ForceActor.Soldier = 2000;
         stronghold.ForceActor.Morale = 70;
 
-        var enemy = StrategyTestWorldBuilder.CreateTestUnit(2, 2, approachFrom);
-        enemy.Soldier = 1200;
-        enemy.Directive = UnitDirective.Move;
-
-        world.GameData.Forces[2] = forceB;
-        world.GameData.Units[2] = enemy;
         world.GameData.Strongholds[10] = stronghold;
-        MapLocationActions.RegisterUnit(world, enemy);
         MapLocationActions.RegisterStronghold(world, stronghold);
 
         using var ctx = StrategyTestWorldFactory.CreateFromWorld(world);
         var worldContext = ctx.Services.GetRequiredService<IGameWorldContext>();
         var meta = ctx.Services.GetRequiredService<StrategyScenarioMeta>();
 
-        Assert.False(GarrisonBehaviorRules.ShouldHoldInCityAwaitingRelief(stronghold, ctx.World.GameData, meta));
-        Assert.True(GarrisonBehaviorRules.TryPrepareGarrisonOnThreat(
-            worldContext, stronghold, ctx.World.GameData, meta));
+        var garrison = StrongholdGarrisonActions.EnsureDefenderUnit(
+            worldContext, stronghold, ctx.World.GameData, meta);
 
-        var garrison = StrongholdGarrisonRules.FindGarrisonUnit(stronghold, ctx.World.GameData);
         Assert.NotNull(garrison);
-        Assert.Equal(UnitDirective.Support, garrison!.Directive);
-        Assert.True(garrison.Location.IsSameTile(castle));
-        Assert.Equal(0, stronghold.ForceActor.Soldier);
+        Assert.True(garrison!.InStronghold);
+        Assert.Equal(stronghold.Id, garrison.LocationStrongholdId);
         Assert.Equal(2000, garrison.Soldier);
+        Assert.Equal(0, stronghold.ForceActor.Soldier);
     }
 
     [Fact]
-    public void MaterializedGarrison_WhenOddsTurnBad_RetreatsToCity()
+    public void MapGarrison_WhenOddsTurnBad_EntersStronghold()
     {
         var castle = new Point3(5, 4);
         var approachFrom = new Point3(3, 4);
@@ -112,6 +102,7 @@ public class GarrisonBehaviorRulesTests
         garrison.Soldier = 1200;
         garrison.Directive = UnitDirective.Support;
         garrison.Stance = UnitStance.Hold;
+        garrison.HomeStrongholdId = stronghold.Id;
         garrison.ActionTarget.StrongholdId = stronghold.Id;
 
         var enemy = StrategyTestWorldBuilder.CreateTestUnit(2, 2, approachFrom);
@@ -133,12 +124,14 @@ public class GarrisonBehaviorRulesTests
         Assert.True(GarrisonBehaviorRules.TryRetreatGarrisonToCityWhenOutnumbered(
             worldContext, stronghold, ctx.World.GameData, meta));
 
-        Assert.Null(StrongholdGarrisonRules.FindGarrisonUnit(stronghold, ctx.World.GameData));
-        Assert.Equal(1200, stronghold.ForceActor.Soldier);
+        var inCity = StrongholdGarrisonRules.FindGarrisonUnit(stronghold, ctx.World.GameData);
+        Assert.NotNull(inCity);
+        Assert.True(inCity!.InStronghold);
+        Assert.Equal(1200, inCity.Soldier);
     }
 
     [Fact]
-    public void EnemyOnStrongholdTile_WhenOutnumbered_HoldsInCity_NoMaterialize()
+    public void EnemyOnStrongholdTile_WhenOutnumbered_AutoComposesInStrongholdOnSiege()
     {
         var castle = new Point3(5, 4);
 
@@ -167,12 +160,14 @@ public class GarrisonBehaviorRulesTests
         var meta = ctx.Services.GetRequiredService<StrategyScenarioMeta>();
 
         Assert.True(GarrisonBehaviorRules.IsStrongholdBlockaded(stronghold, ctx.World.GameData));
-        Assert.False(GarrisonBehaviorRules.CanPreemptivelyMaterializeGarrisonOnTile(stronghold, ctx.World.GameData));
-        Assert.False(GarrisonBehaviorRules.CanMaterializeGarrisonOnTile(stronghold, ctx.World.GameData, meta));
         Assert.True(GarrisonBehaviorRules.ShouldHoldInCityAwaitingRelief(stronghold, ctx.World.GameData, meta));
 
-        Assert.Null(StrongholdGarrisonActions.EnsureDefenderUnit(worldContext, stronghold, ctx.World.GameData, meta));
-        Assert.Equal(1500, stronghold.ForceActor.Soldier);
+        var defender = StrongholdGarrisonActions.EnsureDefenderUnit(
+            worldContext, stronghold, ctx.World.GameData, meta);
+        Assert.NotNull(defender);
+        Assert.True(defender!.InStronghold);
+        Assert.Equal(1500, defender.Soldier);
+        Assert.Equal(0, stronghold.ForceActor.Soldier);
     }
 
     [Fact]

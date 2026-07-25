@@ -165,6 +165,34 @@ public sealed class DeployFromStrongholdRequest
     public int? Food { get; init; }
 
     public int? Money { get; init; }
+
+    /// <summary>false=组建后在城中（默认）；true=组建后立即出城占格。</summary>
+    public bool DeployToMap { get; init; }
+}
+
+/// <summary>创立商店（无需许可）。</summary>
+public sealed class CreateMerchantShopRequest
+{
+    public string? HouseName { get; init; }
+}
+
+/// <summary>Unit 市价购粮（砸单）。</summary>
+public sealed class UnitSmashBuyFoodRequest
+{
+    public required int MaxPriceMoneyPerGo { get; init; }
+
+    public int QuantityGo { get; init; }
+}
+
+/// <summary>设置 Unit 贸易策略。</summary>
+public sealed class SetUnitTradePolicyRequest
+{
+    /** None | WaitBuyFood | WaitSellFood */
+    public required string Policy { get; init; }
+
+    public required int LimitPriceMoneyPerGo { get; init; }
+
+    public int QuantityGo { get; init; }
 }
 
 /// <summary>登记谍报成果（开发/任务用）。</summary>

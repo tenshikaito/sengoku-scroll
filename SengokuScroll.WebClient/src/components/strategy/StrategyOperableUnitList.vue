@@ -5,7 +5,11 @@ import { getForceColorCss } from "./forceColors";
 import { formatSoldiers } from "@/utils/strategyDisplayUnits";
 import { directiveLabel } from "@/utils/unitDirective";
 import { unitStatusLabel } from "@/utils/strategyUnitLabels";
-import { listOperableUnits } from "@/utils/strategyOperableUnits";
+import {
+  listOperableUnits,
+  resolveOperableUnitStrongholdName,
+  type OperableUnitRef,
+} from "@/utils/strategyOperableUnits";
 
 const props = defineProps<{
   worldState: StrategyWorldState;
@@ -21,25 +25,36 @@ const entries = computed(() => listOperableUnits(props.worldState));
 function onSelect(unitId: number, event: MouseEvent) {
   emit("select", unitId, event);
 }
+
+function strongholdName(entry: OperableUnitRef): string | null {
+  if (!entry.unit.inStronghold) return null;
+  return resolveOperableUnitStrongholdName(props.worldState, entry);
+}
+
+function entryClass(entry: OperableUnitRef): Record<string, boolean> {
+  return {
+    selected: props.selectedUnitId === entry.unit.id,
+    offmap: entry.kind === "roster" && !entry.unit.inStronghold,
+    "in-stronghold": entry.unit.inStronghold === true,
+  };
+}
 </script>
 
 <template>
   <aside class="unit-roster-panel">
-    <h3>可操作部队</h3>
-    <p v-if="!entries.length" class="empty">当前无本家可操作部队</p>
+    <h3>可操作兵队</h3>
+    <p v-if="!entries.length" class="empty">当前无本家可操作兵队</p>
     <ul v-else class="unit-roster-list">
       <li
         v-for="entry in entries"
         :key="entry.unit.id"
-        :class="[
-          'unit-roster-item',
-          { selected: selectedUnitId === entry.unit.id, offmap: entry.kind === 'roster' },
-        ]"
+        :class="['unit-roster-item', entryClass(entry)]"
         @click="onSelect(entry.unit.id, $event)"
       >
         <div class="unit-roster-name" :style="{ color: getForceColorCss(entry.unit.forceId) }">
           {{ entry.unit.name }}
-          <span v-if="entry.kind === 'roster'" class="offmap-tag">视野外</span>
+          <span v-if="entry.unit.inStronghold" class="in-stronghold-tag">在城中</span>
+          <span v-else-if="entry.kind === 'roster'" class="offmap-tag">视野外</span>
         </div>
         <div class="unit-roster-meta">
           <span>{{ formatSoldiers(entry.unit.soldiers) }}</span>
@@ -48,6 +63,7 @@ function onSelect(unitId: number, event: MouseEvent) {
         <div class="unit-roster-meta subtle">
           {{ directiveLabel(entry.unit.directive) }}
           <template v-if="entry.unit.commanderName"> · {{ entry.unit.commanderName }}</template>
+          <template v-if="strongholdName(entry)"> · {{ strongholdName(entry) }}</template>
         </div>
       </li>
     </ul>
@@ -114,6 +130,11 @@ function onSelect(unitId: number, event: MouseEvent) {
   opacity: 0.82;
 }
 
+.unit-roster-item.in-stronghold {
+  border-color: rgba(252, 211, 77, 0.35);
+  background: rgba(41, 37, 20, 0.55);
+}
+
 .unit-roster-name {
   font-weight: 600;
   font-size: 0.88rem;
@@ -127,6 +148,15 @@ function onSelect(unitId: number, event: MouseEvent) {
   font-weight: 500;
   color: #94a3b8;
   border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+
+.in-stronghold-tag {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #fcd34d;
+  border: 1px solid rgba(252, 211, 77, 0.45);
   border-radius: 999px;
   padding: 0 6px;
 }

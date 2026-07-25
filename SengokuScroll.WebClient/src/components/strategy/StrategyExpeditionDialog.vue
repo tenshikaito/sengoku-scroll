@@ -19,8 +19,11 @@ const emit = defineEmits<{
     unitName?: string;
     commanderId: number;
     composition: StrategyDeployCompositionEntry[];
+    deployToMap: boolean;
   }];
 }>();
+
+const deployToMap = ref(false);
 
 const unitName = ref("");
 const commanderId = ref<number | null>(null);
@@ -103,7 +106,8 @@ watch(
   () => [props.visible, props.stronghold?.id, props.stronghold?.garrisonTroopPools] as const,
   ([visible]) => {
     if (!visible || !props.stronghold) return;
-    unitName.value = `${props.stronghold.name}出征队`;
+    unitName.value = `${props.stronghold.name}队`;
+    deployToMap.value = false;
     const nextCounts: Record<number, number> = {};
     for (const opt of troopOptions.value) {
       nextCounts[opt.typeId] = 0;
@@ -147,6 +151,7 @@ function submit() {
     unitName: unitName.value.trim() || undefined,
     commanderId: commanderId.value,
     composition,
+    deployToMap: deployToMap.value,
   });
   close();
 }
@@ -155,7 +160,7 @@ function submit() {
 <template>
   <el-dialog
     :model-value="visible"
-    :title="stronghold ? `出征 — ${stronghold.name}` : '出征'"
+    :title="stronghold ? `组建 — ${stronghold.name}` : '组建'"
     width="520px"
     append-to-body
     class="strategy-dialog-centered-footer"
@@ -183,6 +188,14 @@ function submit() {
         />
       </el-select>
       <p v-if="!availableCommanders.length" class="hint warn">该城无可用将领。</p>
+    </div>
+
+    <div class="field">
+      <label>组建后</label>
+      <el-radio-group v-model="deployToMap">
+        <el-radio :value="false">在城中（默认）</el-radio>
+        <el-radio :value="true">立即出城</el-radio>
+      </el-radio-group>
     </div>
 
     <div class="field">
@@ -214,7 +227,7 @@ function submit() {
 
     <template #footer>
       <el-button @click="close">取消</el-button>
-      <el-button type="primary" :disabled="!canConfirm" @click="submit">确认出征</el-button>
+      <el-button type="primary" :disabled="!canConfirm" @click="submit">确认组建</el-button>
     </template>
   </el-dialog>
 </template>
