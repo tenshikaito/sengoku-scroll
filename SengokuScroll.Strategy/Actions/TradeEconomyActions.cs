@@ -4,7 +4,7 @@ using SengokuScroll.Strategy.Constants;
 
 namespace SengokuScroll.Strategy.Actions;
 
-/// <summary>跨据点贸易运输队到港交割（M4-c）。</summary>
+/// <summary>跨据点贸易运输 Unit 到港交割（M4-c）。</summary>
 public static class TradeEconomyActions
 {
     /// <summary>
@@ -12,16 +12,16 @@ public static class TradeEconomyActions
     /// </summary>
     /// <returns>成交总额（文）。</returns>
     public static int CompleteTradeArrival(
-        SupplyConvoy convoy,
+        Unit transport,
         Stronghold origin,
         Stronghold destination,
         GameData gameData)
     {
-        var food = convoy.CargoFoodGo;
+        var food = transport.Food;
         if (food <= 0)
         {
-            convoy.CargoFoodGo = 0;
-            convoy.CargoMoney = 0;
+            transport.Food = 0;
+            transport.Money = 0;
             return 0;
         }
 
@@ -30,12 +30,11 @@ public static class TradeEconomyActions
             : MarketConstants.DefaultPriceMoneyPerGo;
 
         var revenue = food * price;
-        // 业务：贸易收入记入出发据点官府，粮入买方市民库存
         destination.CivilianActor.Food += food;
         origin.ForceActor.Money += revenue;
 
-        convoy.CargoFoodGo = 0;
-        convoy.CargoMoney = 0;
+        transport.Food = 0;
+        transport.Money = 0;
 
         if (gameData.Forces.TryGetValue(origin.ForceId, out var force))
             ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);

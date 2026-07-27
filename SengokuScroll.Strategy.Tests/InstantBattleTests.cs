@@ -64,7 +64,7 @@ public class StrategyInstantBattleHostTests
     public void Host_AdjacentEnemies_CanPreviewAndExecuteBattle()
     {
         using var host = new StrategySimulationHost();
-        host.LoadScenario("mini_kanto");
+        host.LoadScenario("mini_kanto", new StrategyLoadOptions { Difficulty = StrategyDifficulty.Easy });
 
         IsolateEnemyUnitsForMarchTest(GetWorld(host));
         Teleport(GetWorld(host), 2, new Point3(9, 8));
@@ -79,29 +79,19 @@ public class StrategyInstantBattleHostTests
         var attSoldiersBefore = beforeAtt.Soldier;
         var defSoldiersBefore = beforeDef.Soldier;
 
-        Assert.True(host.OrderUnitAttack(1, new Point2(9, 8)).IsSuccess);
-
-        var sawBattleReport = false;
-        for (var day = 0; day < 14; day++)
-        {
-            var afterDay = host.AdvanceDay();
-            Assert.True(afterDay.IsSuccess);
-            if (afterDay.Value!.Events.Any(e =>
-                    e.Category == "BattleReportArrived" && e.BattleResult is not null))
-            {
-                sawBattleReport = true;
-                break;
-            }
-        }
-
-        // ??????????????????????????????????ù?        Assert.True(sawBattleReport, "??????????????????");
+        var execute = host.ExecuteInstantBattle(1, new Point2(9, 8));
+        Assert.True(execute.IsSuccess);
+        Assert.NotNull(execute.Value!.Result);
+        Assert.True(
+            GetUnit(host, 1).Soldier < attSoldiersBefore
+            || GetUnit(host, 2).Soldier < defSoldiersBefore);
     }
 
     [Fact]
     public void Host_NonAdjacentEnemy_ReturnsAttackRangeError()
     {
         using var host = new StrategySimulationHost();
-        host.LoadScenario("mini_kanto");
+        host.LoadScenario("mini_kanto", new StrategyLoadOptions { Difficulty = StrategyDifficulty.Easy });
 
         var world = GetWorld(host);
         Teleport(world, 2, new Point3(7, 4));

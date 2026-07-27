@@ -1,9 +1,8 @@
 using SengokuScroll.Common.Types;
-using SengokuScroll.Domain;
-using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Rules;
 using SengokuScroll.Strategy.Tests.Fixtures;
 
 namespace SengokuScroll.Strategy.Tests;
@@ -27,20 +26,12 @@ public class SupplyStatusEvaluatorTests
         var unit = world.GameData.Units[1];
         unit.Food = 100;
 
-        world.GameData.SupplyConvoys[1] = new SupplyConvoy
-        {
-            Id = 1,
-            Name = "测试粮运队",
-            ForceId = 1,
-            Location = new Point3(0, 0),
-            OriginStrongholdId = 1,
-            TargetUnitId = 1,
-            CargoFoodGo = 2000,
-            PorterCount = 10,
-            EscortSoldierCount = 5,
-            Status = SupplyConvoyStatus.Moving,
-            RoutePoints = new Queue<Point3>([new Point3(1, 0)])
-        };
+        var transport = StrategyTestWorldBuilder.CreateTestTransportUnit(2, 1, new Point3(0, 0));
+        transport.TransportOriginStrongholdId = 1;
+        transport.TransportTargetUnitId = 1;
+        transport.Food = 2000;
+        transport.ActionTarget.RoutePoints = new Queue<Point2>([new Point2(1, 0)]);
+        StrategyTestWorldBuilder.RegisterTransportUnit(world, transport);
 
         Assert.Equal(SupplyStatusEvaluator.Strained, SupplyStatusEvaluator.EvaluateStatus(unit, world.GameData));
     }
@@ -61,20 +52,11 @@ public class SupplyStatusEvaluatorTests
         var world = StrategyTestWorldBuilder.BuildMinimalWorld();
         var unit = world.GameData.Units[1];
 
-        world.GameData.SupplyConvoys[1] = new SupplyConvoy
-        {
-            Id = 1,
-            Name = "测试粮运队",
-            ForceId = 1,
-            Location = unit.Location,
-            OriginStrongholdId = 1,
-            TargetUnitId = 1,
-            CargoFoodGo = 0,
-            PorterCount = 10,
-            EscortSoldierCount = 5,
-            Status = SupplyConvoyStatus.Moving,
-            IsReturningToOrigin = true
-        };
+        var transport = StrategyTestWorldBuilder.CreateTestTransportUnit(2, 1, unit.Location);
+        transport.TransportOriginStrongholdId = 1;
+        transport.TransportTargetUnitId = 1;
+        transport.IsReturningToOrigin = true;
+        StrategyTestWorldBuilder.RegisterTransportUnit(world, transport);
 
         Assert.Empty(SupplyStatusEvaluator.GetInTransitSummaries(unit, world.GameData));
     }

@@ -1,7 +1,9 @@
 using SengokuScroll.Common.Types;
-using SengokuScroll.Domain.Entities;
+using SengokuScroll.Domain.Actions;
 using SengokuScroll.Domain.Entities.Types;
+using SengokuScroll.Strategy.Rules;
 using SengokuScroll.Strategy.Tests.Fixtures;
+using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Tests;
 
@@ -14,28 +16,24 @@ public class MigrantConvoyMovementTests
         var gameData = ctx.World.GameData;
         var origin = gameData.Strongholds.Values.First();
 
-        gameData.SupplyConvoys[1] = new SupplyConvoy
-        {
-            Id = 1,
-            Name = "移民队",
-            ForceId = 0,
-            Location = origin.Location,
-            OriginStrongholdId = origin.Id,
-            TargetStrongholdId = origin.Id,
-            Purpose = TransportPurpose.Migrant,
-            CargoPopulation = 200,
-            CargoFoodGo = 0,
-            CargoMoney = 0,
-            PorterCount = 10,
-            EscortSoldierCount = 0,
-            Status = SupplyConvoyStatus.Moving,
-            Ap = 1,
-            RoutePoints = new Queue<Point3>([new Point3(1, 0)])
-        };
+        var transport = StrategyTestWorldBuilder.CreateTestTransportUnit(
+            2,
+            forceId: 0,
+            origin.Location,
+            TransportPurpose.Migrant,
+            UnitKind.Migrant);
+        transport.TransportOriginStrongholdId = origin.Id;
+        transport.TransportTargetStrongholdId = origin.Id;
+        transport.CargoPopulation = 200;
+        transport.EscortSoldierCount = 0;
+        transport.Ap = 1;
+        transport.ActionTarget.RoutePoints = new Queue<Point2>([new Point2(1, 0)]);
+        StrategyTestWorldBuilder.RegisterTransportUnit(ctx.World, transport);
 
         ctx.TimeController.AdvanceDay(ctx.World, ctx.Engine);
 
-        var convoy = Assert.Single(gameData.SupplyConvoys.Values);
-        Assert.NotEqual(SupplyConvoyStatus.Destroyed, convoy.Status);
+        var remaining = Assert.Single(
+            gameData.Units.Values.Where(TransportUnitRules.IsTransportUnit));
+        Assert.Equal(UnitStatus.Moving, remaining.Status);
     }
 }

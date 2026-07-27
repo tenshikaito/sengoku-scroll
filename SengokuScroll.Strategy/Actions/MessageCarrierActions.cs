@@ -14,15 +14,13 @@ public static class MessageCarrierActions
         => targetUnit.Directive = directive;
 
     /// <summary>
-    /// 将载体携带的假情报作用于运输队：进入迷惑状态、清空原路径、设置误导目标。
+    /// 将载体携带的假情报作用于运输 Unit：进入迷惑状态、清空原路径。
     /// </summary>
-    public static void ApplyFalseIntelligence(SupplyConvoy convoy, MessageCarrier carrier)
+    public static void ApplyFalseIntelligence(Unit transport, MessageCarrier carrier)
     {
-        convoy.IsDeceived = true;
-        convoy.Status = SupplyConvoyStatus.Deceived;
-        convoy.DeceivedHoldDaysRemaining = Constants.LogisticsConstants.FalseIntelligenceHoldDays;
-        convoy.DeceivedRedirect = carrier.Location;
-        convoy.RoutePoints.Clear();
+        TransportUnitActions.ApplyDeceivedHold(
+            transport,
+            Constants.LogisticsConstants.FalseIntelligenceHoldDays);
     }
 
     /// <summary>载体抵达后，将待投递方针写入目标单位。</summary>

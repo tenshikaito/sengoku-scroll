@@ -176,8 +176,33 @@ class UnitNotDirectlyControllableErrorBehavior extends ApiErrorMessageBehavior {
   }
 }
 
+class MarketTradeNotFilledErrorBehavior extends ApiErrorMessageBehavior {
+  readonly code = "TradeNotFilled";
+
+  resolve(): ApiErrorResolution {
+    return {
+      type: "message",
+      message:
+        "未能成交：请检查限价是否覆盖对手盘、资金/粮食是否充足；商队仅支持即时砸单，限价须不低于卖一",
+    };
+  }
+}
+
+class MarketTradeNotAllowedErrorBehavior extends ApiErrorMessageBehavior {
+  readonly code = "TradeNotAllowed";
+
+  resolve(_message: string, ctx: ApiErrorResolveContext): ApiErrorResolution {
+    return {
+      type: "message",
+      message: ctx.lordCommandStrongholdTip ?? "当前无法在此据点交易",
+    };
+  }
+}
+
 const API_ERROR_BEHAVIORS: ApiErrorMessageBehavior[] = [
   new DataNotFoundErrorBehavior(),
+  new MarketTradeNotFilledErrorBehavior(),
+  new MarketTradeNotAllowedErrorBehavior(),
   new LordNotAtResidenceErrorBehavior(),
   new NotSelfForceErrorBehavior(),
   new CannotAppointLordToResidenceErrorBehavior(),

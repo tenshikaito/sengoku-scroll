@@ -103,6 +103,36 @@ public class Unit : Actor, IUnit
     /// <summary>贸易目标数量（合）；0 表示尽可能成交。</summary>
     public int TradeQuantityGo { get; set; }
 
+    /// <summary>运输任务类型（Convoy/Migrant/Merchant 跨据点运输）。</summary>
+    public TransportPurpose TransportPurpose { get; set; } = TransportPurpose.Supply;
+
+    /// <summary>运输出发据点 Id。</summary>
+    public int TransportOriginStrongholdId { get; set; }
+
+    /// <summary>补给目标军事单位 Id；0 表示运往 <see cref="TransportTargetStrongholdId"/>。</summary>
+    public int TransportTargetUnitId { get; set; }
+
+    /// <summary>运输目标据点 Id。</summary>
+    public int TransportTargetStrongholdId { get; set; }
+
+    /// <summary>移民队运载人口。</summary>
+    public int CargoPopulation { get; set; }
+
+    /// <summary>人夫数量（在途自耗粮）。</summary>
+    public int PorterCount { get; set; }
+
+    /// <summary>护卫兵数量。</summary>
+    public int EscortSoldierCount { get; set; }
+
+    /// <summary>卸货后返程阶段。</summary>
+    public bool IsReturningToOrigin { get; set; }
+
+    /// <summary>受假情报迷惑。</summary>
+    public bool IsDeceived { get; set; }
+
+    /// <summary>迷惑剩余停留日数。</summary>
+    public int DeceivedHoldDaysRemaining { get; set; }
+
     public Direction4 Direction { get; set; }
 
     /// <summary>当前行动目标：势力/据点/单位/角色 Id 及剩余路径。</summary>

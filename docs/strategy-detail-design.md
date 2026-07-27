@@ -205,7 +205,7 @@ Merchant 仓库**不**参与产量划分。
 | 类别 | 说明 | 入库 | 阶段 |
 |------|------|------|------|
 | **税收** | §4.3.2 五税 | `ForceActor` 钱/粮 | M4-a/b（关税 M4-c） |
-| **贸易收入** | 官府/**官办企业**在本据点市场挂**卖单**成交后的**货款**（如蜀锦等奢侈品特产；具体商品类型与产能 M5+ 配置） | `ForceActor.Money` | M4-c ✅ |
+| **贸易收入** | 官府/商户在本据点市场**粮食卖单**成交后的货款 | `ForceActor.Money` | M4-c ✅ |
 | **贡赋收入** | 势力内据点、内藩/外藩向宗主/当主居城上缴的粮钱；**外交「朝贡」条约下附庸/藩属的定期贡纳亦归入此类**（义务、运输、欠账见 §4.5，不设独立「朝贡收入」科目） | 宗主/当主 `ForceActor` | M4-b+ |
 | **掠夺收入** | 战斗缴获、抄略等 | `ForceActor` | M5+ |
 
@@ -254,11 +254,13 @@ Merchant 仓库**不**参与产量划分。
 
 ### 4.6 市场（M4+）
 
+> **贸易 / 商家 / 商队 UI 与权限**：见 [strategy-trade-market-design.md](./strategy-trade-market-design.md)
+
 ```
 StrongholdMarket（每据点）
-├── Orders[]              连续撮合订单簿（买卖挂单）
-├── PriceHistory[]        日 K 线：Open/High/Low/Close（文/合），保留 2 年
-└── LastClosePrice        最近收盘价
+├── Orders[]              连续撮合订单簿（按 MarketCommodityType 分品类）
+├── PriceHistoryByCommodity[]  分品类日 K：Open/High/Low/Close，保留 2 年
+└── LastClose（按品类）   最近收盘价
 ```
 
 | 规则 | 说明 |
@@ -269,6 +271,8 @@ StrongholdMarket（每据点）
 | 粮价 | 供需订单簿撮合；秋收供应增加 → 价格下跌；政策可托底/平抑（自由贸易 vs 兜底） |
 | 跨据点贸易 | 复用 **运输队**（`ConvoyPurpose.Trade`）；道路连通；利润须覆盖路程与拦截风险 |
 | 情报 | 独立 **`StrategyIntelligenceLedger`**：各势力对市场的**已知行情**（可延迟、可过时）；信使/旅人/移民/兵队均可传播；记录不过期，AI 按时间降权 |
+
+> **2026-07-27 实装说明**：粮食 + **马匹** 双品类大宗撮合；`CommodityDefinition` master 驱动 UI。做市 AI 已多档，但 AI 严格挂于中枢 ±N 时 **日更仍可能零成交**；2026-07-27 起 AI 可感知最低卖价并在砸单后刷新。战争/谣言/围城抢粮等 **事件粮价 modifier 未接**。诊断与全因素表见 [strategy-trade-market-design.md §14–§15](./strategy-trade-market-design.md)。
 
 ### 4.7 运输与拦截
 
@@ -304,7 +308,7 @@ StrategyMessengerSystem   ← 方针/战报/情报（含物价大幅波动）
 | **官办企业贸易收入** | ✅ M4-c |
 | **跨据点贸易 AI** | ✅ M4-c |
 | **`Diplomacy.Arrears*` 欠账写入** | ✅ M4-c/d（内藩→Diplomacy；直辖→`Force.InternalArrears*`） |
-| **Market 设施 / 奢侈品 / 商户 AI / 同盟贸易** | ✅ M4-d |
+| **Market 设施 / 商户 AI / 同盟贸易** | ✅ M4-d |
 | **拦截缴获 / 势力内欠账 / 俸禄 / 民心人口** | ✅ M4-d |
 | 定额制、民心爆发 | M5+ |
 
@@ -326,7 +330,7 @@ StrategyMessengerSystem   ← 方针/战报/情报（含物价大幅波动）
 | 跨据点贸易 AI、Trade 运输队 | M4-c | ✅ |
 | 市民缺粮自动买单 | M4-b | ✅ |
 | `Diplomacy.Arrears*` 欠账累加（运送不足） | M4-c | ✅ |
-| Market 设施绑定、奢侈品工坊 | M4-d | ✅ |
+| Market 设施绑定 | M4-d | ✅ |
 | 商户卖单、同盟跨势力贸易 | M4-d | ✅ |
 | 拦截缴获、势力内欠账、俸禄、民心/人口 | M4-d | ✅ |
 | 定额制/民心爆发 | M5+ | 待做 |

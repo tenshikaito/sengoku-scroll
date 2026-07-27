@@ -1,7 +1,10 @@
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
+using SengokuScroll.Domain.Types;
+using SengokuScroll.Strategy.Actions;
 using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
+using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Calculators;
@@ -18,6 +21,8 @@ public static class MarketCalculator
         int BuyerActorId,
         int SellerActorId,
         bool SellerTaxExempt,
+        bool SellerInventoryCommitted,
+        bool BuyerMoneyCommitted,
         MarketCommodityType Commodity);
 
     /// <summary>撮合会话结果：成交列表与 OHLC 行情。</summary>
@@ -29,33 +34,56 @@ public static class MarketCalculator
         int SessionClose,
         int TotalVolumeGo);
 
-    /// <summary>连续撮合：按商品种类分别撮合。</summary>
-    public static MatchResult MatchOrders(Stronghold stronghold, int fallbackPrice)
-    {
-        var food = MatchOrdersForCommodity(stronghold, fallbackPrice, MarketCommodityType.Food);
-        var luxury = MatchOrdersForCommodity(stronghold, fallbackPrice, MarketCommodityType.Luxury);
-
-        var trades = food.Trades.Concat(luxury.Trades).ToList();
-        if (trades.Count == 0)
-            return food;
-
-        var open = food.SessionOpen > 0 ? food.SessionOpen : luxury.SessionOpen;
-        var high = Math.Max(food.SessionHigh, luxury.SessionHigh);
-        var low = Math.Min(
-            food.SessionLow == int.MaxValue ? luxury.SessionLow : food.SessionLow,
-            luxury.SessionLow == int.MaxValue ? food.SessionLow : luxury.SessionLow);
-        var close = luxury.SessionClose > 0 && luxury.TotalVolumeGo > 0
-            ? luxury.SessionClose
-            : food.SessionClose;
-        var volume = food.TotalVolumeGo + luxury.TotalVolumeGo;
-
-        return new MatchResult(trades, open, high, low == int.MaxValue ? close : low, close, volume);
-    }
-
-    private static MatchResult MatchOrdersForCommodity(
+    /// <summary>连续撮合：全部可交易商品。</summary>
+    public static MarketCalculator.MatchResult MatchOrders(
         Stronghold stronghold,
         int fallbackPrice,
-        MarketCommodityType commodity)
+        GameDate? gameDate = null)
+    {
+        var trades = new List<TradeExecution>();
+        var open = 0;
+        var high = 0;
+        var low = int.MaxValue;
+        var close = fallbackPrice;
+        var volume = 0;
+
+        foreach (var commodity in Enum.GetValues<MarketCommodityType>())
+        {
+            var commodityFallback = stronghold.Market.ResolveLastClose(commodity);
+            if (commodityFallback <= 0)
+                commodityFallback = CommodityInventoryHelper.ResolveDefaultPrice(null, commodity);
+
+            var partial = MatchOrdersForCommodity(stronghold, commodityFallback, commodity, gameDate);
+            if (partial.Trades.Count == 0)
+                continue;
+
+            trades.AddRange(partial.Trades);
+            if (open == 0)
+                open = partial.SessionOpen;
+            high = Math.Max(high, partial.SessionHigh);
+            low = Math.Min(low, partial.SessionLow == int.MaxValue ? partial.SessionClose : partial.SessionLow);
+            if (partial.TotalVolumeGo > 0)
+                close = partial.SessionClose;
+            volume += partial.TotalVolumeGo;
+        }
+
+        if (trades.Count == 0)
+            return MatchOrdersForCommodity(stronghold, fallbackPrice, MarketCommodityType.Food, gameDate);
+
+        return new MatchResult(
+            trades,
+            open,
+            high,
+            low == int.MaxValue ? close : low,
+            close,
+            volume);
+    }
+
+    public static MatchResult MatchOrdersForCommodity(
+        Stronghold stronghold,
+        int fallbackPrice,
+        MarketCommodityType commodity,
+        GameDate? gameDate)
     {
         var market = stronghold.Market;
         var trades = new List<TradeExecution>();
@@ -99,10 +127,16 @@ public static class MarketCalculator
                 buy.ActorId,
                 sell.ActorId,
                 sell.TaxExempt,
+                sell.InventoryCommitted,
+                buy.MoneyCommitted,
                 commodity));
 
             buy.QuantityGo -= qty;
             sell.QuantityGo -= qty;
+            if (buy.MoneyCommitted)
+                buy.CommittedMoneyGo = Math.Max(0, buy.CommittedMoneyGo - price * qty);
+            if (sell.InventoryCommitted)
+                sell.CommittedInventoryGo = Math.Max(0, sell.CommittedInventoryGo - qty);
             volume += qty;
 
             if (open == 0)
@@ -112,16 +146,27 @@ public static class MarketCalculator
             close = price;
 
             if (buy.QuantityGo <= 0)
+            {
+                if (gameDate is not null)
+                    MarketActions.MarkOrderFullyFilled(buy, gameDate.Value);
                 buys.RemoveAt(0);
+            }
+
             if (sell.QuantityGo <= 0)
+            {
+                if (gameDate is not null)
+                    MarketActions.MarkOrderFullyFilled(sell, gameDate.Value);
                 sells.RemoveAt(0);
+            }
         }
 
-        market.Orders.RemoveAll(o => o.QuantityGo <= 0);
+        MarketActions.RemoveZeroQuantityOrders(stronghold, gameDate);
 
         if (trades.Count == 0)
         {
-            var last = fallbackPrice > 0 ? fallbackPrice : MarketConstants.DefaultPriceMoneyPerGo;
+            var last = fallbackPrice > 0
+                ? fallbackPrice
+                : CommodityInventoryHelper.ResolveDefaultPrice(null, commodity);
             return new MatchResult(trades, last, last, last, last, 0);
         }
 
@@ -145,12 +190,44 @@ public static class MarketCalculator
         return Math.Max(0, target - stronghold.CivilianActor.Food);
     }
 
-    /// <summary>市民买单限价：收盘价 × 溢价系数。</summary>
+    /// <summary>低价卖盘触发的小额捡漏采购（合）。</summary>
+    public static int CalculateBargainBuyQuantityGo(Stronghold stronghold, int referencePrice, int bestAsk)
+    {
+        if (bestAsk <= 0)
+            return 0;
+
+        var fairReference = Math.Max(
+            referencePrice,
+            MarketMakerAiHelper.ResolveFairReferencePrice(stronghold, MarketCommodityType.Food));
+        if (fairReference <= 0 || bestAsk > fairReference)
+            return 0;
+
+        var discountBp = (fairReference - bestAsk) * EconomyConstants.BasisPointsPer100Percent / fairReference;
+        if (discountBp < MarketConstants.BargainBuyDiscountThresholdBp)
+            return 0;
+
+        var daily = LogisticsCalculator.CalculateCivilianDailyFoodConsumption(stronghold.Population);
+        if (daily <= 0)
+            return 0;
+
+        return Math.Min(
+            daily * MarketConstants.BargainBuyCoverDays,
+            MarketConstants.CivilianMaxBuyFoodGoPerLevel);
+    }
+
+    /// <summary>市民最高有效买价：紧缺时近中枢一档，平时最远档。</summary>
     public static int CalculateCivilianBuyLimitPrice(Stronghold stronghold)
-        => stronghold.Market.LastClosePriceMoneyPerGo > 0
-            ? stronghold.Market.LastClosePriceMoneyPerGo * MarketConstants.CivilianBuyPricePremiumBp
-              / EconomyConstants.BasisPointsPer100Percent
-            : MarketConstants.DefaultPriceMoneyPerGo;
+    {
+        var reference = MarketMakerAiHelper.ResolveReferencePrice(stronghold);
+        var depth = MarketMakerAiHelper.ResolveMaxDepthLevels(
+            stronghold.CivilianActor.Id,
+            MarketCalculator.CalculateCivilianBuyQuantityGo(stronghold),
+            MarketConstants.GovernmentMinSellQuantityGo);
+
+        return MarketMakerAiHelper.PreferNearReferenceBids(stronghold)
+            ? MarketMakerAiHelper.BidPrice(reference, 1)
+            : MarketMakerAiHelper.BidPrice(reference, depth);
+    }
 
     /// <summary>官府可挂卖单的余粮（合）。</summary>
     public static int CalculateGovernmentSellQuantityGo(Stronghold stronghold)
@@ -168,13 +245,4 @@ public static class MarketCalculator
         => stronghold.Market.LastClosePriceMoneyPerGo > 0
             ? stronghold.Market.LastClosePriceMoneyPerGo
             : MarketConstants.DefaultPriceMoneyPerGo;
-
-    /// <summary>奢侈品工坊日产（单位）。</summary>
-    public static int CalculateDailyLuxuryProduction(Stronghold stronghold)
-    {
-        if (!EconomyFacilityRules.HasLuxuryWorkshop(stronghold))
-            return 0;
-
-        return Math.Max(0, stronghold.CivilianActor.CommerceProduction / MarketConstants.LuxuryProductionDivisor);
-    }
 }

@@ -14,55 +14,40 @@ public class LogisticsCalculatorTests
     [Fact]
     public void DailyTransitConsumption_MatchesHistoricalBaseline()
     {
-        // 默认运输队：50 人夫 + 20 护卫，参照战国兵站日耗基准
         var consumption = LogisticsCalculator.CalculateDailyTransitConsumption(
             LogisticsConstants.DefaultPorterCount,
             LogisticsConstants.DefaultEscortSoldierCount);
 
-        // 50×1.5 + 20×3 = 75+60 = 135 合/日
         Assert.Equal(135, consumption);
     }
 
     [Fact]
     public void UnitDailyFoodConsumption_ScalesWithSoldiers()
     {
-        // 100 兵 × 3 合/人/日 = 300 合
         Assert.Equal(300, LogisticsCalculator.CalculateUnitDailyFoodConsumption(100));
     }
 
     [Fact]
     public void CivilianDailyFoodConsumption_ScalesWithPopulation()
     {
-        // 1000 民 × 2 合/人/日 = 2000 合
         Assert.Equal(2000, LogisticsCalculator.CalculateCivilianDailyFoodConsumption(1000));
     }
 }
 
-/// <summary>运输队日更行为（<see cref="SupplyConvoyActions"/>）的单元测试。</summary>
-public class SupplyConvoyActionsTests
+/// <summary>运输 Unit 日更行为（<see cref="TransportUnitActions"/>）的单元测试。</summary>
+public class TransportUnitActionsTests
 {
     [Fact]
     public void ApplyDailyTransitConsumption_ReducesCargo()
     {
-        // 一支载粮 5000 合的运输队，编成与默认常量一致
-        var convoy = new Domain.Entities.SupplyConvoy
-        {
-            Id = 1,
-            Name = "测试粮运队",
-            ForceId = 1,
-            Location = new Point3(0, 0),
-            OriginStrongholdId = 1,
-            TargetUnitId = 1,
-            CargoFoodGo = 5000,
-            PorterCount = 50,
-            EscortSoldierCount = 20,
-            Status = SupplyConvoyStatus.Moving
-        };
+        var transport = Fixtures.StrategyTestWorldBuilder.CreateTestTransportUnit(1, 1, new Point3(0, 0));
+        transport.TransportOriginStrongholdId = 1;
+        transport.TransportTargetUnitId = 1;
+        transport.Food = 5000;
 
-        SupplyConvoyActions.ApplyDailyTransitConsumption(convoy);
+        TransportUnitActions.ApplyDailyTransitConsumption(transport);
 
-        // 扣除 135 合在途自耗
-        Assert.Equal(4865, convoy.CargoFoodGo);
+        Assert.Equal(4865, transport.Food);
     }
 }
 
@@ -72,7 +57,6 @@ public class MessageCarrierRulesAndActionsTests
     [Fact]
     public void RequiresMessenger_WhenSameTile_ReturnsFalse()
     {
-        // 同格（含同在据点内）免信使
         var p = new Point3(3, 4);
         Assert.False(MessageCarrierRules.RequiresInTransitDelivery(p, p));
     }
@@ -80,30 +64,18 @@ public class MessageCarrierRulesAndActionsTests
     [Fact]
     public void RequiresMessenger_WhenDifferentTile_ReturnsTrue()
     {
-        // 异格必须信使传递
         Assert.True(MessageCarrierRules.RequiresInTransitDelivery(new Point3(1, 1), new Point3(2, 2)));
     }
 
     [Fact]
-    public void ApplyFalseIntelligence_DeceivesConvoy()
+    public void ApplyFalseIntelligence_DeceivesTransportUnit()
     {
-        // 在途运输队，原路径 2 格
-        var convoy = new Domain.Entities.SupplyConvoy
-        {
-            Id = 1,
-            Name = "测试粮运队",
-            ForceId = 1,
-            Location = new Point3(0, 0),
-            OriginStrongholdId = 1,
-            TargetUnitId = 2,
-            CargoFoodGo = 1000,
-            PorterCount = 10,
-            EscortSoldierCount = 5,
-            Status = SupplyConvoyStatus.Moving,
-            RoutePoints = new Queue<Point3>([new Point3(1, 0), new Point3(2, 0)])
-        };
+        var transport = Fixtures.StrategyTestWorldBuilder.CreateTestTransportUnit(1, 1, new Point3(0, 0));
+        transport.TransportOriginStrongholdId = 1;
+        transport.TransportTargetUnitId = 2;
+        transport.Food = 1000;
+        transport.ActionTarget.RoutePoints = new Queue<Point2>([new Point2(1, 0), new Point2(2, 0)]);
 
-        // 敌方信使投递假情报，目标为该运输队
         var carrier = new Domain.Entities.MessageCarrier
         {
             Id = 1,
@@ -120,12 +92,10 @@ public class MessageCarrierRulesAndActionsTests
             }
         };
 
-        MessageCarrierActions.ApplyFalseIntelligence(convoy, carrier);
+        MessageCarrierActions.ApplyFalseIntelligence(transport, carrier);
 
-        Assert.True(convoy.IsDeceived);
-        Assert.Equal(SupplyConvoyStatus.Deceived, convoy.Status);
-        Assert.Equal(LogisticsConstants.FalseIntelligenceHoldDays, convoy.DeceivedHoldDaysRemaining);
-        Assert.Empty(convoy.RoutePoints);
-        Assert.Equal(carrier.Location, convoy.DeceivedRedirect);
+        Assert.True(transport.IsDeceived);
+        Assert.Equal(LogisticsConstants.FalseIntelligenceHoldDays, transport.DeceivedHoldDaysRemaining);
+        Assert.Empty(transport.ActionTarget.RoutePoints);
     }
 }

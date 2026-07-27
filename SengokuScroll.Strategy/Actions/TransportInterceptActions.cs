@@ -1,4 +1,5 @@
 using SengokuScroll.Domain;
+using SengokuScroll.Domain.Contexts;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Types;
@@ -8,55 +9,54 @@ using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Actions;
 
-/// <summary>运输队软拦截结果（M4-b/d）。</summary>
+/// <summary>运输 Unit 软拦截结果（M4-b/d）。</summary>
 public static class TransportInterceptActions
 {
     /// <summary>执行拦截后果；返回 true 表示当日不再移动。</summary>
     public static bool ApplySoftIntercept(
-        SupplyConvoy convoy,
+        IGameWorldContext context,
+        Unit transport,
         GameDate date,
         int threatLevel,
         GameData gameData)
     {
-        if (!TransportRules.ShouldIntercept(convoy, date, threatLevel))
+        if (!TransportRules.ShouldIntercept(transport, date, threatLevel))
             return false;
 
-        // 业务：同格敌军威胁则全灭运输队并缴获/记欠账；否则软拦截扣货并迷惑一日
         if (threatLevel >= TransportConstants.SameTileEnemyThreat)
         {
-            var plunderForceId = TransportRules.FindPrimaryThreatUnitId(convoy, gameData) is int unitId
+            var plunderForceId = TransportRules.FindPrimaryThreatUnitId(transport, gameData) is int unitId
                                  && gameData.Units.TryGetValue(unitId, out var unit)
                 ? unit.ForceId
                 : 0;
 
             if (plunderForceId > 0)
-                PlunderEconomyActions.AwardConvoyCargoToForce(convoy, plunderForceId, gameData);
+                PlunderEconomyActions.AwardConvoyCargoToForce(transport, plunderForceId, gameData);
 
-            TributeArrearsActions.AccrueUndeliveredConvoy(convoy, gameData);
+            TributeArrearsActions.AccrueUndeliveredConvoy(transport, gameData);
 
-            convoy.CargoFoodGo = 0;
-            convoy.CargoMoney = 0;
-            convoy.Status = SupplyConvoyStatus.Destroyed;
+            transport.Food = 0;
+            transport.Money = 0;
+            TransportUnitActions.DestroyTransport(context, transport);
             return true;
         }
 
-        if (convoy.CargoMoney > 0)
+        if (transport.Money > 0)
         {
             var toll = EconomyCalculator.ApplyBasisPointsTax(
-                convoy.CargoMoney,
+                transport.Money,
                 TransportConstants.TollCargoMoneyBp);
-            convoy.CargoMoney = Math.Max(0, convoy.CargoMoney - toll);
+            transport.Money = Math.Max(0, transport.Money - toll);
         }
-        else if (convoy.CargoFoodGo > 0)
+        else if (transport.Food > 0)
         {
             var loss = EconomyCalculator.ApplyBasisPointsTax(
-                convoy.CargoFoodGo,
+                transport.Food,
                 TransportConstants.SkirmishCargoFoodBp);
-            convoy.CargoFoodGo = Math.Max(0, convoy.CargoFoodGo - loss);
+            transport.Food = Math.Max(0, transport.Food - loss);
         }
 
-        convoy.DeceivedHoldDaysRemaining = 1;
-        convoy.Status = SupplyConvoyStatus.Deceived;
+        TransportUnitActions.ApplyDeceivedHold(transport, holdDays: 1);
         return true;
     }
 }

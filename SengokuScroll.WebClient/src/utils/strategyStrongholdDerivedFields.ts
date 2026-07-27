@@ -18,9 +18,8 @@ export function deriveGarrisonTroopPools(
   const total = Math.max(0, garrisonSoldiers);
   if (total <= 0) return [];
 
-  const horseCap = Math.max(20, Math.floor(population / 80));
   const matchlockCap = Math.max(10, Math.floor(population / 120));
-  const cavalry = Math.min(Math.floor(total / 8), horseCap);
+  const cavalry = Math.floor(total / 8);
   const matchlock = Math.min(Math.floor(total / 12), matchlockCap);
   const archers = Math.min(
     Math.floor(total / 10),
@@ -280,7 +279,7 @@ export function deriveCityActors(stronghold: {
       kind: "Government",
       money: stronghold.money ?? 0,
       food: stronghold.food ?? 0,
-      luxuryGoods: 0,
+      horse: 0,
       commerceProduction: 0,
       agricultureProduction: 0,
       characterCount: 0,
@@ -294,7 +293,7 @@ export function deriveCityActors(stronghold: {
       kind: "Civilian",
       money: 0,
       food: 0,
-      luxuryGoods: 0,
+      horse: 0,
       commerceProduction: 0,
       agricultureProduction: 0,
       characterCount: 0,
@@ -310,7 +309,7 @@ export function deriveCityActors(stronghold: {
       kind: "Kokujin",
       money: 0,
       food: 0,
-      luxuryGoods: 0,
+      horse: 0,
       commerceProduction: 0,
       agricultureProduction: 0,
       characterCount: 1,
@@ -327,7 +326,7 @@ export function deriveCityActors(stronghold: {
       kind: "Merchant",
       money: 18_000 + Math.max(0, stronghold.id) * 2_500,
       food: 2_400_000,
-      luxuryGoods: 100,
+      horse: 100,
       commerceProduction: Math.max(500, Math.floor(commerceValue / 40)),
       agricultureProduction: 0,
       characterCount: 1,
@@ -344,7 +343,7 @@ export function deriveCityActors(stronghold: {
       kind: "Religion",
       money: 12_000,
       food: 1_200_000,
-      luxuryGoods: 20,
+      horse: 20,
       commerceProduction: 0,
       agricultureProduction: Math.max(120_000, stronghold.population * 3),
       characterCount: 1,
@@ -361,7 +360,7 @@ export function deriveCityActors(stronghold: {
       kind: "Merchant",
       money: 35_000,
       food: 1_200_000,
-      luxuryGoods: 300,
+      horse: 300,
       commerceProduction: Math.max(800, Math.floor(commerceValue / 40)),
       agricultureProduction: 0,
       characterCount: 1,
@@ -378,7 +377,7 @@ export function deriveCityActors(stronghold: {
       kind: "Merchant",
       money: 28_000,
       food: 1_200_000,
-      luxuryGoods: 180,
+      horse: 180,
       commerceProduction: 640,
       agricultureProduction: 0,
       characterCount: 2,
@@ -393,7 +392,7 @@ export function deriveCityActors(stronghold: {
       kind: "Religion",
       money: 5_000,
       food: 600_000,
-      luxuryGoods: 12,
+      horse: 12,
       commerceProduction: 0,
       agricultureProduction: 120_000,
       characterCount: 1,

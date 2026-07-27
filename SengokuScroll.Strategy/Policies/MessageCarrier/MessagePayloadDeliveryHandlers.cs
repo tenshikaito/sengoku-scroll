@@ -6,13 +6,13 @@ using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Policies.MessageDelivery;
 
 public sealed class MessagePayloadDeliveryContext
 {
     public required MessageCarrier Carrier { get; init; }
-    public required Dictionary<int, SupplyConvoy> Convoys { get; init; }
     public required GameData GameData { get; init; }
     public required StrategyScenarioMeta ScenarioMeta { get; init; }
     public required StrategyDayOutcomeBuffer DayOutcomeBuffer { get; init; }
@@ -146,10 +146,11 @@ internal sealed class FalseIntelligencePayloadHandler : IMessagePayloadDeliveryH
     {
         var carrier = ctx.Carrier;
         if (carrier.Payload.TargetConvoyId <= 0
-            || !ctx.Convoys.TryGetValue(carrier.Payload.TargetConvoyId, out var convoy))
+            || !ctx.GameData.Units.TryGetValue(carrier.Payload.TargetConvoyId, out var transport)
+            || !TransportUnitRules.IsTransportUnit(transport))
             return false;
 
-        MessageCarrierActions.ApplyFalseIntelligence(convoy, carrier);
+        MessageCarrierActions.ApplyFalseIntelligence(transport, carrier);
         return true;
     }
 }

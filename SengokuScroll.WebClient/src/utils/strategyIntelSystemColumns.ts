@@ -274,7 +274,7 @@ export function forceOrgActorTableColumns(
     { prop: "hostLordName", label: "领主", minWidth: 80 },
     { prop: "money", label: "金钱", width: 88, align: "right" },
     { prop: "food", label: "粮食", width: 88, align: "right" },
-    { prop: "luxuryGoods", label: "奢侈品", width: 72, align: "right" },
+    { prop: "horse", label: "马匹", width: 72, align: "right" },
     { prop: "characterCount", label: "人数", width: 52, align: "center" },
   ];
 }

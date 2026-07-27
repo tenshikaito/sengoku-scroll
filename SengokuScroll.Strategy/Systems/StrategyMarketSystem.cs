@@ -1,5 +1,6 @@
 using SengokuScroll.Domain.Contexts;
 using SengokuScroll.Domain.Entities;
+using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Systems;
 using SengokuScroll.Domain.Types;
 using SengokuScroll.Strategy.Actions;
@@ -36,13 +37,19 @@ public class StrategyMarketSystem(
         // 阶段1：逐可贸易据点——AI 挂单
         foreach (var stronghold in context.GameWorldContext.EachStronghold())
         {
-            if (!MarketRules.CanTrade(stronghold))
+            if (!MarketRules.CanTrade(stronghold, gameData))
                 continue;
 
+            MarketActions.RemoveZeroQuantityOrders(stronghold, date);
+
             CivilianMarketAiHelper.EvaluateAndPlaceBuyOrders(stronghold);
+            GovernmentMarketAiHelper.EvaluateAndPlaceBuyOrders(stronghold);
             GovernmentMarketAiHelper.EvaluateAndPlaceSellOrders(stronghold);
-            GovernmentLuxuryMarketAiHelper.EvaluateAndPlaceSellOrders(stronghold);
-            MerchantMarketAiHelper.EvaluateAndPlaceSellOrders(stronghold);
+            MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold, MarketCommodityType.Food);
+            HorseMarketAiHelper.EvaluateAndPlaceOrders(stronghold);
+            MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold, MarketCommodityType.Horse);
+
+            MarketActions.RemoveDeprecatedCommodityOrders(stronghold);
 
             // 阶段2：连续撮合成交、写 K 线、记录价格波动情报
             var fallback = stronghold.Market.LastClosePriceMoneyPerGo > 0
@@ -50,7 +57,7 @@ public class StrategyMarketSystem(
                 : MarketConstants.DefaultPriceMoneyPerGo;
 
             var previousClose = fallback;
-            var result = MarketCalculator.MatchOrders(stronghold, fallback);
+            var result = MarketCalculator.MatchOrders(stronghold, fallback, date);
             MarketActions.ApplyMatchResult(stronghold, result, taxLedger);
             MarketActions.SetDailyBarDate(stronghold, date);
 

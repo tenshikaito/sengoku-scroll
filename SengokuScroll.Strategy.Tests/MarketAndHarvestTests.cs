@@ -1,3 +1,4 @@
+using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Types;
 using SengokuScroll.Strategy.Actions;
 using SengokuScroll.Strategy.Calculators;
@@ -12,6 +13,112 @@ namespace SengokuScroll.Strategy.Tests;
 /// <summary>M4-b 市场撮合与收粮规则。</summary>
 public class MarketAndHarvestTests
 {
+    [Fact]
+    public void AddOrMergeBuyOrder_MergesQuantityAtSamePrice()
+    {
+        var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
+
+        MarketActions.AddOrMergeBuyOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            94,
+            500,
+            MarketCommodityType.Food,
+            taxExempt: true);
+        MarketActions.AddOrMergeBuyOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            94,
+            300,
+            MarketCommodityType.Food,
+            taxExempt: true);
+
+        var order = Assert.Single(
+            stronghold.Market.Orders.Where(o =>
+                MarketRules.IsBuyOrder(o)
+                && o.ActorId == stronghold.ForceActor.Id
+                && o.PriceMoneyPerGo == 94));
+        Assert.Equal(800, order.QuantityGo);
+    }
+
+    [Fact]
+    public void AddOrMergeSellOrder_MergesQuantityAtSamePrice()
+    {
+        var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
+
+        MarketActions.AddOrMergeSellOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            94,
+            500,
+            MarketCommodityType.Food,
+            taxExempt: true);
+        MarketActions.AddOrMergeSellOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            94,
+            200,
+            MarketCommodityType.Food,
+            taxExempt: true);
+
+        var order = Assert.Single(
+            stronghold.Market.Orders.Where(o =>
+                MarketRules.IsSellOrder(o)
+                && o.ActorId == stronghold.ForceActor.Id
+                && o.PriceMoneyPerGo == 94));
+        Assert.Equal(700, order.QuantityGo);
+    }
+
+    [Fact]
+    public void AddOrMergeBuyOrder_WithCommitMoney_DeductsBuyerMoney()
+    {
+        var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
+        stronghold.ForceActor.Money = 10_000;
+
+        var ok = MarketActions.AddOrMergeBuyOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            87,
+            100,
+            MarketCommodityType.Food,
+            taxExempt: true,
+            commitMoney: true);
+
+        Assert.True(ok);
+        Assert.Equal(10_000 - 8700, stronghold.ForceActor.Money);
+        var order = Assert.Single(
+            stronghold.Market.Orders,
+            o => MarketRules.IsBuyOrder(o) && o.PriceMoneyPerGo == 87);
+        Assert.True(order.MoneyCommitted);
+        Assert.Equal(8700, order.CommittedMoneyGo);
+        Assert.Equal(100, order.QuantityGo);
+    }
+
+    [Fact]
+    public void AddOrMergeSellOrder_WithCommitInventory_DeductsSellerFood()
+    {
+        var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
+        stronghold.ForceActor.Food = 5000;
+
+        var ok = MarketActions.AddOrMergeSellOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            87,
+            1200,
+            MarketCommodityType.Food,
+            taxExempt: true,
+            commitInventory: true);
+
+        Assert.True(ok);
+        Assert.Equal(3800, stronghold.ForceActor.Food);
+        var order = Assert.Single(
+            stronghold.Market.Orders,
+            o => MarketRules.IsSellOrder(o) && o.PriceMoneyPerGo == 87);
+        Assert.True(order.InventoryCommitted);
+        Assert.Equal(1200, order.CommittedInventoryGo);
+        Assert.Equal(1200, order.QuantityGo);
+    }
+
     [Fact]
     public void MatchOrders_BuyMeetsSell_ExecutesTrade()
     {
@@ -100,24 +207,21 @@ public class MarketAndHarvestTests
         transit.TariffTaxRate = 10;
         transit.CommerceValue = 2000;
 
-        var convoy = new Domain.Entities.SupplyConvoy
-        {
-            Id = 7,
-            Name = "trade",
-            ForceId = 1,
-            Location = new Common.Types.Point3(1, 0),
-            OriginStrongholdId = 1,
-            TargetStrongholdId = 2,
-            CargoMoney = 5000,
-            CargoFoodGo = 0,
-            Purpose = Domain.Entities.Types.TransportPurpose.Trade
-        };
+        var transport = StrategyTestWorldBuilder.CreateTestTransportUnit(
+            7,
+            1,
+            new Common.Types.Point3(1, 0),
+            Domain.Entities.Types.TransportPurpose.Trade,
+            UnitKind.Merchant);
+        transport.TransportOriginStrongholdId = 1;
+        transport.TransportTargetStrongholdId = 2;
+        transport.Money = 5000;
 
         var ledger = new Diagnostics.TariffTaxLedger();
-        var paid = Actions.TariffEconomyActions.TryAssessTransitTariff(convoy, transit, ledger);
+        var paid = Actions.TariffEconomyActions.TryAssessTransitTariff(transport, transit, ledger);
 
         Assert.Equal(500, paid);
-        Assert.Equal(4500, convoy.CargoMoney);
+        Assert.Equal(4500, transport.Money);
         Assert.Equal(500, ledger.GetAccrued(transit.Id));
     }
 
@@ -128,22 +232,20 @@ public class MarketAndHarvestTests
         stronghold.CommerceValue = 2000;
         stronghold.TariffTaxRate = 10;
 
-        var convoy = new Domain.Entities.SupplyConvoy
-        {
-            Id = 8,
-            Name = "own",
-            ForceId = 1,
-            Location = stronghold.Location,
-            OriginStrongholdId = 2,
-            CargoMoney = 5000,
-            Purpose = Domain.Entities.Types.TransportPurpose.Trade
-        };
+        var transport = StrategyTestWorldBuilder.CreateTestTransportUnit(
+            8,
+            1,
+            stronghold.Location,
+            Domain.Entities.Types.TransportPurpose.Trade,
+            UnitKind.Merchant);
+        transport.TransportOriginStrongholdId = 2;
+        transport.Money = 5000;
 
         var ledger = new Diagnostics.TariffTaxLedger();
-        var paid = Actions.TariffEconomyActions.TryAssessTransitTariff(convoy, stronghold, ledger);
+        var paid = Actions.TariffEconomyActions.TryAssessTransitTariff(transport, stronghold, ledger);
 
         Assert.Equal(0, paid);
-        Assert.Equal(5000, convoy.CargoMoney);
+        Assert.Equal(5000, transport.Money);
     }
 
     [Fact]
@@ -155,11 +257,47 @@ public class MarketAndHarvestTests
 
         GovernmentMarketAiHelper.EvaluateAndPlaceSellOrders(stronghold);
 
-        var sell = stronghold.Market.Orders.Single(o => MarketRules.IsSellOrder(o));
-        Assert.Equal(stronghold.ForceActor.Id, sell.ActorId);
-        Assert.True(sell.TaxExempt);
-        Assert.Equal(40, sell.PriceMoneyPerGo);
-        Assert.Equal(2000, sell.QuantityGo);
+        var sells = stronghold.Market.Orders
+            .Where(o => MarketRules.IsSellOrder(o) && o.ActorId == stronghold.ForceActor.Id)
+            .OrderBy(o => o.PriceMoneyPerGo)
+            .ToList();
+
+        Assert.InRange(sells.Count, 1, MarketConstants.MarketMaxDepthLevels);
+        Assert.Equal(stronghold.ForceActor.Id, sells[0].ActorId);
+        Assert.True(sells.All(o => o.TaxExempt));
+        Assert.Equal(2000, sells.Sum(o => o.QuantityGo));
+        Assert.True(sells[0].QuantityGo >= sells[^1].QuantityGo);
+        Assert.Equal(41, sells[0].PriceMoneyPerGo);
+    }
+
+    [Fact]
+    public void GovernmentMarketAiHelper_DoesNotRemovePlayerRestingSellOrders()
+    {
+        var gameData = StrategyTestWorldBuilder.BuildMinimalWorld().GameData;
+        gameData.GameDate = new GameDate(1560, 6, 1);
+        var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
+        stronghold.ForceActor.Food = MarketConstants.GovernmentFoodReserveGo + 60_000;
+        stronghold.Market.LastClosePriceMoneyPerGo = 103;
+
+        var playerQty = 50 * LogisticsConstants.GoPerKoku;
+        Assert.True(MarketActions.AddOrMergeSellOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            askPrice: 13,
+            quantityGo: playerQty,
+            MarketCommodityType.Food,
+            taxExempt: true,
+            commitInventory: true,
+            createdDate: gameData.GameDate));
+
+        GovernmentMarketAiHelper.EvaluateAndPlaceSellOrders(stronghold);
+
+        Assert.Contains(
+            stronghold.Market.Orders,
+            o => MarketRules.IsSellOrder(o) && o.PriceMoneyPerGo == 13 && o.QuantityGo == playerQty);
+        Assert.Contains(
+            stronghold.Market.Orders,
+            o => MarketRules.IsSellOrder(o) && o.PriceMoneyPerGo == 104);
     }
 
     [Fact]
@@ -222,20 +360,18 @@ public class MarketAndHarvestTests
         world.GameData.Strongholds[1] = origin;
         world.GameData.Strongholds[2] = destination;
 
-        var convoy = new Domain.Entities.SupplyConvoy
-        {
-            Id = 3,
-            Name = "trade",
-            ForceId = 1,
-            Location = destination.Location,
-            OriginStrongholdId = 1,
-            TargetStrongholdId = 2,
-            CargoFoodGo = 1000,
-            Purpose = Domain.Entities.Types.TransportPurpose.Trade
-        };
+        var transport = StrategyTestWorldBuilder.CreateTestTransportUnit(
+            3,
+            1,
+            destination.Location,
+            Domain.Entities.Types.TransportPurpose.Trade,
+            UnitKind.Merchant);
+        transport.TransportOriginStrongholdId = 1;
+        transport.TransportTargetStrongholdId = 2;
+        transport.Food = 1000;
 
         var revenue = Actions.TradeEconomyActions.CompleteTradeArrival(
-            convoy,
+            transport,
             origin,
             destination,
             world.GameData);
@@ -258,18 +394,6 @@ public class MarketAndHarvestTests
     }
 
     [Fact]
-    public void CalculateDailyLuxuryProduction_RequiresWorkshop()
-    {
-        var withWorkshop = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
-        var without = StrategyTestWorldBuilder.CreateTestStronghold(2, 1, new Common.Types.Point3(1, 0));
-        without.CommerceValue = 500;
-        without.EconomyFacilityIds = [];
-
-        Assert.True(MarketCalculator.CalculateDailyLuxuryProduction(withWorkshop) > 0);
-        Assert.Equal(0, MarketCalculator.CalculateDailyLuxuryProduction(without));
-    }
-
-    [Fact]
     public void CanTrade_WithMarketFacility_IgnoresLowCommerceValue()
     {
         var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
@@ -280,17 +404,25 @@ public class MarketAndHarvestTests
     }
 
     [Fact]
+    public void CanTrade_WithoutMarketFacility_ReturnsFalse()
+    {
+        var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
+        stronghold.CommerceValue = 5000;
+        stronghold.EconomyFacilityIds = [];
+
+        Assert.False(MarketRules.CanTrade(stronghold));
+    }
+
+    [Fact]
     public void TransportRules_AdjacentEnemy_IncreasesThreat()
     {
-        var convoy = new Domain.Entities.SupplyConvoy
-        {
-            Id = 1,
-            Name = "test",
-            ForceId = 1,
-            Location = new Common.Types.Point3(5, 5),
-            OriginStrongholdId = 1,
-            Purpose = Domain.Entities.Types.TransportPurpose.Trade
-        };
+        var transport = StrategyTestWorldBuilder.CreateTestTransportUnit(
+            1,
+            1,
+            new Common.Types.Point3(5, 5),
+            Domain.Entities.Types.TransportPurpose.Trade,
+            UnitKind.Merchant);
+        transport.TransportOriginStrongholdId = 1;
 
         var world = StrategyTestWorldBuilder.BuildMinimalWorld();
         var enemy = StrategyTestWorldBuilder.CreateTestUnit(2, 2, new Common.Types.Point3(5, 6));
@@ -308,7 +440,7 @@ public class MarketAndHarvestTests
             }
         ];
 
-        var threat = TransportRules.EvaluateThreatLevel(convoy, world.GameData);
+        var threat = TransportRules.EvaluateThreatLevel(transport, world.GameData);
         Assert.True(threat > 0);
     }
 }

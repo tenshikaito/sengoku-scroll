@@ -6,16 +6,16 @@ namespace SengokuScroll.Strategy.Actions;
 /// <summary>移民队抵达后的据点人口与民心/治安调整。</summary>
 public static class MigrantConvoyActions
 {
-    public static void CompleteMigrantArrival(SupplyConvoy convoy, Stronghold destination)
+    public static void CompleteMigrantArrival(Unit transport, Stronghold destination)
     {
-        if (convoy.CargoPopulation <= 0)
+        if (transport.CargoPopulation <= 0)
             return;
 
-        destination.Population += convoy.CargoPopulation;
+        destination.Population += transport.CargoPopulation;
         destination.Stability = (byte)Math.Max(
             0,
             destination.Stability - MigrantConstants.DestinationStabilityPenalty);
-        convoy.CargoPopulation = 0;
+        transport.CargoPopulation = 0;
     }
 
     public static void ApplyOriginDepartureEffects(Stronghold origin, int migrants)

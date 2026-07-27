@@ -6,6 +6,7 @@ using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Character;
 using static SengokuScroll.Domain.Entities.Unit;
 
@@ -146,16 +147,17 @@ public static class StrategyVisionRules
         return true;
     }
 
-    /// <summary>运输队是否可作为视野源（同 Realm、在途）。</summary>
+    /// <summary>运输 Unit 是否可作为视野源（同 Realm、在途）。</summary>
     public static bool IsControllableVisionConvoy(
-        SupplyConvoy convoy,
+        Unit transport,
         int playerForceId,
         GameData gameData)
     {
-        if (!IsSameRealmForce(convoy.ForceId, playerForceId, gameData))
+        if (!IsSameRealmForce(transport.ForceId, playerForceId, gameData))
             return false;
 
-        return convoy.Status is SupplyConvoyStatus.Moving or SupplyConvoyStatus.Deceived;
+        return TransportUnitRules.IsActiveTransport(transport)
+               && transport.Status == UnitStatus.Moving;
     }
 
     /// <summary>是否为玩家势力当主角色（任何模式下恒可作为视野源）。</summary>
@@ -255,17 +257,20 @@ public static class StrategyVisionRules
         int mapWidth,
         int mapHeight)
     {
-        foreach (var convoy in gameData.SupplyConvoys.Values)
+        foreach (var transport in gameData.Units.Values)
         {
-            if (!visionForceIds.Contains(convoy.ForceId))
+            if (!TransportUnitRules.IsTransportUnit(transport))
                 continue;
 
-            if (!IsControllableVisionConvoy(convoy, playerForceId, gameData))
+            if (!visionForceIds.Contains(transport.ForceId))
+                continue;
+
+            if (!IsControllableVisionConvoy(transport, playerForceId, gameData))
                 continue;
 
             AddSightBox(
                 visible,
-                convoy.Location,
+                transport.Location,
                 StrategyTroopSightRanges.Convoy,
                 mapWidth,
                 mapHeight);

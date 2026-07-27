@@ -134,7 +134,7 @@ public class StrategyAiImprovementsTests
 
         Assert.True(GarrisonBehaviorRules.IsStrongholdBlockaded(stronghold, ctx.World.GameData));
         Assert.Equal(0, dispatchHelper.DispatchNeededConvoys());
-        Assert.Empty(ctx.World.GameData.SupplyConvoys);
+        Assert.DoesNotContain(ctx.World.GameData.Units.Values, TransportUnitRules.IsTransportUnit);
         Assert.True(unit.Food < SupplyDispatchConstants.UnitFoodThresholdGo);
     }
 
@@ -144,22 +144,15 @@ public class StrategyAiImprovementsTests
         var world = StrategyTestWorldBuilder.BuildLogisticsWorld(new Point3(3, 0), unitFood: 100);
         var stronghold = world.GameData.Strongholds[1];
 
-        var convoy = new SupplyConvoy
-        {
-            Id = 1,
-            Name = "测试粮运",
-            ForceId = 1,
-            Location = stronghold.Location,
-            OriginStrongholdId = stronghold.Id,
-            TargetUnitId = 1,
-            CargoFoodGo = 500,
-            Purpose = TransportPurpose.Supply,
-            Status = SupplyConvoyStatus.Moving,
-            Ap = 1,
-            Movement = 2,
-            RoutePoints = new Queue<Point3>([new Point3(1, 0), new Point3(2, 0)])
-        };
-        world.GameData.SupplyConvoys[1] = convoy;
+        var transport = StrategyTestWorldBuilder.CreateTestTransportUnit(2, 1, stronghold.Location);
+        transport.Name = "测试粮运";
+        transport.TransportOriginStrongholdId = stronghold.Id;
+        transport.TransportTargetUnitId = 1;
+        transport.Food = 500;
+        transport.Ap = 1;
+        transport.Movement = 2;
+        transport.ActionTarget.RoutePoints = new Queue<Point2>([new Point2(1, 0), new Point2(2, 0)]);
+        StrategyTestWorldBuilder.RegisterTransportUnit(world, transport);
 
         var forceB = StrategyTestWorldBuilder.CreateTestForce(2);
         StrategyTestWorldBuilder.LinkEnemyForces(world.GameData.Forces[1], forceB);
@@ -171,12 +164,12 @@ public class StrategyAiImprovementsTests
 
         using var ctx = StrategyTestWorldFactory.CreateFromWorld(world);
         var supplySystem = ctx.Services.GetRequiredService<IStrategySupplySystem>();
-        var startLocation = convoy.Location;
+        var startLocation = transport.Location;
 
         supplySystem.Update();
 
-        Assert.Equal(startLocation, convoy.Location);
-        Assert.Equal(1, convoy.Ap);
+        Assert.Equal(startLocation, transport.Location);
+        Assert.Equal(1, transport.Ap);
     }
 
     [Fact]

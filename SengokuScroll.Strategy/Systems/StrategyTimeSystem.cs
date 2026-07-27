@@ -90,16 +90,16 @@ public class StrategyTimeSystem(
             }
         }
 
-        // 阶段3：恢复在途运输队行动力
+        // 阶段3：恢复在途运输 Unit 行动力
         var gameData = context.GameWorldContext.GameWorld.GameData;
-        foreach (var convoy in gameData.SupplyConvoys.Values)
+        foreach (var transport in TransportUnitRules.EnumerateActiveTransportUnits(gameData))
         {
-            if (convoy.Status is not (SupplyConvoyStatus.Moving or SupplyConvoyStatus.Deceived))
+            if (transport.Status != UnitStatus.Moving && !TransportUnitRules.IsDeceivedTransport(transport))
                 continue;
 
-            var movement = convoy.Movement > 0 ? convoy.Movement : LogisticsConstants.ConvoyDailyAp;
-            convoy.Movement = movement;
-            convoy.Ap = Math.Min(movement, convoy.Ap + recovery);
+            var movement = transport.Movement > 0 ? transport.Movement : LogisticsConstants.ConvoyDailyAp;
+            transport.Movement = movement;
+            transport.Ap = Math.Min(movement, transport.Ap + recovery);
         }
     }
 

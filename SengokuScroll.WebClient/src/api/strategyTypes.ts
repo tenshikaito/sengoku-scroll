@@ -216,6 +216,7 @@ export interface StrategyMasterDataSnapshot {
   landmarks: StrategyMasterDataEntry[];
   terrainVegetationFeatures: StrategyMasterDataEntry[];
   terrainSurfaceFeatures: StrategyMasterDataEntry[];
+  commodities: StrategyMasterDataEntry[];
   enums: StrategyMasterDataEntry[];
 }
 
@@ -457,6 +458,15 @@ export interface StrategyStrongholdState {
   introduction?: string | null;
   technologies?: StrategyEntityTechnologyState[];
   activeEffects?: StrategyEntityEffectState[];
+  /** 经济设施（Market/特产工坊等）。 */
+  economyFacilities?: StrategyEconomyFacilityState[];
+  /** 官府马匹库存（匹）。 */
+  horse?: number;
+}
+
+export interface StrategyEconomyFacilityState {
+  typeId: number;
+  name: string;
 }
 
 export interface StrategyGarrisonTroopPoolState {
@@ -499,7 +509,7 @@ export interface StrategyStrongholdCityActorState {
   kind: string;
   money: number;
   food: number;
-  luxuryGoods: number;
+  horse: number;
   commerceProduction: number;
   agricultureProduction: number;
   characterCount: number;
@@ -556,6 +566,8 @@ export interface StrategyUnitState {
   cultureName: string;
   religionName: string;
   money: number;
+  /** 商队马匹库存（匹）。 */
+  horse?: number;
   /** 兵种/备队构成；无则空数组。 */
   composition: StrategySubUnitState[];
   /** Sufficient | Strained | CutOff */

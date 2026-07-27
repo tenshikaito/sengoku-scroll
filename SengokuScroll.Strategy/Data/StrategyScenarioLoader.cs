@@ -329,7 +329,8 @@ public static class StrategyScenarioLoader
                 DefenseFacilityTypes = StrongholdDefenseRules.CreateDefaultDefenseFacilityTypes(),
                 UnitTypes = [],
                 Characters = [],
-                Technologies = StrategyDefaultMasterDataSeed.CreateDefaultTechnologies()
+                Technologies = StrategyDefaultMasterDataSeed.CreateDefaultTechnologies(),
+                Commodities = [],
             },
             GameData = new GameData
             {
@@ -353,6 +354,8 @@ public static class StrategyScenarioLoader
 
         foreach (var character in characters.Values)
             MapLocationActions.RegisterCharacter(world, character);
+
+        SupplyConvoyMigrationHelper.MigrateToUnits(world);
 
         foreach (var character in characters.Values)
         {

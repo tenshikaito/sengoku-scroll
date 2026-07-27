@@ -449,8 +449,9 @@ Diplomacy.Arrears：贡粮/钱纳运送不足时累加（内藩→宗主）✅
 
 ```
 Market 设施绑定（EconomyFacilityIds；CanTrade 优先认 Market 设施）
-奢侈品工坊：日产 LuxuryGoods → 官办高价卖单（贸易收入）
-商户 AI：余粮/奢侈品挂卖单
+特产工坊（id=102）：M5+ 物资产出占位
+市场撮合：粮食 + 马匹（CommodityDefinition master；分品类 K 线/盘口）
+商户 / 马匹 AI：MerchantMarketAiHelper、HorseMarketAiHelper
 同盟/非敌对势力跨据点 Trade 运输队
 运输队被毁：贡纳欠账 + 敌军缴获（掠夺收入）
 势力内直辖欠账：Force.InternalArrears*
@@ -458,9 +459,17 @@ Market 设施绑定（EconomyFacilityIds；CanTrade 优先认 Market 设施）
 缺粮降民心 / 年度人口变化（简化）
 ```
 
+**M4-e（2026-07-27 · 多品类 UI）**
+
+```
+前端 StrategyMarketDialog：粮食/马匹 Tab；master 驱动单位与 API 路由
+StrategyMarketEchartsPanel：Tab 切换销毁重建图表
+WorldState.MasterData.Commodities 下发；stronghold.horse / unit.horse 展示
+```
+
 **M5+（计划）**
 
-定额制、建设投资、外交赠金、多种物资（铁木马）玩法、店铺设施荒废、AI 经济政策。
+定额制、建设投资、外交赠金、铁/木/炮等更多物资玩法、店铺设施荒废、AI 经济政策。
 
 ### 6.6 路径可见性与战争迷雾
 

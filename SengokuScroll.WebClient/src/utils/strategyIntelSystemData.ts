@@ -392,7 +392,7 @@ export interface IntelForceOrgActorRow {
   hostLordName: string;
   money: string;
   food: string;
-  luxuryGoods: string;
+  horse: string;
   characterCount: string;
   nameWithStrongholdLinkId?: number;
   hostForceNameLinkId?: number;
@@ -3220,7 +3220,7 @@ function mapForceOrgActorIntelRow(
     hostLordNameLinkId: stronghold.lordId > 0 ? stronghold.lordId : undefined,
     money: formatMoney(actor.money),
     food: formatFoodGo(actor.food),
-    luxuryGoods: String(Math.max(0, actor.luxuryGoods ?? 0)),
+    horse: String(Math.max(0, actor.horse ?? 0)),
     characterCount: String(Math.max(0, actor.characterCount)),
   };
 }

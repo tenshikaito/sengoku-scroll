@@ -454,6 +454,8 @@ public sealed record StrategyMasterDataSnapshotDto
 
     public required IReadOnlyList<StrategyMasterDataEntryDto> TerrainSurfaceFeatures { get; init; }
 
+    public required IReadOnlyList<StrategyMasterDataEntryDto> Commodities { get; init; }
+
     public required IReadOnlyList<StrategyMasterDataEntryDto> Enums { get; init; }
 }
 
@@ -684,8 +686,8 @@ public sealed record StrategyStrongholdStateDto
     /// <summary>已建城防设施。</summary>
     public required IReadOnlyList<StrategyDefenseFacilityStateDto> DefenseFacilities { get; init; }
 
-    /// <summary>官府奢侈品库存（M4-d）。</summary>
-    public required int LuxuryGoods { get; init; }
+    /// <summary>官府/据点马匹库存（匹）。</summary>
+    public required int Horse { get; init; }
 
     /// <summary>经济设施（Market/奢侈品工坊等）。</summary>
     public required IReadOnlyList<StrategyEconomyFacilityStateDto> EconomyFacilities { get; init; }
@@ -797,7 +799,7 @@ public sealed record StrategyStrongholdCityActorStateDto
 
     public required int Food { get; init; }
 
-    public required int LuxuryGoods { get; init; }
+    public required int Horse { get; init; }
 
     public required int CommerceProduction { get; init; }
 
@@ -1515,11 +1517,12 @@ public static class StrategyWorldStateMapper
                         b.Location.X, b.Location.Y, meta, visibilityState))
                 .Select(b => MapBattlefield(b, world.GameData))
                 .OrderBy(b => b.Id)],
-            SupplyConvoys = [.. world.GameData.SupplyConvoys.Values
-                .Where(c => visibilityState is null
+            SupplyConvoys = [.. world.GameData.Units.Values
+                .Where(TransportUnitRules.IsTransportUnit)
+                .Where(u => visibilityState is null
                     || StrategyFogDtoRules.IsMapMobileEntityVisible(
-                        c.Location.X, c.Location.Y, c.ForceId, meta, world.GameData, visibilityState))
-                .Select(c => MapConvoy(c, world.GameData))
+                        u.Location.X, u.Location.Y, u.ForceId, meta, world.GameData, visibilityState))
+                .Select(u => MapConvoy(u, world.GameData))
                 .OrderBy(c => c.Id)],
             MessageCarriers = [.. world.GameData.MessageCarriers.Values
                 .Where(m => visibilityState is null
@@ -1869,6 +1872,20 @@ public static class StrategyWorldStateMapper
                         ("description", kv.Value.Description))
                 })
                 .OrderBy(x => x.Id)],
+            Commodities = [.. gameMaster.Commodities.Values
+                .Select(x => new StrategyMasterDataEntryDto
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    Description = x.Description,
+                    Fields = MasterFields(
+                        ("commodityType", x.CommodityType.ToString()),
+                        ("tradeEnabled", x.TradeEnabled.ToString()),
+                        ("defaultPriceMoneyPerUnit", x.DefaultPriceMoneyPerUnit.ToString()),
+                        ("unitLabel", x.UnitLabel),
+                        ("description", x.Description))
+                })
+                .OrderBy(x => x.Id)],
             Enums = StrategyMasterDataEnumCatalog.BuildEntries()
         };
 
@@ -2183,54 +2200,54 @@ public static class StrategyWorldStateMapper
         };
     }
 
-    private static StrategySupplyConvoyStateDto MapConvoy(SupplyConvoy c, GameData gameData)
+    private static StrategySupplyConvoyStateDto MapConvoy(Unit u, GameData gameData)
     {
         string? commanderName = null;
-        if (c.LeaderId > 0 && gameData.Characters.TryGetValue(c.LeaderId, out var commander))
+        if (u.LeaderId > 0 && gameData.Characters.TryGetValue(u.LeaderId, out var commander))
             commanderName = commander.Name;
 
-        gameData.Units.TryGetValue(c.TargetUnitId, out var targetUnit);
-        gameData.Strongholds.TryGetValue(c.OriginStrongholdId, out var origin);
+        gameData.Units.TryGetValue(u.TransportTargetUnitId, out var targetUnit);
+        gameData.Strongholds.TryGetValue(u.TransportOriginStrongholdId, out var origin);
 
         var route = new List<StrategyMapPointDto>
         {
-            new() { X = c.Location.X, Y = c.Location.Y }
+            new() { X = u.Location.X, Y = u.Location.Y }
         };
-        foreach (var point in c.RoutePoints)
+        foreach (var point in u.ActionTarget.RoutePoints)
             route.Add(new StrategyMapPointDto { X = point.X, Y = point.Y });
 
-        var directive = c.IsReturningToOrigin ? "Retreat" : "Support";
+        var directive = u.IsReturningToOrigin ? "Retreat" : "Support";
 
         return new StrategySupplyConvoyStateDto
         {
-            Id = c.Id,
-            Name = c.Name,
-            ForceId = c.ForceId,
-            X = c.Location.X,
-            Y = c.Location.Y,
+            Id = u.Id,
+            Name = u.Name,
+            ForceId = u.ForceId,
+            X = u.Location.X,
+            Y = u.Location.Y,
             IsMilitary = false,
             CommanderName = commanderName,
-            CommanderId = c.LeaderId > 0 ? c.LeaderId : null,
-            Soldiers = c.PorterCount + c.EscortSoldierCount,
-            PorterCount = c.PorterCount,
-            EscortSoldierCount = c.EscortSoldierCount,
-            Food = c.CargoFoodGo,
-            CargoFoodGo = c.CargoFoodGo,
-            Ap = c.Ap,
-            Movement = c.Movement > 0 ? c.Movement : LogisticsConstants.ConvoyDailyAp,
-            Status = c.Status.ToString(),
+            CommanderId = u.LeaderId > 0 ? u.LeaderId : null,
+            Soldiers = u.PorterCount + u.EscortSoldierCount,
+            PorterCount = u.PorterCount,
+            EscortSoldierCount = u.EscortSoldierCount,
+            Food = u.Food,
+            CargoFoodGo = u.Food,
+            Ap = u.Ap,
+            Movement = u.Movement > 0 ? u.Movement : LogisticsConstants.ConvoyDailyAp,
+            Status = TransportUnitRules.MapTransportStatusLabel(u),
             Directive = directive,
             Route = route,
-            Morale = 75,
-            Training = 65,
+            Morale = u.Morale,
+            Training = u.Training,
             CultureName = "日本",
             ReligionName = "神道教",
-            Money = c.CargoMoney,
-            TargetUnitId = c.TargetUnitId,
+            Money = u.Money,
+            TargetUnitId = u.TransportTargetUnitId,
             TargetUnitName = targetUnit?.Name,
-            OriginStrongholdId = c.OriginStrongholdId,
+            OriginStrongholdId = u.TransportOriginStrongholdId,
             OriginStrongholdName = origin?.Name,
-            IsReturningToOrigin = c.IsReturningToOrigin
+            IsReturningToOrigin = u.IsReturningToOrigin
         };
     }
 
@@ -2332,6 +2349,9 @@ public static class StrategyWorldStateMapper
         var mapUnits = new List<StrategyUnitStateDto>();
         foreach (var unit in world.GameData.Units.Values.OrderBy(u => u.Id))
         {
+            if (TransportUnitRules.IsTransportUnit(unit))
+                continue;
+
             var placement = StrategyFogDtoRules.ClassifyUnit(
                 unit, meta, world.GameData, visibilityState);
             if (placement != StrategyFogDtoRules.UnitFogPlacement.Map)
@@ -2364,6 +2384,9 @@ public static class StrategyWorldStateMapper
         var roster = new List<StrategyUnitRosterEntryDto>();
         foreach (var unit in world.GameData.Units.Values.OrderBy(u => u.Id))
         {
+            if (TransportUnitRules.IsTransportUnit(unit))
+                continue;
+
             var placement = StrategyFogDtoRules.ClassifyUnit(
                 unit, meta, world.GameData, visibilityState);
             if (placement != StrategyFogDtoRules.UnitFogPlacement.Roster)
@@ -2694,7 +2717,7 @@ public static class StrategyWorldStateMapper
             IsHistorical = s.IsHistorical,
             Defense = facilities.Sum(f => f.Defense),
             DefenseFacilities = facilities,
-            LuxuryGoods = s.ForceActor.LuxuryGoods,
+            Horse = s.ForceActor.Horse,
             EconomyFacilities = MapEconomyFacilities(s),
             SiegeThreat = StrategyWorldStateDtoSiegeThreatResolver.Resolve(s, gameData),
             Scale = s.Scale,

@@ -3,12 +3,11 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
-using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Helpers;
 
-/// <summary>跨据点粮价套利：同势力或同盟派遣 Trade 运输队（M4-c/d）。</summary>
+/// <summary>跨据点粮价套利：低价据点采买、高价据点售出（做市商行商）。</summary>
 public static class TradeMarketAiHelper
 {
     public static bool ShouldDispatchTrade(
@@ -22,10 +21,10 @@ public static class TradeMarketAiHelper
         if (!DiplomacyTradeRules.CanTradeForces(origin.ForceId, destination.ForceId, gameData))
             return false;
 
-        if (!MarketRules.CanTrade(origin) || !MarketRules.CanTrade(destination))
+        if (!MarketRules.CanTrade(origin, gameData) || !MarketRules.CanTrade(destination, gameData))
             return false;
 
-        if (HasActiveTradeConvoy(gameData.SupplyConvoys, origin.Id, destination.Id))
+        if (TransportUnitRules.HasActiveTradeTransport(gameData, origin.Id, destination.Id))
             return false;
 
         var buyQty = MarketCalculator.CalculateCivilianBuyQuantityGo(destination);
@@ -36,12 +35,13 @@ public static class TradeMarketAiHelper
         if (sellQty < MarketConstants.GovernmentMinSellQuantityGo)
             return false;
 
-        var sellPrice = MarketCalculator.CalculateGovernmentSellPrice(origin);
-        var buyLimit = MarketCalculator.CalculateCivilianBuyLimitPrice(destination);
-        var minBuy = sellPrice * (EconomyConstants.BasisPointsPer100Percent + MarketConstants.TradeMinProfitSpreadBp)
-                       / EconomyConstants.BasisPointsPer100Percent;
+        var originPrice = MarketMakerAiHelper.ResolveReferencePrice(origin);
+        var destinationPrice = MarketMakerAiHelper.ResolveReferencePrice(destination);
+        var minProfitableDestination = originPrice
+            * (EconomyConstants.BasisPointsPer100Percent + MarketConstants.TradeMinProfitSpreadBp)
+            / EconomyConstants.BasisPointsPer100Percent;
 
-        return buyLimit >= minBuy;
+        return destinationPrice >= minProfitableDestination;
     }
 
     public static int CalculateTradeCargoGo(Stronghold origin, Stronghold destination)
@@ -55,17 +55,4 @@ public static class TradeMarketAiHelper
 
     public static int ResolvePathForceId(Stronghold origin, GameData gameData)
         => origin.ForceId;
-
-    public static bool HasActiveTradeConvoy(
-        IReadOnlyDictionary<int, SupplyConvoy> convoys,
-        int originStrongholdId,
-        int destinationStrongholdId)
-        => convoys.Values.Any(c =>
-            c.Purpose == TransportPurpose.Trade
-            && !c.IsReturningToOrigin
-            && c.OriginStrongholdId == originStrongholdId
-            && c.TargetStrongholdId == destinationStrongholdId
-            && c.Status is SupplyConvoyStatus.Moving
-                or SupplyConvoyStatus.Arrived
-                or SupplyConvoyStatus.Deceived);
 }

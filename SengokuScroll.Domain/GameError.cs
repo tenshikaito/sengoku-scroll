@@ -133,6 +133,19 @@ public sealed class GameError(string code, params object[] data)
         public static GameError InvalidForce { get; } = new(nameof(InvalidForce));
     }
 
+    public static class MarketError
+    {
+        /// <summary>无权在此据点交易或市场未开放。</summary>
+        public static GameError TradeNotAllowed { get; } = new(nameof(TradeNotAllowed));
+
+        /// <summary>未成交（无匹配挂单、库存或资金不足等）。</summary>
+        public static GameError TradeNotFilled { get; } = new(nameof(TradeNotFilled));
+
+        public static GameError OrderNotFound { get; } = new(nameof(OrderNotFound));
+
+        public static GameError OrderNotOwned { get; } = new(nameof(OrderNotOwned));
+    }
+
     public static class DomesticError
     {
         /// <summary>当主不在居城，无法下达据点内政指令。</summary>

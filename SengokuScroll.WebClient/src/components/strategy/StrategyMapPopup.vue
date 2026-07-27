@@ -67,11 +67,16 @@ const props = defineProps<{
   canUnitExitStronghold?: boolean;
   /** 单位可建制解散（Home 据点） */
   canUnitDisband?: boolean;
-  /** 单位可在城内贸易 */
-  canUnitTrade?: boolean;
-  /** 据点可创立商店 */
-  canCreateShop?: boolean;
-  createShopTooltip?: string;
+  /** 商队可在城内打开市场 */
+  canUnitOpenMarket?: boolean;
+  /** 当主据点可交易（城内须有商队） */
+  canStrongholdTrade?: boolean;
+  strongholdTradeTooltip?: string;
+  /** 角色所在据点可查看市场 */
+  canViewPersonalMarket?: boolean;
+  personalMarketTooltip?: string;
+  /** 据点商家列表（Merchant cityActors） */
+  merchantShops?: { id: number; name: string }[];
   /** 角色在城内可执行个人军事/内政指令（领主/代官/当主） */
   canExecutePersonalCommands?: boolean;
 }>();
@@ -101,17 +106,38 @@ const emit = defineEmits<{
   beginUnitEnterStronghold: [];
   beginUnitExitStronghold: [];
   beginUnitDisband: [];
-  beginUnitSmashBuyFood: [];
-  beginUnitTradePolicy: [];
-  beginCreateShop: [];
+  openUnitMarket: [];
+  openStrongholdMarket: [];
+  openPersonalMarket: [];
+  openMerchantShop: [actorId: number];
   showIntel: [];
   cancel: [];
 }>();
 
-type StrongholdMenuView = "categories" | "military" | "domestic" | "personnel";
+type StrongholdMenuView = "categories" | "military" | "domestic" | "personnel" | "merchants";
 
 const strongholdMenuView = ref<StrongholdMenuView>("categories");
 const characterMenuView = ref<StrongholdMenuView>("categories");
+
+const merchantShopList = computed(() => props.merchantShops ?? []);
+
+function openMerchantEntry() {
+  if (blockIfStrongholdBesieged()) return;
+  const shops = merchantShopList.value;
+  if (shops.length === 0) {
+    showUnavailableTip("该据点暂无商家");
+    return;
+  }
+  if (shops.length === 1) {
+    emit("openMerchantShop", shops[0]!.id);
+    return;
+  }
+  characterMenuView.value = "merchants";
+}
+
+function onMerchantShopClick(actorId: number) {
+  emit("openMerchantShop", actorId);
+}
 
 watch(
   () => props.mode,
@@ -513,22 +539,13 @@ function onCharacterEspionageClick() {
           📤 解散
         </StrategyMapActionButton>
         <StrategyMapActionButton
-          v-if="canUnitTrade"
+          v-if="canUnitOpenMarket"
           variant="primary"
           :tooltip-side="tooltipSide"
-          tooltip="按市价上限砸单买入粮食"
-          @click="emit('beginUnitSmashBuyFood')"
+          tooltip="以商队库存在大宗市场买卖粮食"
+          @click="emit('openUnitMarket')"
         >
-          🌾 购粮
-        </StrategyMapActionButton>
-        <StrategyMapActionButton
-          v-if="canUnitTrade"
-          variant="primary"
-          :tooltip-side="tooltipSide"
-          tooltip="设定等待购粮/卖粮策略（日末自动执行）"
-          @click="emit('beginUnitTradePolicy')"
-        >
-          📈 贸易
+          📈 交易
         </StrategyMapActionButton>
         <div class="divider" />
         <button type="button" class="map-action map-action--default" @click.stop="emit('showIntel')">
@@ -540,6 +557,25 @@ function onCharacterEspionageClick() {
 
     <template v-else-if="mode === 'characterCommand'">
       <div class="actions actions--vertical">
+        <template v-if="characterMenuView === 'merchants'">
+          <button type="button" class="map-action map-action--default map-action--back" @click.stop="characterMenuView = 'categories'">
+            ← 返回
+          </button>
+          <StrategyMapActionButton
+            v-for="shop in merchantShopList"
+            :key="shop.id"
+            variant="primary"
+            :tooltip-side="tooltipSide"
+            :tooltip="`拜访 ${shop.name}`"
+            @click="onMerchantShopClick(shop.id)"
+          >
+            🏪 {{ shop.name }}
+          </StrategyMapActionButton>
+          <div class="divider" />
+          <button type="button" class="map-action map-action--default" @click.stop="emit('cancel')">取消</button>
+        </template>
+
+        <template v-else>
         <template v-if="canExecutePersonalCommands">
           <template v-if="characterMenuView === 'categories'">
             <StrategyMapActionButton
@@ -630,6 +666,25 @@ function onCharacterEspionageClick() {
         </template>
 
         <StrategyMapActionButton
+          v-if="canViewPersonalMarket"
+          variant="primary"
+          :tooltip-side="tooltipSide"
+          :tooltip="personalMarketTooltip || '查看大宗市场行情（不可交易）'"
+          @click="emit('openPersonalMarket')"
+        >
+          📈 市场
+        </StrategyMapActionButton>
+        <StrategyMapActionButton
+          v-if="merchantShopList.length > 0"
+          variant="primary"
+          :tooltip-side="tooltipSide"
+          tooltip="拜访城内商家（个人物品买卖尚未实装）"
+          @click="openMerchantEntry"
+        >
+          🏪 商家
+        </StrategyMapActionButton>
+
+        <StrategyMapActionButton
           :variant="leaveAvailable ? 'primary' : 'muted'"
           :tooltip-side="tooltipSide"
           :tooltip="leaveTip"
@@ -675,6 +730,7 @@ function onCharacterEspionageClick() {
           📋 情报
         </button>
         <button type="button" class="map-action map-action--default" @click.stop="emit('cancel')">取消</button>
+        </template>
       </div>
     </template>
 
@@ -788,12 +844,12 @@ function onCharacterEspionageClick() {
             💰 税率
           </StrategyMapActionButton>
           <StrategyMapActionButton
-            :variant="canCreateShop ? 'primary' : 'muted'"
+            :variant="canStrongholdTrade ? 'primary' : 'muted'"
             :tooltip-side="tooltipSide"
-            :tooltip="canCreateShop ? '在本城创立商人商店（无需许可；商业值≥20，每商人势力每城限 1 店）' : (createShopTooltip || '当前无法创立商店')"
-            @click="canCreateShop ? emit('beginCreateShop') : showUnavailableTip(createShopTooltip || '当前无法创立商店')"
+            :tooltip="canStrongholdTrade ? '以官府库在本城大宗市场买卖' : (strongholdTradeTooltip || '当前无法交易')"
+            @click="canStrongholdTrade ? emit('openStrongholdMarket') : showUnavailableTip(strongholdTradeTooltip || '当前无法交易')"
           >
-            🏪 商店
+            📈 交易
           </StrategyMapActionButton>
           <StrategyMapActionButton
             variant="muted"

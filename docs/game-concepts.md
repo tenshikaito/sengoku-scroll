@@ -198,7 +198,8 @@
 | **保有核心 HasCoreForceIds** | 哪些势力宣称该据点为核心（宣战理由等）。 | ✅ | `Stronghold.cs` |
 | **据点市场 StrongholdMarket** | 订单簿 + 日 K 线；需 Market 设施方可挂单。 | ✅ | `StrongholdMarket.cs` |
 | **城防设施 DefenseFacilityIds** | Castle/Wall/Gate/Moat/Defender 等，累加城防值。 | 📋 | `StrongholdType.cs` |
-| **经济设施 EconomyFacilityIds** | Market、奢侈品工坊等。 | ✅ | `EconomyFacilityRules.cs` |
+| **经济设施 EconomyFacilityIds** | Market、特产工坊（id=102，M5+ 产出占位）等。 | ✅ | `EconomyFacilityRules.cs` |
+| **Actor 物资** | `Food`/`Money` + `Horse`（所持马匹）+ `Wood`/`Iron`/…；**骑兵由 SubUnit 兵种表示**，`Horse` 非编制上限。 | ✅ | `Actor.cs` |
 | **据点类型 StrongholdType** | 平城/平山城/山城等地形建造限制。 | 📋 | `Types/StrongholdType.cs` |
 
 ### 1.5 地图单位 Unit、子编制 SubUnit 与城内状态
@@ -473,20 +474,24 @@
 
 **关键文件**：`EconomyCalculator.cs` · `TariffEconomyActions.cs`
 
-### 4.3 市场 Market 与商店
+### 4.3 市场 Market 与商家
+
+> **完整规格**：[strategy-trade-market-design.md](./strategy-trade-market-design.md)（2026-07-26）
 
 | 概念 | 定义 | 状态 | 关键文件 |
 |------|------|------|----------|
 | **连续撮合** | 日推进中、单位移动前独立相位；**AI 与 Actor 挂单** 互相成交。 | ✅ | `StrategyMarketSystem.cs` |
-| **做市商** | 挂单主体为城内 **Actor**（官府 ForceActor、MerchantActor 等）。 | 🟡 | `StrongholdMarket.cs` |
-| **商店 Shop** | **1 商店 = 1 个 MerchantActor**；**同一商人势力在同一据点最多 1 店**；创立商店 **不要求** Market 设施，**不要求势力许可**（商业值≥20；史实许可规则 📋）。 | 🟡 | `StrongholdShopActions.cs` |
-| **单位交易** | 贸易 **Unit** 在 **InStronghold** 时仅 **砸单瞬时成交**（吃簿），**不可挂单**；成交进 Unit 的 Food/Money。 | 🟡 | 设计规格 |
-| **TradePolicy** | Unit 任务层：轮询至价格满足再砸单（等价「限价/到位才买卖」）。 | 🟡 | 设计规格 |
-| **关税** | 运输 Unit 过境含征税据点时 **自动扣税**；须在 **左上角消息区** 通知。 | 🟡 | `TariffEconomyActions.cs` |
-| **UI 入口** | 官府菜单→市场（**仅当主**）；单位菜单→市场（**该贸易 Unit**）；非当主个人仅可看行情。 | 🟡 | 设计规格 |
-| **挂单 MarketOrder** | Buy/Sell；主体为 Actor（做市）。 | ✅ | `StrongholdMarket.cs` |
-| **商品 MarketCommodityType** | `Food` / `Luxury`。 | ✅ | `MarketCommodityType.cs` |
-| **日 K 线 DailyPriceBar** | OHLC，保留约 2 年。 | ✅ | `StrongholdMarket.cs` |
+| **做市商** | 挂单主体为城内 **Actor**（官府、MerchantActor 等）。 | 🟡 | `StrongholdMarket.cs` |
+| **商家 MerchantActor** | 1 店 = 1 Actor；个人行动 **「商家」** 进店对话（物品 📋）；**大宗不在店内**。 | 🟡 | `StrongholdIntelDtoHelper.cs` |
+| **Market 设施** | **唯一**市场开放门槛；围城/封锁 **关市**。 | ✅ | `MarketRules.cs` |
+| **商队 UnitKind.Merchant** | 城内 **交易** 砸单；须预组商队带钱/粮，**不接官府库直联**。 | 🟡 | `UnitTradeActions.cs` |
+| **运输队 UnitKind.Convoy** | 补给/贡赋/税赋；与商队 **分类型、分菜单**。 | 🟡 | `UnitKind.cs` |
+| **TradePolicy** | 商队任务层：日末自动砸单。 | 🟡 | `UnitTradeActions.cs` |
+| **关税** | 商队过境；策略决定全额/超额确认 📋。 | 🟡 | `TariffEconomyActions.cs` |
+| **UI** | 个人：**市场**（只读）+ **商家**；据点/商队：**交易**→市场窗口；**无**策略模式创立店入口。 | 🟡 | `StrategyMarketDialog.vue` |
+| **挂单 MarketOrder** | Buy/Sell；主体为 Actor。 | ✅ | `StrongholdMarket.cs` |
+| **商品** | `Food`、`Horse`（可交易）；master `CommodityDefinition` | ✅ | `MarketCommodityType.cs` · `CommodityDefinition.cs` |
+| **日 K 线** | OHLC；窗口按需 `GET …/market` | ✅ | `MarketSnapshotHelper.cs` |
 
 ### 4.4 运输与经济任务 TransportPurpose
 
@@ -774,7 +779,7 @@ Application 层区分策略 / RPG / MMO — `GameOptions.cs`。RPG/MMO 专属概
 | `BattleCombatDirective` | `BattleDirectiveRules.cs` | HoldLine, FightToDeath, CounterAttack, AttemptRetreat |
 | `StrategyTimeState` | `StrategyTimeState.cs` | Paused, Running |
 | `SupplyConvoyStatus` | `SupplyConvoyStatus.cs` | Forming, Moving, Arrived, Destroyed, Deceived |
-| `MarketCommodityType` | `MarketCommodityType.cs` | Food, Luxury |
+| `MarketCommodityType` | `MarketCommodityType.cs` | Food, Horse |
 
 ---
 

@@ -1,6 +1,7 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
+using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Actions;
 
@@ -20,7 +21,6 @@ public static class TributeArrearsActions
         if (!gameData.Forces.TryGetValue(origin.ForceId, out var originForce))
             return;
 
-        // 业务：有宗主则记入双方外交欠账，否则记入势力内部欠账
         var suzerainForceId = ResolveSuzerainForceId(originForce);
         if (suzerainForceId is int suzerainId and > 0 && suzerainId != origin.ForceId)
         {
@@ -32,16 +32,16 @@ public static class TributeArrearsActions
         originForce.InternalArrearsMoney += Math.Max(0, moneyShortfall);
     }
 
-    /// <summary>运输队被毁时，将未送达的贡纳/税赋记为欠账。</summary>
-    public static void AccrueUndeliveredConvoy(SupplyConvoy convoy, GameData gameData)
+    /// <summary>运输 Unit 被毁时，将未送达的贡纳/税赋记为欠账。</summary>
+    public static void AccrueUndeliveredConvoy(Unit transport, GameData gameData)
     {
-        if (convoy.Purpose is not (TransportPurpose.Tribute or TransportPurpose.TaxMoney))
+        if (transport.TransportPurpose is not (TransportPurpose.Tribute or TransportPurpose.TaxMoney))
             return;
 
-        if (!gameData.Strongholds.TryGetValue(convoy.OriginStrongholdId, out var origin))
+        if (!gameData.Strongholds.TryGetValue(transport.TransportOriginStrongholdId, out var origin))
             return;
 
-        AccrueShortfall(gameData, origin, convoy.CargoFoodGo, convoy.CargoMoney);
+        AccrueShortfall(gameData, origin, transport.Food, transport.Money);
     }
 
     private static void AccrueDiplomacyShortfall(

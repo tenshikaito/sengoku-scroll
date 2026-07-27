@@ -2,13 +2,14 @@ using SengokuScroll.Common.Types;
 using SengokuScroll.Domain.Contexts;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
-using SengokuScroll.Domain.Extensions;
 using SengokuScroll.Domain.Systems;
 using SengokuScroll.Strategy.Actions;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Rules;
+using SengokuScroll.Domain.Extensions;
+using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Systems;
 
@@ -18,7 +19,7 @@ public interface IStrategySupplySystem : IGameSystem
 }
 
 /// <summary>
-/// 后勤系统：自动派遣运输队、每日推进在途队列、卸粮后返程、抵达据点后移除以便再次派遣。
+/// 后勤系统：自动派遣运输 Unit、每日推进在途队列、卸粮后返程、抵达据点后移除以便再次派遣。
 /// 玩家可查看运输队指令菜单；改道须经信使（后续 API）。
 /// </summary>
 public class StrategySupplySystem(
@@ -34,67 +35,66 @@ public class StrategySupplySystem(
     /// <inheritdoc />
     public void Update()
     {
-        // 阶段1：自动派遣——月初贡纳/钱纳、贸易队、缺粮补给队
         dispatchHelper.DispatchMonthlyLordTributes();
         dispatchHelper.DispatchTradeConvoys();
         dispatchHelper.DispatchNeededConvoys();
 
-        var gameData = context.GameWorldContext.GameWorld.GameData;
+        var worldContext = context.GameWorldContext;
+        var gameData = worldContext.GameWorld.GameData;
         var gameDate = gameData.GameDate;
-        var convoys = gameData.SupplyConvoys;
 
-        // 阶段2：逐队在途推进——日耗、拦截、移动、过境关税
-        foreach (var convoy in convoys.Values.ToList())
+        foreach (var transport in TransportUnitRules.EnumerateActiveTransportUnits(gameData).ToList())
         {
-            if (convoy.Status is not (SupplyConvoyStatus.Moving or SupplyConvoyStatus.Deceived))
+            if (transport.Status != UnitStatus.Moving && !TransportUnitRules.IsDeceivedTransport(transport))
                 continue;
 
-            SupplyConvoyActions.ApplyDailyTransitConsumption(convoy);
+            if (TransportUnitRules.HasArrived(transport))
+                continue;
 
-            // 返程空载不扣粮尽；Outbound 载粮/载钱均为 0 则视为溃散（移民队携带人口除外）
-            if (convoy.Purpose != TransportPurpose.Migrant
-                && convoy.CargoFoodGo <= 0
-                && convoy.CargoMoney <= 0
-                && !convoy.IsReturningToOrigin)
+            TransportUnitActions.ApplyDailyTransitConsumption(transport);
+
+            if (transport.TransportPurpose != TransportPurpose.Migrant
+                && transport.Food <= 0
+                && transport.Money <= 0
+                && transport.CargoPopulation <= 0
+                && !transport.IsReturningToOrigin)
             {
-                convoy.Status = SupplyConvoyStatus.Destroyed;
+                TransportUnitActions.DestroyTransport(worldContext, transport);
                 continue;
             }
 
-            // 业务：迷惑状态暂停移动，逐日递减迷惑剩余天数
-            if (convoy.IsDeceived && convoy.DeceivedHoldDaysRemaining > 0)
+            if (transport.IsDeceived && transport.DeceivedHoldDaysRemaining > 0)
             {
-                convoy.DeceivedHoldDaysRemaining--;
+                transport.DeceivedHoldDaysRemaining--;
                 continue;
             }
 
-            var threat = TransportRules.EvaluateThreatLevel(convoy, gameData);
-            if (TransportInterceptActions.ApplySoftIntercept(convoy, gameDate, threat, gameData))
+            var threat = TransportRules.EvaluateThreatLevel(transport, gameData);
+            if (TransportInterceptActions.ApplySoftIntercept(worldContext, transport, gameDate, threat, gameData))
                 continue;
 
-            if (convoy.Ap <= 0)
+            if (transport.Ap <= 0)
                 continue;
 
-            if (!convoy.IsReturningToOrigin
-                && gameData.Strongholds.TryGetValue(convoy.OriginStrongholdId, out var origin)
+            if (!transport.IsReturningToOrigin
+                && gameData.Strongholds.TryGetValue(transport.TransportOriginStrongholdId, out var origin)
                 && GarrisonBehaviorRules.IsStrongholdBlockaded(origin, gameData)
-                && convoy.Location.IsSameTile(origin.Location))
+                && transport.Location.IsSameTile(origin.Location))
                 continue;
 
-            convoy.Ap--;
-            SupplyConvoyActions.AdvanceOneStep(convoy);
+            transport.Ap--;
+            TransportUnitActions.AdvanceOneStep(worldContext, transport);
 
-            if (convoy.Purpose == TransportPurpose.Trade)
+            if (transport.TransportPurpose == TransportPurpose.Trade)
             {
-                var location = new Point2(convoy.Location.X, convoy.Location.Y);
-                var stronghold = context.GameWorldContext.GetStrongholdOrDefault(location);
+                var location = new Point2(transport.Location.X, transport.Location.Y);
+                var stronghold = worldContext.GetStrongholdOrDefault(location);
                 if (stronghold is not null)
                     TariffEconomyActions.TryAssessTransitTariff(
-                        convoy, stronghold, tariffTaxLedger, dayOutcomeBuffer, scenarioMeta);
+                        transport, stronghold, tariffTaxLedger, dayOutcomeBuffer, scenarioMeta);
             }
         }
 
-        // 阶段3：处理抵达运输队——卸货、贸易交割、安排返程
         dispatchHelper.CompleteArrivedConvoys();
     }
 }

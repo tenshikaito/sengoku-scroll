@@ -306,10 +306,300 @@ public sealed class StrategySimulationHost : IDisposable
             if (!gameData.Strongholds.TryGetValue(unit.LocationStrongholdId, out var stronghold))
                 return GameError.StrongholdError.StrongholdNotFound;
 
+            if (!UnitTradeActions.CanTradeAtStronghold(unit, stronghold, gameData))
+                return GameError.MarketError.TradeNotAllowed;
+
             var ledger = simulation.Services.GetRequiredService<MerchantTaxLedger>();
             var bought = UnitTradeActions.SmashBuyFood(
                 unit, stronghold, gameData, ledger, maxPriceMoneyPerGo, quantityGo);
-            return bought > 0 ? BuildStateResult() : GameError.DataNotFound;
+            return bought > 0 ? BuildStateResult() : GameError.MarketError.TradeNotFilled;
+        }
+    }
+
+    /// <summary>城内 Unit 市价卖出粮食（砸单）。</summary>
+    public GameResult<StrategyWorldStateDto> UnitSmashSellFood(
+        int unitId,
+        int minPriceMoneyPerGo,
+        int quantityGo = 0)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+
+            if (!gameData.Strongholds.TryGetValue(unit.LocationStrongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!UnitTradeActions.CanTradeAtStronghold(unit, stronghold, gameData))
+                return GameError.MarketError.TradeNotAllowed;
+
+            var ledger = simulation.Services.GetRequiredService<MerchantTaxLedger>();
+            var sold = UnitTradeActions.SmashSellFood(
+                unit, stronghold, gameData, ledger, minPriceMoneyPerGo, quantityGo);
+            return sold > 0 ? BuildStateResult() : GameError.MarketError.TradeNotFilled;
+        }
+    }
+
+    /// <summary>据点市场快照（市场窗口 UI）。</summary>
+    public GameResult<StrategyMarketSnapshotDto> GetMarketSnapshot(
+        int strongholdId,
+        MarketCommodityType commodity = MarketCommodityType.Food)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            var playerForceId = simulation.ScenarioMeta.PlayerForceId;
+            return MarketSnapshotHelper.BuildSnapshot(stronghold, gameData, commodity, playerForceId: playerForceId);
+        }
+    }
+
+    /// <summary>当主撤销官府挂单。</summary>
+    public GameResult<StrategyWorldStateDto> StrongholdLordCancelMarketOrder(
+        int strongholdId,
+        int orderId,
+        MarketCommodityType commodity = MarketCommodityType.Food)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            var meta = simulation.ScenarioMeta;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!StrongholdLordTradeActions.CancelMarketOrder(
+                    stronghold,
+                    meta.PlayerForceId,
+                    meta,
+                    gameData,
+                    orderId,
+                    commodity,
+                    out var error))
+            {
+                return error ?? GameError.MarketError.OrderNotFound;
+            }
+
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>当主以官府库在市价买入粮食。</summary>
+    public GameResult<StrategyWorldStateDto> StrongholdLordSmashBuyFood(
+        int strongholdId,
+        int maxPriceMoneyPerGo,
+        int quantityGo = 0)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            var meta = simulation.ScenarioMeta;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!StrongholdLordTradeActions.CanLordTradeAtStronghold(
+                    stronghold,
+                    meta.PlayerForceId,
+                    meta,
+                    gameData))
+            {
+                return GameError.MarketError.TradeNotAllowed;
+            }
+
+            var ledger = simulation.Services.GetRequiredService<MerchantTaxLedger>();
+            var result = StrongholdLordTradeActions.LimitBuyFood(
+                stronghold,
+                meta.PlayerForceId,
+                meta,
+                gameData,
+                ledger,
+                maxPriceMoneyPerGo,
+                quantityGo);
+            return result.HasTradeEffect ? BuildStateResult() : GameError.MarketError.TradeNotFilled;
+        }
+    }
+
+    /// <summary>当主以官府库在市价卖出粮食。</summary>
+    public GameResult<StrategyWorldStateDto> StrongholdLordSmashSellFood(
+        int strongholdId,
+        int minPriceMoneyPerGo,
+        int quantityGo = 0)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            var meta = simulation.ScenarioMeta;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!StrongholdLordTradeActions.CanLordTradeAtStronghold(
+                    stronghold,
+                    meta.PlayerForceId,
+                    meta,
+                    gameData))
+            {
+                return GameError.MarketError.TradeNotAllowed;
+            }
+
+            var ledger = simulation.Services.GetRequiredService<MerchantTaxLedger>();
+            var result = StrongholdLordTradeActions.LimitSellFood(
+                stronghold,
+                meta.PlayerForceId,
+                meta,
+                gameData,
+                ledger,
+                minPriceMoneyPerGo,
+                quantityGo);
+            return result.HasTradeEffect ? BuildStateResult() : GameError.MarketError.TradeNotFilled;
+        }
+    }
+
+    /// <summary>当主以官府库在市价买入马匹。</summary>
+    public GameResult<StrategyWorldStateDto> StrongholdLordSmashBuyHorse(
+        int strongholdId,
+        int maxPriceMoneyPerUnit,
+        int quantity = 0)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            var meta = simulation.ScenarioMeta;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!StrongholdLordTradeActions.CanLordTradeAtStronghold(
+                    stronghold,
+                    meta.PlayerForceId,
+                    meta,
+                    gameData))
+            {
+                return GameError.MarketError.TradeNotAllowed;
+            }
+
+            var ledger = simulation.Services.GetRequiredService<MerchantTaxLedger>();
+            var result = StrongholdLordTradeActions.LimitBuyHorse(
+                stronghold,
+                meta.PlayerForceId,
+                meta,
+                gameData,
+                ledger,
+                maxPriceMoneyPerUnit,
+                quantity);
+            return result.HasTradeEffect ? BuildStateResult() : GameError.MarketError.TradeNotFilled;
+        }
+    }
+
+    /// <summary>当主以官府库在市价卖出马匹。</summary>
+    public GameResult<StrategyWorldStateDto> StrongholdLordSmashSellHorse(
+        int strongholdId,
+        int minPriceMoneyPerUnit,
+        int quantity = 0)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            var meta = simulation.ScenarioMeta;
+            if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!StrongholdLordTradeActions.CanLordTradeAtStronghold(
+                    stronghold,
+                    meta.PlayerForceId,
+                    meta,
+                    gameData))
+            {
+                return GameError.MarketError.TradeNotAllowed;
+            }
+
+            var ledger = simulation.Services.GetRequiredService<MerchantTaxLedger>();
+            var result = StrongholdLordTradeActions.LimitSellHorse(
+                stronghold,
+                meta.PlayerForceId,
+                meta,
+                gameData,
+                ledger,
+                minPriceMoneyPerUnit,
+                quantity);
+            return result.HasTradeEffect ? BuildStateResult() : GameError.MarketError.TradeNotFilled;
+        }
+    }
+
+    /// <summary>城内 Unit 市价买入马匹（砸单）。</summary>
+    public GameResult<StrategyWorldStateDto> UnitSmashBuyHorse(
+        int unitId,
+        int maxPriceMoneyPerUnit,
+        int quantity = 0)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+
+            if (!gameData.Strongholds.TryGetValue(unit.LocationStrongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!UnitTradeActions.CanTradeAtStronghold(unit, stronghold, gameData))
+                return GameError.MarketError.TradeNotAllowed;
+
+            var ledger = simulation.Services.GetRequiredService<MerchantTaxLedger>();
+            var bought = UnitTradeActions.SmashBuyHorse(
+                unit, stronghold, gameData, ledger, maxPriceMoneyPerUnit, quantity);
+            return bought > 0 ? BuildStateResult() : GameError.MarketError.TradeNotFilled;
+        }
+    }
+
+    /// <summary>城内 Unit 市价卖出马匹（砸单）。</summary>
+    public GameResult<StrategyWorldStateDto> UnitSmashSellHorse(
+        int unitId,
+        int minPriceMoneyPerUnit,
+        int quantity = 0)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+
+            if (!gameData.Strongholds.TryGetValue(unit.LocationStrongholdId, out var stronghold))
+                return GameError.StrongholdError.StrongholdNotFound;
+
+            if (!UnitTradeActions.CanTradeAtStronghold(unit, stronghold, gameData))
+                return GameError.MarketError.TradeNotAllowed;
+
+            var ledger = simulation.Services.GetRequiredService<MerchantTaxLedger>();
+            var sold = UnitTradeActions.SmashSellHorse(
+                unit, stronghold, gameData, ledger, minPriceMoneyPerUnit, quantity);
+            return sold > 0 ? BuildStateResult() : GameError.MarketError.TradeNotFilled;
         }
     }
 

@@ -32,6 +32,7 @@ public class Actor : IHasForce
 
     public int Copper { get; set; }
 
+    /// <summary>所持马匹（匹）；Actor/Unit 库存物资。骑兵编制由 SubUnit 兵种表示，不以此字段为上限。</summary>
     public int Horse { get; set; }
 
     public int Matchlock { get; set; }

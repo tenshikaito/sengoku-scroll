@@ -8,6 +8,7 @@ using SengokuScroll.Strategy.Actions;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Data.Models;
+using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Helpers;
@@ -28,11 +29,8 @@ public class MigrantDispatchHelper(
             if (!ShouldEmigrate(origin))
                 continue;
 
-            if (gameData.SupplyConvoys.Values.Any(c =>
-                    c.Purpose == TransportPurpose.Migrant && c.OriginStrongholdId == origin.Id))
-            {
+            if (TransportUnitRules.HasActiveMigrantFromOrigin(gameData, origin.Id))
                 continue;
-            }
 
             var destination = FindBestDestination(origin, gameData);
             if (destination is null)
@@ -113,24 +111,20 @@ public class MigrantDispatchHelper(
 
         MigrantConvoyActions.ApplyOriginDepartureEffects(origin, migrants);
 
-        var convoyId = gameData.SupplyConvoys.Keys.DefaultIfEmpty(0).Max() + 1;
-        gameData.SupplyConvoys[convoyId] = new SupplyConvoy
-        {
-            Id = convoyId,
-            Name = $"{origin.Name}移民→{destination.Name}",
-            ForceId = 0,
-            Location = origin.Location,
-            OriginStrongholdId = origin.Id,
-            TargetStrongholdId = destination.Id,
-            CargoPopulation = migrants,
-            Purpose = TransportPurpose.Migrant,
-            PorterCount = LogisticsConstants.DefaultPorterCount,
-            EscortSoldierCount = 0,
-            Movement = LogisticsConstants.ConvoyDailyAp,
-            Ap = 0,
-            Status = SupplyConvoyStatus.Moving,
-            RoutePoints = RouteCalculator.ToDailyRouteQueue(path)
-        };
+        ConvoyUnitFactory.CreateTransportUnit(
+            context.GameWorldContext.GameWorld,
+            $"{origin.Name}移民→{destination.Name}",
+            forceId: 0,
+            leaderId: 0,
+            origin.Location,
+            origin.Id,
+            targetUnitId: 0,
+            targetStrongholdId: destination.Id,
+            foodCargo: 0,
+            moneyCargo: 0,
+            cargoPopulation: migrants,
+            TransportPurpose.Migrant,
+            RouteCalculator.ToDailyRouteQueuePoint2(path));
 
         return true;
     }

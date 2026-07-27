@@ -145,7 +145,6 @@ public static class StrategyTestWorldBuilder
             EconomyFacilityIds =
             [
                 EconomyFacilityConstants.MarketFacilityTypeId,
-                EconomyFacilityConstants.LuxuryWorkshopTypeId
             ],
             HasCoreForceIds = [forceId],
             Agriculture = new StrongholdAgricultureState()
@@ -246,4 +245,42 @@ public static class StrategyTestWorldBuilder
                 RoutePoints = new Queue<Point2>()
             }
         };
+
+    /// <summary>创建测试用运输 Unit（Convoy/Migrant/Merchant 在途）。</summary>
+    public static Unit CreateTestTransportUnit(
+        int id,
+        int forceId,
+        Point3 location,
+        TransportPurpose purpose = TransportPurpose.Supply,
+        UnitKind kind = UnitKind.Convoy)
+        => new()
+        {
+            Id = id,
+            Name = $"Transport{id}",
+            ForceId = forceId,
+            Location = location,
+            Ap = 0,
+            Movement = LogisticsConstants.ConvoyDailyAp,
+            IsMilitary = false,
+            Kind = kind,
+            Status = UnitStatus.Moving,
+            TransportPurpose = purpose,
+            PorterCount = LogisticsConstants.DefaultPorterCount,
+            EscortSoldierCount = purpose == TransportPurpose.Migrant
+                ? 0
+                : LogisticsConstants.DefaultEscortSoldierCount,
+            Morale = 70,
+            SubUnitIds = [],
+            ActionTarget = new UnitActionTarget
+            {
+                RoutePoints = new Queue<Point2>()
+            }
+        };
+
+    /// <summary>将运输 Unit 登记到测试世界。</summary>
+    public static void RegisterTransportUnit(GameWorld world, Unit transport)
+    {
+        world.GameData.Units[transport.Id] = transport;
+        MapLocationActions.RegisterUnit(world, transport);
+    }
 }

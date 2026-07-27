@@ -65,7 +65,7 @@ public class StrategyFogDtoRulesTests
         Defense = 500,
         DefenseFacilities = [],
         EconomyFacilities = [],
-        LuxuryGoods = 0,
+        Horse = 0,
         Scale = 12,
         Maintenance = 7200,
         ActiveEffects = [],

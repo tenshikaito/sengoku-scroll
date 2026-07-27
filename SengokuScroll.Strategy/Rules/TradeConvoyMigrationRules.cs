@@ -4,5 +4,5 @@ namespace SengokuScroll.Strategy.Rules;
 public static class TradeConvoyMigrationRules
 {
     /// <summary>false=沿用 SupplyConvoy；true=AI 贸易派遣优先创建 Merchant Unit。</summary>
-    public const bool PreferUnitTradeConvoys = false;
+    public const bool PreferUnitTradeConvoys = true;
 }

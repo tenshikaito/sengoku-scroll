@@ -16,11 +16,10 @@ public static class StrongholdMilitaryBootstrapHelper
         if (forceActor.SubUnitIds.Count > 0 || forceActor.Soldier <= 0)
             return;
 
-        forceActor.Horse = Math.Max(forceActor.Horse, Math.Max(20, stronghold.Population / 80));
         forceActor.Matchlock = Math.Max(forceActor.Matchlock, Math.Max(10, stronghold.Population / 120));
 
         var total = forceActor.Soldier;
-        var cavalry = Math.Min(total / 8, forceActor.Horse);
+        var cavalry = total / 8;
         var matchlock = Math.Min(total / 12, forceActor.Matchlock);
         var archers = Math.Min(total / 10, Math.Max(0, total - cavalry - matchlock) / 2);
         var professional = cavalry + matchlock + archers;

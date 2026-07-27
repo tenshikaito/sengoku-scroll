@@ -1,10 +1,12 @@
 using SengokuScroll.Common.Types;
+using SengokuScroll.Domain.Actions;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Data;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Rules;
 using SengokuScroll.Strategy.Tests.Fixtures;
 using SengokuScroll.Strategy.Vision;
 
@@ -20,19 +22,14 @@ public class ForceVisionConvoyAndLordTests
 
         var convoyX = 6;
         var convoyY = 6;
-        world.GameData.SupplyConvoys[9001] = new SupplyConvoy
-        {
-            Id = 9001,
-            Name = "测试粮运",
-            ForceId = meta.PlayerForceId,
-            Location = new Point3(convoyX, convoyY),
-            OriginStrongholdId = 1,
-            Status = SupplyConvoyStatus.Moving,
-            PorterCount = 10,
-            EscortSoldierCount = 5,
-            Movement = 4,
-            Ap = 4
-        };
+        var transport = StrategyTestWorldBuilder.CreateTestTransportUnit(
+            9001,
+            meta.PlayerForceId,
+            new Point3(convoyX, convoyY));
+        transport.TransportOriginStrongholdId = 1;
+        transport.Ap = 4;
+        transport.Movement = 4;
+        StrategyTestWorldBuilder.RegisterTransportUnit(world, transport);
 
         var visible = new ForceVisionPolicy().ComputeVisibleTiles(
             world,

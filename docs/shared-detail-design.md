@@ -568,13 +568,16 @@ Entity（抽象基类）
 | `Soldier` | int | 城兵数 |
 | `Morale` | byte | 士气（0-100） |
 
-**物资属性**：
+**物资属性**（`Actor` 基类，据点/单位/商户等共用）：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `Food` | int | 粮食储备 |
-| `Material` | int | 物资储备 |
-| `Money` | int | 金钱储备 |
+| `Food` | int | 粮食（合） |
+| `Money` | int | 金钱（贯） |
+| `Horse` | int | 所持马匹（匹）；Unit 载重/库存，**非**骑兵上限 |
+| `Wood` / `Iron` / `Copper` / `Matchlock` / `Cannon` / `Boat` / `Ship` / `Fleet` | int | 建设/军备物资（M5+ 循环） |
+
+骑兵编制见 **`SubUnit.TypeId`**（如 Cavalry）；已废弃用 `Horse` 限制骑兵数的 bootstrap 逻辑。
 
 **StrongholdActor结构**：
 

@@ -2,6 +2,7 @@ using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Calculators;
 
@@ -18,17 +19,14 @@ public static class SupplyStatusEvaluator
     /// <summary>评估单位当前补给状态。</summary>
     public static string EvaluateStatus(Unit unit, GameData gameData)
     {
-        var inbound = GetInboundConvoys(unit.Id, gameData);
+        var inbound = GetInboundTransports(unit.Id, gameData);
 
-        // 业务：无携粮且无在途载货 → 断绝
         if (unit.Food <= 0 && !HasUsableInboundCargo(inbound))
             return CutOff;
 
-        // 业务：在途补给队被迷惑 → 紧张
-        if (inbound.Any(c => c.Status is SupplyConvoyStatus.Deceived || c.IsDeceived))
+        if (inbound.Any(TransportUnitRules.IsDeceivedTransport))
             return Strained;
 
-        // 业务：携粮低于阈值时，有在途或后方粮源为紧张，否则断绝
         if (unit.Food < SupplyDispatchConstants.UnitFoodThresholdGo)
         {
             if (HasUsableInboundCargo(inbound))
@@ -45,18 +43,18 @@ public static class SupplyStatusEvaluator
     {
         var list = new List<InTransitSupplySummary>();
 
-        foreach (var convoy in GetInboundConvoys(unit.Id, gameData))
+        foreach (var transport in GetInboundTransports(unit.Id, gameData))
         {
-            if (convoy.IsReturningToOrigin || convoy.CargoFoodGo <= 0)
+            if (transport.IsReturningToOrigin || transport.Food <= 0)
                 continue;
 
             list.Add(new InTransitSupplySummary
             {
-                ConvoyId = convoy.Id,
-                CargoFoodGo = convoy.CargoFoodGo,
-                EstimatedDays = EstimateArrivalDays(convoy),
-                IsDeceived = convoy.IsDeceived || convoy.Status is SupplyConvoyStatus.Deceived,
-                OriginStrongholdId = convoy.OriginStrongholdId
+                ConvoyId = transport.Id,
+                CargoFoodGo = transport.Food,
+                EstimatedDays = EstimateArrivalDays(transport),
+                IsDeceived = TransportUnitRules.IsDeceivedTransport(transport),
+                OriginStrongholdId = transport.TransportOriginStrongholdId
             });
         }
 
@@ -73,13 +71,12 @@ public static class SupplyStatusEvaluator
         return Math.Max(0, unit.Food / daily);
     }
 
-    private static IEnumerable<SupplyConvoy> GetInboundConvoys(int unitId, GameData gameData)
-        => gameData.SupplyConvoys.Values.Where(c =>
-            c.TargetUnitId == unitId
-            && c.Status is not SupplyConvoyStatus.Destroyed);
+    private static IEnumerable<Unit> GetInboundTransports(int unitId, GameData gameData)
+        => TransportUnitRules.GetInboundTransportsForUnit(unitId, gameData)
+            .Where(TransportUnitRules.IsActiveTransport);
 
-    private static bool HasUsableInboundCargo(IEnumerable<SupplyConvoy> inbound)
-        => inbound.Any(c => !c.IsReturningToOrigin && c.CargoFoodGo > 0);
+    private static bool HasUsableInboundCargo(IEnumerable<Unit> inbound)
+        => inbound.Any(t => !t.IsReturningToOrigin && t.Food > 0);
 
     private static bool HasResupplySource(Unit unit, GameData gameData)
     {
@@ -95,13 +92,13 @@ public static class SupplyStatusEvaluator
         return false;
     }
 
-    private static int EstimateArrivalDays(SupplyConvoy convoy)
+    private static int EstimateArrivalDays(Unit transport)
     {
-        var days = convoy.RoutePoints.Count;
-        if (convoy.IsDeceived && convoy.DeceivedHoldDaysRemaining > 0)
-            days += convoy.DeceivedHoldDaysRemaining;
+        var days = transport.ActionTarget.RoutePoints.Count;
+        if (transport.IsDeceived && transport.DeceivedHoldDaysRemaining > 0)
+            days += transport.DeceivedHoldDaysRemaining;
 
-        return Math.Max(days, convoy.Status is SupplyConvoyStatus.Arrived ? 0 : 1);
+        return Math.Max(days, TransportUnitRules.HasArrived(transport) ? 0 : 1);
     }
 
     public sealed record InTransitSupplySummary

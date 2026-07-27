@@ -184,6 +184,22 @@ public sealed class UnitSmashBuyFoodRequest
     public int QuantityGo { get; init; }
 }
 
+/// <summary>Unit 市价卖粮（砸单）。</summary>
+public sealed class UnitSmashSellFoodRequest
+{
+    public required int MinPriceMoneyPerGo { get; init; }
+
+    public int QuantityGo { get; init; }
+}
+
+/// <summary>撤销官府挂单。</summary>
+public sealed class CancelMarketOrderRequest
+{
+    public required int OrderId { get; init; }
+
+    public string Commodity { get; init; } = "Food";
+}
+
 /// <summary>设置 Unit 贸易策略。</summary>
 public sealed class SetUnitTradePolicyRequest
 {

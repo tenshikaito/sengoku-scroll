@@ -120,21 +120,16 @@ public class EconomyMonthlySettlementTests
         var path = Path.Combine(AppContext.BaseDirectory, "Maps", "mini_kanto.json");
         var loaded = StrategyScenarioLoader.LoadFromFile(path);
         var gameData = loaded.World.GameData;
-        gameData.SupplyConvoys.Clear();
-        gameData.SupplyConvoys[99] = new Domain.Entities.SupplyConvoy
-        {
-            Id = 99,
-            Name = "测试贡纳",
-            ForceId = 1,
-            Location = new SengokuScroll.Common.Types.Point3(1, 4, 0),
-            OriginStrongholdId = 1,
-            TargetStrongholdId = 1,
-            CargoFoodGo = 500,
-            CargoMoney = 1200,
-            PorterCount = 10,
-            EscortSoldierCount = 5,
-            Status = Domain.Entities.Types.SupplyConvoyStatus.Moving
-        };
+        var transport = StrategyTestWorldBuilder.CreateTestTransportUnit(
+            99,
+            1,
+            new SengokuScroll.Common.Types.Point3(1, 4, 0));
+        transport.Name = "测试贡纳";
+        transport.TransportOriginStrongholdId = 1;
+        transport.TransportTargetStrongholdId = 1;
+        transport.Food = 500;
+        transport.Money = 1200;
+        StrategyTestWorldBuilder.RegisterTransportUnit(loaded.World, transport);
 
         var dto = StrategyWorldStateMapper.ToDto(loaded.World, "mini_kanto", loaded.Meta);
         var mapped = dto.SupplyConvoys.Single(c => c.Id == 99);

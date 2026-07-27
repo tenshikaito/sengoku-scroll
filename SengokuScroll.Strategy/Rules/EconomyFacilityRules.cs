@@ -14,10 +14,6 @@ public static class EconomyFacilityRules
     public static bool HasMarket(Stronghold stronghold)
         => HasFacility(stronghold, EconomyFacilityConstants.MarketFacilityTypeId);
 
-    /// <summary>据点是否拥有奢侈品工坊（可生产高价值商品）。</summary>
-    public static bool HasLuxuryWorkshop(Stronghold stronghold)
-        => HasFacility(stronghold, EconomyFacilityConstants.LuxuryWorkshopTypeId);
-
     /// <summary>剧本未配置时按商业值推断默认设施。</summary>
     public static IReadOnlyList<int> ResolveDefaultFacilityIds(Stronghold stronghold)
     {
@@ -27,10 +23,6 @@ public static class EconomyFacilityRules
         if (stronghold.CommerceValue >= EconomyConstants.CommerceValuePerShopSlot)
             ids.Add(EconomyFacilityConstants.MarketFacilityTypeId);
 
-        // 业务：商业值达到奢侈品工坊门槛时，视为拥有奢侈品工坊
-        if (stronghold.CommerceValue >= EconomyFacilityConstants.LuxuryWorkshopMinCommerceValue)
-            ids.Add(EconomyFacilityConstants.LuxuryWorkshopTypeId);
-
         return ids;
     }
 
@@ -39,7 +31,7 @@ public static class EconomyFacilityRules
         => typeId switch
         {
             EconomyFacilityConstants.MarketFacilityTypeId => "市场",
-            EconomyFacilityConstants.LuxuryWorkshopTypeId => "奢侈品工坊",
+            EconomyFacilityConstants.SpecialtyWorkshopTypeId => "特产工坊",
             _ => $"设施#{typeId}"
         };
 }

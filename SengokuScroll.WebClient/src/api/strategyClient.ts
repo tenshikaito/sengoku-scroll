@@ -420,6 +420,284 @@ export const unitSmashBuyFood = (
     },
   );
 
+export const unitSmashSellFood = (
+  unitId: number,
+  payload: { minPriceMoneyPerGo: number; quantityGo?: number },
+) =>
+  request(
+    "POST",
+    `/units/${unitId}/trade/smash-sell-food`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/trade/smash-sell-food`, {
+        minPriceMoneyPerGo: payload.minPriceMoneyPerGo,
+        quantityGo: payload.quantityGo ?? 0,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持贸易卖粮");
+    },
+  );
+
+export const unitSmashBuyHorse = (
+  unitId: number,
+  payload: { maxPriceMoneyPerGo: number; quantityGo?: number },
+) =>
+  request(
+    "POST",
+    `/units/${unitId}/trade/smash-buy-horse`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/trade/smash-buy-horse`, {
+        maxPriceMoneyPerGo: payload.maxPriceMoneyPerGo,
+        quantityGo: payload.quantityGo ?? 0,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持贸易购马");
+    },
+  );
+
+export const unitSmashSellHorse = (
+  unitId: number,
+  payload: { minPriceMoneyPerGo: number; quantityGo?: number },
+) =>
+  request(
+    "POST",
+    `/units/${unitId}/trade/smash-sell-horse`,
+    () =>
+      fetchLive<unknown>("POST", `/units/${unitId}/trade/smash-sell-horse`, {
+        minPriceMoneyPerGo: payload.minPriceMoneyPerGo,
+        quantityGo: payload.quantityGo ?? 0,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持贸易卖马");
+    },
+  );
+
+export interface StrategyMarketDepthLevel {
+  priceMoneyPerGo: number;
+  quantityGo: number;
+}
+
+export interface StrategyMarketDailyBar {
+  year: number;
+  month: number;
+  day: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volumeGo: number;
+  turnoverMoney: number;
+}
+
+export interface StrategyMarketSnapshot {
+  strongholdId: number;
+  strongholdName: string;
+  commodity: string;
+  isOpen: boolean;
+  lastClosePriceMoneyPerGo: number;
+  /** 盘口中线报价（由挂单簿推导） */
+  sessionPriceMoneyPerGo: number;
+  /** Empty | Bid | Ask | Both */
+  bookQuoteSide: string;
+  bestBidPriceMoneyPerGo: number;
+  bestAskPriceMoneyPerGo: number;
+  closeLevelQuantityGo: number;
+  bidLevels: StrategyMarketDepthLevel[];
+  askLevels: StrategyMarketDepthLevel[];
+  dailyBars: StrategyMarketDailyBar[];
+  playerOpenOrders: StrategyMarketOpenOrder[];
+}
+
+export interface StrategyMarketOpenOrder {
+  id: number;
+  side: string;
+  priceMoneyPerGo: number;
+  quantityGo: number;
+  originalQuantityGo: number;
+  filledQuantityGo: number;
+  /** Open | Partial */
+  fillStatus: string;
+  createdYear: number;
+  createdMonth: number;
+  createdDay: number;
+}
+
+function normalizeMarketSnapshot(raw: unknown): StrategyMarketSnapshot {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  const num = (obj: Record<string, unknown>, camel: string, pascal: string, fallback = 0) => {
+    const v = obj[camel] ?? obj[pascal];
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const str = (obj: Record<string, unknown>, camel: string, pascal: string, fallback: string) => {
+    const v = obj[camel] ?? obj[pascal];
+    return typeof v === "string" && v.length > 0 ? v : fallback;
+  };
+  const mapLevels = (levelsRaw: unknown): StrategyMarketDepthLevel[] => {
+    if (!Array.isArray(levelsRaw)) return [];
+    return levelsRaw.map((item) => {
+      const l = item as Record<string, unknown>;
+      return {
+        priceMoneyPerGo: num(l, "priceMoneyPerGo", "PriceMoneyPerGo"),
+        quantityGo: num(l, "quantityGo", "QuantityGo"),
+      };
+    });
+  };
+  const mapBars = (barsRaw: unknown): StrategyMarketDailyBar[] => {
+    if (!Array.isArray(barsRaw)) return [];
+    return barsRaw.map((item) => {
+      const b = item as Record<string, unknown>;
+      return {
+        year: num(b, "year", "Year"),
+        month: num(b, "month", "Month"),
+        day: num(b, "day", "Day"),
+        open: num(b, "open", "Open"),
+        high: num(b, "high", "High"),
+        low: num(b, "low", "Low"),
+        close: num(b, "close", "Close"),
+        volumeGo: num(b, "volumeGo", "VolumeGo"),
+        turnoverMoney: num(b, "turnoverMoney", "TurnoverMoney"),
+      };
+    });
+  };
+  const mapOpenOrders = (ordersRaw: unknown): StrategyMarketOpenOrder[] => {
+    if (!Array.isArray(ordersRaw)) return [];
+    return ordersRaw.map((item) => {
+      const o = item as Record<string, unknown>;
+      return {
+        id: num(o, "id", "Id"),
+        side: str(o, "side", "Side", "Buy"),
+        priceMoneyPerGo: num(o, "priceMoneyPerGo", "PriceMoneyPerGo"),
+        quantityGo: num(o, "quantityGo", "QuantityGo"),
+        originalQuantityGo: num(o, "originalQuantityGo", "OriginalQuantityGo"),
+        filledQuantityGo: num(o, "filledQuantityGo", "FilledQuantityGo"),
+        fillStatus: str(o, "fillStatus", "FillStatus", "Open"),
+        createdYear: num(o, "createdYear", "CreatedYear"),
+        createdMonth: num(o, "createdMonth", "CreatedMonth"),
+        createdDay: num(o, "createdDay", "CreatedDay"),
+      };
+    });
+  };
+  return {
+    strongholdId: num(row, "strongholdId", "StrongholdId"),
+    strongholdName: str(row, "strongholdName", "StrongholdName", "市场"),
+    commodity: str(row, "commodity", "Commodity", "Food"),
+    isOpen: row.isOpen === true || row.IsOpen === true,
+    lastClosePriceMoneyPerGo: num(row, "lastClosePriceMoneyPerGo", "LastClosePriceMoneyPerGo"),
+    sessionPriceMoneyPerGo: num(
+      row,
+      "sessionPriceMoneyPerGo",
+      "SessionPriceMoneyPerGo",
+      num(row, "lastClosePriceMoneyPerGo", "LastClosePriceMoneyPerGo"),
+    ),
+    bookQuoteSide: str(row, "bookQuoteSide", "BookQuoteSide", "Empty"),
+    bestBidPriceMoneyPerGo: num(row, "bestBidPriceMoneyPerGo", "BestBidPriceMoneyPerGo"),
+    bestAskPriceMoneyPerGo: num(row, "bestAskPriceMoneyPerGo", "BestAskPriceMoneyPerGo"),
+    closeLevelQuantityGo: num(row, "closeLevelQuantityGo", "CloseLevelQuantityGo"),
+    bidLevels: mapLevels(row.bidLevels ?? row.BidLevels),
+    askLevels: mapLevels(row.askLevels ?? row.AskLevels),
+    dailyBars: mapBars(row.dailyBars ?? row.DailyBars),
+    playerOpenOrders: mapOpenOrders(row.playerOpenOrders ?? row.PlayerOpenOrders),
+  };
+}
+
+export const fetchMarketSnapshot = (strongholdId: number, commodity: "Food" | "Horse" = "Food") =>
+  request(
+    "GET",
+    `/strongholds/${strongholdId}/market?commodity=${commodity}`,
+    () =>
+      fetchLive<unknown>("GET", `/strongholds/${strongholdId}/market?commodity=${commodity}`, undefined).then(
+        normalizeMarketSnapshot,
+      ),
+    () => {
+      throw new Error("Mock 模式不支持市场快照");
+    },
+  );
+
+export const strongholdLordSmashBuyFood = (
+  strongholdId: number,
+  payload: { maxPriceMoneyPerGo: number; quantityGo?: number },
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/trade/smash-buy-food`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/trade/smash-buy-food`, {
+        maxPriceMoneyPerGo: payload.maxPriceMoneyPerGo,
+        quantityGo: payload.quantityGo ?? 0,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持官府购粮");
+    },
+  );
+
+export const strongholdLordSmashSellFood = (
+  strongholdId: number,
+  payload: { minPriceMoneyPerGo: number; quantityGo?: number },
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/trade/smash-sell-food`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/trade/smash-sell-food`, {
+        minPriceMoneyPerGo: payload.minPriceMoneyPerGo,
+        quantityGo: payload.quantityGo ?? 0,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持官府卖粮");
+    },
+  );
+
+export const strongholdLordSmashBuyHorse = (
+  strongholdId: number,
+  payload: { maxPriceMoneyPerGo: number; quantityGo?: number },
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/trade/smash-buy-horse`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/trade/smash-buy-horse`, {
+        maxPriceMoneyPerGo: payload.maxPriceMoneyPerGo,
+        quantityGo: payload.quantityGo ?? 0,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持官府购马");
+    },
+  );
+
+export const strongholdLordSmashSellHorse = (
+  strongholdId: number,
+  payload: { minPriceMoneyPerGo: number; quantityGo?: number },
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/trade/smash-sell-horse`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/trade/smash-sell-horse`, {
+        minPriceMoneyPerGo: payload.minPriceMoneyPerGo,
+        quantityGo: payload.quantityGo ?? 0,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持官府卖马");
+    },
+  );
+
+export const strongholdLordCancelMarketOrder = (
+  strongholdId: number,
+  payload: { orderId: number; commodity?: "Food" | "Horse" },
+) =>
+  request(
+    "POST",
+    `/strongholds/${strongholdId}/trade/cancel-order`,
+    () =>
+      fetchLive<unknown>("POST", `/strongholds/${strongholdId}/trade/cancel-order`, {
+        orderId: payload.orderId,
+        commodity: payload.commodity ?? "Food",
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持撤单");
+    },
+  );
+
 export type UnitTradePolicyValue = "None" | "WaitBuyFood" | "WaitSellFood";
 
 export const setUnitTradePolicy = (

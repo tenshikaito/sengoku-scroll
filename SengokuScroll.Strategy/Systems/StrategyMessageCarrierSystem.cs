@@ -16,7 +16,7 @@ public interface IStrategyMessageCarrierSystem : IGameSystem
 }
 
 /// <summary>
-/// 文书载体系统：每日推进载体移动，抵达后投递方针/战报或向运输队施加假情报。
+/// 文书载体系统：每日推进载体移动，抵达后投递方针/战报或向运输 Unit 施加假情报。
 /// </summary>
 public class StrategyMessageCarrierSystem(
     IGameContext context,
@@ -34,7 +34,6 @@ public class StrategyMessageCarrierSystem(
     {
         var gameData = context.GameWorldContext.GameWorld.GameData;
         var carriers = gameData.MessageCarriers;
-        var convoys = gameData.SupplyConvoys;
         var toRemove = new List<int>();
 
         foreach (var carrier in carriers.Values.ToList())
@@ -44,7 +43,7 @@ public class StrategyMessageCarrierSystem(
 
             if (carrier.RoutePoints.Count == 0)
             {
-                Deliver(carrier, convoys, gameData);
+                Deliver(carrier, gameData);
                 toRemove.Add(carrier.Id);
                 continue;
             }
@@ -53,7 +52,7 @@ public class StrategyMessageCarrierSystem(
 
             if (carrier.RoutePoints.Count == 0)
             {
-                Deliver(carrier, convoys, gameData);
+                Deliver(carrier, gameData);
                 toRemove.Add(carrier.Id);
             }
         }
@@ -62,17 +61,13 @@ public class StrategyMessageCarrierSystem(
             carriers.Remove(id);
     }
 
-    private void Deliver(
-        MessageCarrier carrier,
-        Dictionary<int, SupplyConvoy> convoys,
-        Domain.GameData gameData)
+    private void Deliver(MessageCarrier carrier, Domain.GameData gameData)
     {
         carrier.Status = MessageCarrierStatus.Arrived;
 
         MessagePayloadDeliveryRegistry.TryDeliver(new MessagePayloadDeliveryContext
         {
             Carrier = carrier,
-            Convoys = convoys,
             GameData = gameData,
             ScenarioMeta = scenarioMeta,
             DayOutcomeBuffer = dayOutcomeBuffer,

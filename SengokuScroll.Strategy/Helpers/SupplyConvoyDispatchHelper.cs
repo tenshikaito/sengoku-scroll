@@ -15,10 +15,10 @@ using SengokuScroll.Strategy.Rules;
 namespace SengokuScroll.Strategy.Helpers;
 
 /// <summary>
-/// 运输队自动派遣：评估低粮单位并从最近有粮据点生成运输队与路径。
+/// 运输队自动派遣：评估低粮单位并从最近有粮据点生成运输 Unit 与路径。
 /// </summary>
 /// <remarks>
-/// 业务循环：据点出库 → 运输队沿路径前进 → 抵达部队卸粮 → 返程回据点 → 移除实体；
+/// 业务循环：据点出库 → 运输 Unit 沿路径前进 → 抵达部队卸粮 → 返程回据点 → 移除实体；
 /// 若部队仍缺粮，下一日可再次自动派遣。玩家改道须经信使（前端占位，后续 API）。
 /// </remarks>
 public class SupplyConvoyDispatchHelper(
@@ -29,23 +29,24 @@ public class SupplyConvoyDispatchHelper(
     StrategyTributeLedger tributeLedger,
     MonthlyTaxCollectionLedger monthlyTaxCollectionLedger)
 {
+    private IGameWorldContext WorldContext => context.GameWorldContext;
+
     /// <summary>
     /// 扫描己方单位，为缺粮且尚无在途（含返程）运输队的单位自动派遣补给。
     /// </summary>
     /// <returns>本次新创建的运输队数量。</returns>
     public int DispatchNeededConvoys()
     {
-        var world = context.GameWorldContext.GameWorld;
+        var world = WorldContext.GameWorld;
         var gameData = world.GameData;
         var created = 0;
 
-        foreach (var unit in context.GameWorldContext.EachUnit())
+        foreach (var unit in WorldContext.EachUnit().Where(u => u.IsMilitary).ToList())
         {
-            // 业务：缺粮且尚无在途运输队时，从最近有粮据点自动发粮
             if (unit.Food >= SupplyDispatchConstants.UnitFoodThresholdGo)
                 continue;
 
-            if (HasActiveConvoyForUnit(gameData.SupplyConvoys, unit.Id))
+            if (TransportUnitRules.HasActiveConvoyForUnit(gameData, unit.Id))
                 continue;
 
             var stronghold = FindNearestStrongholdWithFood(unit, gameData);
@@ -71,27 +72,21 @@ public class SupplyConvoyDispatchHelper(
 
             stronghold.ForceActor.Food -= cargo;
 
-            var convoyId = NextEntityId(gameData.SupplyConvoys.Keys);
-            var convoy = new SupplyConvoy
-            {
-                Id = convoyId,
-                Name = BuildConvoyName(stronghold, unit),
-                ForceId = unit.ForceId,
-                LeaderId = ResolveConvoyLeaderId(stronghold, gameData),
-                Location = stronghold.Location,
-                OriginStrongholdId = stronghold.Id,
-                TargetUnitId = unit.Id,
-                CargoFoodGo = cargo,
-                Purpose = TransportPurpose.Supply,
-                PorterCount = LogisticsConstants.DefaultPorterCount,
-                EscortSoldierCount = LogisticsConstants.DefaultEscortSoldierCount,
-                Movement = LogisticsConstants.ConvoyDailyAp,
-                Ap = 0,
-                Status = SupplyConvoyStatus.Moving,
-                RoutePoints = RouteCalculator.ToDailyRouteQueue(path)
-            };
+            ConvoyUnitFactory.CreateTransportUnit(
+                world,
+                BuildConvoyName(stronghold, unit),
+                unit.ForceId,
+                ResolveConvoyLeaderId(stronghold, gameData),
+                stronghold.Location,
+                stronghold.Id,
+                targetUnitId: unit.Id,
+                targetStrongholdId: 0,
+                foodCargo: cargo,
+                moneyCargo: 0,
+                cargoPopulation: 0,
+                purpose: TransportPurpose.Supply,
+                routePoints: RouteCalculator.ToDailyRouteQueuePoint2(path));
 
-            gameData.SupplyConvoys[convoyId] = convoy;
             created++;
         }
 
@@ -103,7 +98,7 @@ public class SupplyConvoyDispatchHelper(
     /// </summary>
     public int DispatchMonthlyLordTributes()
     {
-        var gameData = context.GameWorldContext.GameWorld.GameData;
+        var gameData = WorldContext.GameWorld.GameData;
 
         if (!EconomyRules.IsMonthlySettlementDay(gameData.GameDate))
             return 0;
@@ -123,7 +118,7 @@ public class SupplyConvoyDispatchHelper(
             if (!gameData.Strongholds.TryGetValue(targetStrongholdId, out var destination))
                 continue;
 
-            if (HasActiveTributeConvoy(gameData.SupplyConvoys, origin.Id, targetStrongholdId))
+            if (TransportUnitRules.HasActiveTributeTransport(gameData, origin.Id, targetStrongholdId))
                 continue;
 
             if (GarrisonBehaviorRules.IsStrongholdBlockaded(origin, gameData))
@@ -133,7 +128,6 @@ public class SupplyConvoyDispatchHelper(
             var obligation = moneyCargo;
             moneyCargo = Math.Min(moneyCargo, origin.ForceActor.Money);
 
-        // 业务：府库不足则记欠账，仍尝试按实际库存发运
             if (moneyCargo <= 0)
             {
                 if (obligation > 0)
@@ -173,7 +167,7 @@ public class SupplyConvoyDispatchHelper(
         if (obligationFoodGo <= 0)
             return false;
 
-        var gameData = context.GameWorldContext.GameWorld.GameData;
+        var gameData = WorldContext.GameWorld.GameData;
 
         var destinationId = TributeRoutingHelper.ResolveTributeDestinationStrongholdId(
             origin,
@@ -186,7 +180,7 @@ public class SupplyConvoyDispatchHelper(
         if (!gameData.Strongholds.TryGetValue(targetStrongholdId, out var destination))
             return false;
 
-        if (HasActiveTributeConvoy(gameData.SupplyConvoys, origin.Id, targetStrongholdId))
+        if (TransportUnitRules.HasActiveTributeTransport(gameData, origin.Id, targetStrongholdId))
             return false;
 
         if (GarrisonBehaviorRules.IsStrongholdBlockaded(origin, gameData))
@@ -223,7 +217,7 @@ public class SupplyConvoyDispatchHelper(
     /// <summary>扫描同势力据点间粮价差，派遣贸易运输队（M4-c）。</summary>
     public int DispatchTradeConvoys()
     {
-        var gameData = context.GameWorldContext.GameWorld.GameData;
+        var gameData = WorldContext.GameWorld.GameData;
         var created = 0;
 
         foreach (var destination in gameData.Strongholds.Values)
@@ -272,12 +266,22 @@ public class SupplyConvoyDispatchHelper(
         if (TradeConvoyMigrationRules.PreferUnitTradeConvoys)
         {
             return TradeConvoyUnitFactory.TryCreateMerchantTradeUnit(
-                context.GameWorldContext.GameWorld,
+                WorldContext.GameWorld,
                 origin,
                 destination,
-                foodCargo) is not null;
+                foodCargo,
+                pathfindingService) is not null;
         }
 
+        return TryCreateLegacyTradeConvoy(origin, destination, gameData, foodCargo);
+    }
+
+    private bool TryCreateLegacyTradeConvoy(
+        Stronghold origin,
+        Stronghold destination,
+        GameData gameData,
+        int foodCargo)
+    {
         var path = pathfindingService.CalculatePath(
             new MapPathAgent(origin.Location, TradeMarketAiHelper.ResolvePathForceId(origin, gameData)),
             destination.Location);
@@ -290,29 +294,22 @@ public class SupplyConvoyDispatchHelper(
         if (gameData.Forces.TryGetValue(origin.ForceId, out var originForce))
             ForceEconomyActions.SyncForceTreasuryFromStrongholds(originForce, gameData);
 
-        var convoyId = NextEntityId(gameData.SupplyConvoys.Keys);
-        var convoy = new SupplyConvoy
-        {
-            Id = convoyId,
-            Name = $"{origin.Name}贸易→{destination.Name}",
-            ForceId = origin.ForceId,
-            LeaderId = ResolveConvoyLeaderId(origin, gameData),
-            Location = origin.Location,
-            OriginStrongholdId = origin.Id,
-            TargetUnitId = 0,
-            TargetStrongholdId = destination.Id,
-            CargoFoodGo = foodCargo,
-            CargoMoney = 0,
-            Purpose = TransportPurpose.Trade,
-            PorterCount = LogisticsConstants.DefaultPorterCount,
-            EscortSoldierCount = LogisticsConstants.DefaultEscortSoldierCount,
-            Movement = LogisticsConstants.ConvoyDailyAp,
-            Ap = 0,
-            Status = SupplyConvoyStatus.Moving,
-            RoutePoints = RouteCalculator.ToDailyRouteQueue(path)
-        };
+        ConvoyUnitFactory.CreateTransportUnit(
+            WorldContext.GameWorld,
+            $"{origin.Name}贸易→{destination.Name}",
+            origin.ForceId,
+            ResolveConvoyLeaderId(origin, gameData),
+            origin.Location,
+            origin.Id,
+            targetUnitId: 0,
+            targetStrongholdId: destination.Id,
+            foodCargo,
+            moneyCargo: 0,
+            cargoPopulation: 0,
+            TransportPurpose.Trade,
+            RouteCalculator.ToDailyRouteQueuePoint2(path),
+            kindOverride: UnitKind.Convoy);
 
-        gameData.SupplyConvoys[convoyId] = convoy;
         return true;
     }
 
@@ -341,69 +338,61 @@ public class SupplyConvoyDispatchHelper(
         if (gameData.Forces.TryGetValue(origin.ForceId, out var originForce))
             ForceEconomyActions.SyncForceTreasuryFromStrongholds(originForce, gameData);
 
-        var convoyId = NextEntityId(gameData.SupplyConvoys.Keys);
-        var convoy = new SupplyConvoy
-        {
-            Id = convoyId,
-            Name = foodCargo > 0
+        ConvoyUnitFactory.CreateTransportUnit(
+            WorldContext.GameWorld,
+            foodCargo > 0
                 ? $"{origin.Name}贡粮→{destination.Name}"
                 : $"{origin.Name}钱纳→{destination.Name}",
-            ForceId = origin.ForceId,
-            LeaderId = ResolveConvoyLeaderId(origin, gameData),
-            Location = origin.Location,
-            OriginStrongholdId = origin.Id,
-            TargetUnitId = 0,
-            TargetStrongholdId = destination.Id,
-            CargoFoodGo = foodCargo,
-            CargoMoney = moneyCargo,
-            Purpose = purpose,
-            PorterCount = LogisticsConstants.DefaultPorterCount,
-            EscortSoldierCount = LogisticsConstants.DefaultEscortSoldierCount,
-            Movement = LogisticsConstants.ConvoyDailyAp,
-            Ap = 0,
-            Status = SupplyConvoyStatus.Moving,
-            RoutePoints = RouteCalculator.ToDailyRouteQueue(path)
-        };
+            origin.ForceId,
+            ResolveConvoyLeaderId(origin, gameData),
+            origin.Location,
+            origin.Id,
+            targetUnitId: 0,
+            targetStrongholdId: destination.Id,
+            foodCargo,
+            moneyCargo,
+            cargoPopulation: 0,
+            purpose,
+            RouteCalculator.ToDailyRouteQueuePoint2(path));
 
-        gameData.SupplyConvoys[convoyId] = convoy;
         return true;
     }
 
     /// <summary>
-    /// 处理已抵达运输队：卸粮后安排返程；返程抵达据点后移出地图。
+    /// 处理已抵达运输 Unit：卸粮后安排返程；返程抵达据点后移出地图。
     /// </summary>
     public void CompleteArrivedConvoys()
     {
-        var gameData = context.GameWorldContext.GameWorld.GameData;
+        var world = WorldContext.GameWorld;
+        var gameData = world.GameData;
 
-        foreach (var convoy in gameData.SupplyConvoys.Values.ToList())
+        foreach (var transport in TransportUnitRules.EnumerateActiveTransportUnits(gameData).ToList())
         {
-            if (convoy.Status != SupplyConvoyStatus.Arrived)
+            if (!TransportUnitRules.HasArrived(transport))
                 continue;
 
-            // 业务：返程抵达出发据点后移除实体，结束运输循环
-            if (convoy.IsReturningToOrigin)
+            if (transport.IsReturningToOrigin)
             {
-                gameData.SupplyConvoys.Remove(convoy.Id);
+                TransportUnitActions.DestroyTransport(WorldContext, transport);
                 continue;
             }
 
-            if (convoy.TargetStrongholdId > 0)
+            if (transport.TransportTargetStrongholdId > 0)
             {
-                if (gameData.Strongholds.TryGetValue(convoy.TargetStrongholdId, out var destination))
+                if (gameData.Strongholds.TryGetValue(transport.TransportTargetStrongholdId, out var destination))
                 {
-                    if (convoy.Purpose == TransportPurpose.Migrant)
+                    if (transport.TransportPurpose == TransportPurpose.Migrant)
                     {
-                        MigrantConvoyActions.CompleteMigrantArrival(convoy, destination);
-                        gameData.SupplyConvoys.Remove(convoy.Id);
+                        MigrantConvoyActions.CompleteMigrantArrival(transport, destination);
+                        TransportUnitActions.DestroyTransport(WorldContext, transport);
                         continue;
                     }
 
-                    if (convoy.Purpose == TransportPurpose.Trade
-                        && gameData.Strongholds.TryGetValue(convoy.OriginStrongholdId, out var tradeOrigin))
+                    if (transport.TransportPurpose == TransportPurpose.Trade
+                        && gameData.Strongholds.TryGetValue(transport.TransportOriginStrongholdId, out var tradeOrigin))
                     {
                         var revenue = TradeEconomyActions.CompleteTradeArrival(
-                            convoy,
+                            transport,
                             tradeOrigin,
                             destination,
                             gameData);
@@ -415,28 +404,27 @@ public class SupplyConvoyDispatchHelper(
                                 Category = "TradeConvoyArrived",
                                 Brief = $"📦 贸易队抵达 {destination.Name}",
                                 Message =
-                                    $"📦 贸易队 {convoy.Name} 抵达 {destination.Name}，" +
+                                    $"📦 贸易队 {transport.Name} 抵达 {destination.Name}，" +
                                     $"贸易收入 💰{revenue:N0}"
                             });
                         }
 
-                        ScheduleReturnToOrigin(convoy, gameData);
+                        ScheduleReturnToOrigin(transport, gameData);
                         continue;
                     }
 
-                    var deliveredFood = convoy.CargoFoodGo;
-                    var deliveredMoney = convoy.CargoMoney;
+                    var deliveredFood = transport.Food;
+                    var deliveredMoney = transport.Money;
 
-                    SupplyConvoyActions.DeliverCargoToStronghold(convoy, destination);
+                    TransportUnitActions.DeliverCargoToStronghold(transport, destination);
 
-                    if (gameData.Strongholds.TryGetValue(convoy.OriginStrongholdId, out var origin))
+                    if (gameData.Strongholds.TryGetValue(transport.TransportOriginStrongholdId, out var origin))
                     {
                         var playerCapitalId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
                             scenarioMeta.PlayerForceId,
                             gameData,
                             scenarioMeta);
 
-                        // 业务：贡纳抵达玩家居城时记入贡纳台账并推送事件
                         if (destination.Id == playerCapitalId
                             && TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData)
                             == scenarioMeta.PlayerForceId)
@@ -464,21 +452,22 @@ public class SupplyConvoyDispatchHelper(
                 }
                 else
                 {
-                    gameData.SupplyConvoys.Remove(convoy.Id);
+                    TransportUnitActions.DestroyTransport(WorldContext, transport);
                     continue;
                 }
 
-                ScheduleReturnToOrigin(convoy, gameData);
+                ScheduleReturnToOrigin(transport, gameData);
                 continue;
             }
 
-            if (!gameData.Units.TryGetValue(convoy.TargetUnitId, out var unit))
+            if (!gameData.Units.TryGetValue(transport.TransportTargetUnitId, out var unit))
             {
-                gameData.SupplyConvoys.Remove(convoy.Id);
+                TransportUnitActions.DestroyTransport(WorldContext, transport);
                 continue;
             }
 
-            SupplyConvoyActions.DeliverCargoToUnit(convoy, unit);
+            var foodDelivered = transport.Food;
+            TransportUnitActions.DeliverCargoToUnit(transport, unit);
 
             if (unit.ForceId == scenarioMeta.PlayerForceId)
             {
@@ -487,37 +476,36 @@ public class SupplyConvoyDispatchHelper(
                     Category = "SupplyConvoyArrived",
                     Brief = $"🌾 补给抵达 {unit.Name}",
                     Message =
-                        $"🌾 运输队 {convoy.Name} 向 {unit.Name} 卸粮 🌾{convoy.CargoFoodGo:N0}"
+                        $"🌾 运输队 {transport.Name} 向 {unit.Name} 卸粮 🌾{foodDelivered:N0}"
                 });
             }
 
-            ScheduleReturnToOrigin(convoy, gameData);
+            ScheduleReturnToOrigin(transport, gameData);
         }
     }
 
-    /// <summary>计算返回出发据点的路径并进入返程阶段。</summary>
-    private void ScheduleReturnToOrigin(SupplyConvoy convoy, GameData gameData)
+    private void ScheduleReturnToOrigin(Unit transport, GameData gameData)
     {
-        if (!gameData.Strongholds.TryGetValue(convoy.OriginStrongholdId, out var stronghold))
+        if (!gameData.Strongholds.TryGetValue(transport.TransportOriginStrongholdId, out var stronghold))
         {
-            gameData.SupplyConvoys.Remove(convoy.Id);
+            TransportUnitActions.DestroyTransport(WorldContext, transport);
             return;
         }
 
         var path = pathfindingService.CalculatePath(
-            new MapPathAgent(convoy.Location, convoy.ForceId),
+            new MapPathAgent(transport.Location, transport.ForceId),
             stronghold.Location);
 
         if (path is null || path.Count <= 1)
         {
-            convoy.Location = stronghold.Location;
-            gameData.SupplyConvoys.Remove(convoy.Id);
+            transport.Location = stronghold.Location;
+            TransportUnitActions.DestroyTransport(WorldContext, transport);
             return;
         }
 
-        SupplyConvoyActions.BeginReturnToOrigin(
-            convoy,
-            RouteCalculator.ToDailyRouteQueue(path));
+        TransportUnitActions.BeginReturnToOrigin(
+            transport,
+            RouteCalculator.ToDailyRouteQueuePoint2(path));
     }
 
     private Stronghold? FindNearestStrongholdWithFood(Unit unit, GameData gameData)
@@ -525,7 +513,7 @@ public class SupplyConvoyDispatchHelper(
         Stronghold? best = null;
         var bestSteps = int.MaxValue;
 
-        foreach (var stronghold in context.GameWorldContext.EachStronghold())
+        foreach (var stronghold in WorldContext.EachStronghold())
         {
             if (stronghold.ForceId != unit.ForceId)
                 continue;
@@ -549,58 +537,6 @@ public class SupplyConvoyDispatchHelper(
         }
 
         return best;
-    }
-
-    /// <summary>目标部队是否已有在途或返程中的运输任务（同一部队不重复派遣）。</summary>
-    private static bool HasActiveConvoyForUnit(
-        IReadOnlyDictionary<int, SupplyConvoy> convoys,
-        int unitId)
-    {
-        foreach (var convoy in convoys.Values)
-        {
-            if (convoy.TargetUnitId != unitId)
-                continue;
-
-            if (convoy.Status is SupplyConvoyStatus.Moving
-                or SupplyConvoyStatus.Deceived
-                or SupplyConvoyStatus.Forming
-                or SupplyConvoyStatus.Arrived)
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool HasActiveTributeConvoy(
-        IReadOnlyDictionary<int, SupplyConvoy> convoys,
-        int originStrongholdId,
-        int targetStrongholdId)
-    {
-        foreach (var convoy in convoys.Values)
-        {
-            if (convoy.OriginStrongholdId != originStrongholdId)
-                continue;
-
-            if (convoy.TargetStrongholdId != targetStrongholdId)
-                continue;
-
-            if (convoy.IsReturningToOrigin)
-                continue;
-
-            if (convoy.Status is SupplyConvoyStatus.Moving
-                or SupplyConvoyStatus.Deceived
-                or SupplyConvoyStatus.Forming
-                or SupplyConvoyStatus.Arrived)
-                return true;
-        }
-
-        return false;
-    }
-
-    private static int NextEntityId(IEnumerable<int> existingIds)
-    {
-        var max = existingIds.DefaultIfEmpty(0).Max();
-        return max + 1;
     }
 
     private static string BuildConvoyName(Stronghold origin, Unit target)

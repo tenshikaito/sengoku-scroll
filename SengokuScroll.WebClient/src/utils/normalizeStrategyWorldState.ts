@@ -5,6 +5,7 @@ import type {
   StrategyMasterDataEntry,
   StrategyMasterDataSnapshot,
   StrategyDefenseFacilityState,
+  StrategyEconomyFacilityState,
   StrategyForceState,
   StrategyLordState,
   StrategyMapCharacterState,
@@ -189,6 +190,7 @@ function normalizeUnit(raw: unknown, lord: StrategyLordState): StrategyUnitState
     cultureName: requiredString(pick(u, "cultureName", "CultureName"), "日本"),
     religionName: requiredString(pick(u, "religionName", "ReligionName"), "神道教"),
     money: safeInt(pick(u, "money", "Money")),
+    horse: safeInt(pick(u, "horse", "Horse")),
     composition: Array.isArray(pick(u, "composition", "Composition"))
       ? (pick(u, "composition", "Composition") as unknown[]).map(normalizeSubUnit)
       : [],
@@ -300,7 +302,7 @@ function normalizeCityActors(raw: unknown): StrategyStrongholdCityActorState[] {
       kind: normalizeCityActorKind(requiredString(pick(row, "kind", "Kind"), "Merchant")),
       money: safeInt(pick(row, "money", "Money")),
       food: safeInt(pick(row, "food", "Food")),
-      luxuryGoods: safeInt(pick(row, "luxuryGoods", "LuxuryGoods")),
+      horse: safeInt(pick(row, "horse", "Horse") ?? pick(row, "luxuryGoods", "LuxuryGoods")),
       commerceProduction: safeInt(pick(row, "commerceProduction", "CommerceProduction")),
       agricultureProduction: safeInt(pick(row, "agricultureProduction", "AgricultureProduction")),
       characterCount: safeInt(pick(row, "characterCount", "CharacterCount")),
@@ -325,7 +327,7 @@ function normalizeLegacyMerchants(raw: unknown): StrategyStrongholdCityActorStat
       kind: "Merchant",
       money: safeInt(pick(row, "money", "Money")),
       food: safeInt(pick(row, "food", "Food")),
-      luxuryGoods: safeInt(pick(row, "luxuryGoods", "LuxuryGoods")),
+      horse: safeInt(pick(row, "horse", "Horse") ?? pick(row, "luxuryGoods", "LuxuryGoods")),
       commerceProduction: 0,
       agricultureProduction: 0,
       characterCount: 0,
@@ -385,6 +387,7 @@ function normalizeStronghold(
     cultureName: requiredString(pick(s, "cultureName", "CultureName"), "日本"),
     religionName: requiredString(pick(s, "religionName", "ReligionName"), "神道教"),
     money: safeInt(pick(s, "money", "Money")),
+    horse: safeInt(pick(s, "horse", "Horse")),
     garrisonSoldiers: safeInt(pick(s, "garrisonSoldiers", "GarrisonSoldiers")),
     militiaSoldiers: safeInt(pick(s, "militiaSoldiers", "MilitiaSoldiers")),
     totalSoldiers: (() => {
@@ -441,6 +444,7 @@ function normalizeStronghold(
     introduction: optionalString(pick(s, "introduction", "Introduction")) ?? null,
     technologies: normalizeEntityTechnologies(pick(s, "technologies", "Technologies")),
     activeEffects: normalizeEntityEffects(pick(s, "activeEffects", "ActiveEffects")),
+    economyFacilities: normalizeEconomyFacilities(pick(s, "economyFacilities", "EconomyFacilities")),
   }) as StrategyStrongholdState;
 }
 
@@ -505,6 +509,18 @@ function normalizeDefenseFacilities(raw: unknown): StrategyDefenseFacilityState[
       category: requiredString(pick(f, "category", "Category"), "Defender"),
       level: safeInt(pick(f, "level", "Level"), 1),
       defense: safeInt(pick(f, "defense", "Defense")),
+    };
+  });
+}
+
+function normalizeEconomyFacilities(raw: unknown): StrategyEconomyFacilityState[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const f = item as Record<string, unknown>;
+    const typeId = safeInt(pick(f, "typeId", "TypeId"));
+    return {
+      typeId,
+      name: requiredString(pick(f, "name", "Name"), `设施 #${typeId}`),
     };
   });
 }
@@ -826,6 +842,7 @@ function normalizeMasterData(raw: unknown): StrategyMasterDataSnapshot | undefin
     terrainSurfaceFeatures: normalizeMasterDataList(
       pick(row, "terrainSurfaceFeatures", "TerrainSurfaceFeatures")
     ),
+    commodities: normalizeMasterDataList(pick(row, "commodities", "Commodities")),
     enums: normalizeMasterDataList(pick(row, "enums", "Enums")),
   };
 }

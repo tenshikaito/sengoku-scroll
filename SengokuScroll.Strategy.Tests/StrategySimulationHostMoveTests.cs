@@ -2,6 +2,7 @@ using SengokuScroll.Common.Types;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Actions;
 using SengokuScroll.Strategy.Hosting;
+using SengokuScroll.Strategy.Models;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Tests;
@@ -13,7 +14,7 @@ public class StrategySimulationHostMoveTests
     public void Host_UnitAt1_2_Reaches3_2_InTwoAdvanceDays()
     {
         using var host = new StrategySimulationHost();
-        host.LoadScenario("mini_kanto");
+        host.LoadScenario("mini_kanto", new StrategyLoadOptions { Difficulty = StrategyDifficulty.Easy });
 
         var world = GetWorld(host);
         foreach (var u in world.GameData.Units.Values.Where(u => u.ForceId != 1).ToList())
@@ -46,7 +47,7 @@ public class StrategySimulationHostMoveTests
     public void Host_AfterLongMarchTo1_2_ThenOrder3_2_AdvancesTo3_2()
     {
         using var host = new StrategySimulationHost();
-        host.LoadScenario("mini_kanto");
+        host.LoadScenario("mini_kanto", new StrategyLoadOptions { Difficulty = StrategyDifficulty.Easy });
 
         var world = GetWorld(host);
         Teleport(world, 1, new Point3(1, 2));

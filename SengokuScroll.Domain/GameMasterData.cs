@@ -32,4 +32,6 @@ public class GameMasterData
     public required Dictionary<int, CharacterDefinition> Characters { get; set; }
 
     public Dictionary<int, TechnologyDefinition> Technologies { get; set; } = [];
+
+    public Dictionary<int, CommodityDefinition> Commodities { get; set; } = [];
 }

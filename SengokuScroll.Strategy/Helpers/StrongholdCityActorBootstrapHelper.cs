@@ -16,6 +16,7 @@ public static class StrongholdCityActorBootstrapHelper
     public static void EnsureCityActors(GameData gameData, StrategyForceLordRegistry registry)
     {
         MerchantBootstrapHelper.EnsureMerchantShops(gameData);
+        MarketBootstrapHelper.EnsureDemoMarketData(gameData);
 
         foreach (var stronghold in gameData.Strongholds.Values)
         {
@@ -59,7 +60,6 @@ public static class StrongholdCityActorBootstrapHelper
             Type = ActorType.Regligion,
             Money = 12_000,
             Food = MarketConstants.MerchantFoodReserveGo,
-            LuxuryGoods = 20,
             CommerceProduction = 0,
             AgricultureProduction = Math.Max(120_000, stronghold.Population * 3),
             CharacterIds = [leaderId],
@@ -121,7 +121,6 @@ public static class StrongholdCityActorBootstrapHelper
             Type = ActorType.Merchant,
             Food = MarketConstants.MerchantFoodReserveGo,
             Money = 35_000,
-            LuxuryGoods = 300,
             CommerceProduction = Math.Max(500, stronghold.CommerceValue / 40),
             CharacterIds = [leaderId],
             SubUnitIds = []

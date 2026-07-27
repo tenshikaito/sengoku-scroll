@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using SengokuScroll.Common.Types;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities.Types;
+using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Hosting;
 using SengokuScroll.Strategy.Persistence;
 using SengokuScroll.Strategy.Models;
@@ -17,7 +18,8 @@ namespace SengokuScroll.WebApi.Controllers;
 [Route("api/strategy")]
 public class StrategyController(
     StrategySimulationHost simulationHost,
-    StrategySaveSlotRepository saveSlotRepository) : ControllerBase
+    StrategySaveSlotRepository saveSlotRepository,
+    ILogger<StrategyController> logger) : ControllerBase
 {
     /// <summary>加载 JSON 剧本（如 mini_kanto）。</summary>
     [HttpPost("load")]
@@ -180,6 +182,91 @@ public class StrategyController(
     public IActionResult UnitSmashBuyFood(int unitId, [FromBody] UnitSmashBuyFoodRequest request)
         => ToActionResult(simulationHost.UnitSmashBuyFood(
             unitId, request.MaxPriceMoneyPerGo, request.QuantityGo));
+
+    /// <summary>Unit 市价卖出粮食（砸单）。</summary>
+    [HttpPost("units/{unitId:int}/trade/smash-sell-food")]
+    public IActionResult UnitSmashSellFood(int unitId, [FromBody] UnitSmashSellFoodRequest request)
+        => ToActionResult(simulationHost.UnitSmashSellFood(
+            unitId, request.MinPriceMoneyPerGo, request.QuantityGo));
+
+    /// <summary>Unit 市价买入马匹。</summary>
+    [HttpPost("units/{unitId:int}/trade/smash-buy-horse")]
+    public IActionResult UnitSmashBuyHorse(int unitId, [FromBody] UnitSmashBuyFoodRequest request)
+        => ToActionResult(simulationHost.UnitSmashBuyHorse(
+            unitId, request.MaxPriceMoneyPerGo, request.QuantityGo));
+
+    /// <summary>Unit 市价卖出马匹。</summary>
+    [HttpPost("units/{unitId:int}/trade/smash-sell-horse")]
+    public IActionResult UnitSmashSellHorse(int unitId, [FromBody] UnitSmashSellFoodRequest request)
+        => ToActionResult(simulationHost.UnitSmashSellHorse(
+            unitId, request.MinPriceMoneyPerGo, request.QuantityGo));
+
+    /// <summary>据点市场快照（窗口 UI）。</summary>
+    [HttpGet("strongholds/{strongholdId:int}/market")]
+    public IActionResult GetMarketSnapshot(
+        int strongholdId,
+        [FromQuery] string commodity = "Food")
+    {
+        if (!Enum.TryParse<MarketCommodityType>(commodity, ignoreCase: true, out var parsed))
+            return BadRequest(new { error = "InvalidCommodity" });
+
+        var result = simulationHost.GetMarketSnapshot(strongholdId, parsed);
+        if (result.IsSuccess && result.Value is not null)
+        {
+            logger.LogInformation(
+                "MarketSnapshot {Summary}",
+                MarketSnapshotDiagnostics.FormatSummary(result.Value));
+        }
+
+        return ToMarketSnapshotResult(result);
+    }
+
+    /// <summary>当主以官府库市价购粮。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/trade/smash-buy-food")]
+    public IActionResult StrongholdLordSmashBuyFood(
+        int strongholdId,
+        [FromBody] UnitSmashBuyFoodRequest request)
+        => ToActionResult(simulationHost.StrongholdLordSmashBuyFood(
+            strongholdId, request.MaxPriceMoneyPerGo, request.QuantityGo));
+
+    /// <summary>当主以官府库市价卖粮。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/trade/smash-sell-food")]
+    public IActionResult StrongholdLordSmashSellFood(
+        int strongholdId,
+        [FromBody] UnitSmashSellFoodRequest request)
+        => ToActionResult(simulationHost.StrongholdLordSmashSellFood(
+            strongholdId, request.MinPriceMoneyPerGo, request.QuantityGo));
+
+    /// <summary>当主以官府库市价买马。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/trade/smash-buy-horse")]
+    public IActionResult StrongholdLordSmashBuyHorse(
+        int strongholdId,
+        [FromBody] UnitSmashBuyFoodRequest request)
+        => ToActionResult(simulationHost.StrongholdLordSmashBuyHorse(
+            strongholdId, request.MaxPriceMoneyPerGo, request.QuantityGo));
+
+    /// <summary>当主以官府库市价卖马。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/trade/smash-sell-horse")]
+    public IActionResult StrongholdLordSmashSellHorse(
+        int strongholdId,
+        [FromBody] UnitSmashSellFoodRequest request)
+        => ToActionResult(simulationHost.StrongholdLordSmashSellHorse(
+            strongholdId, request.MinPriceMoneyPerGo, request.QuantityGo));
+
+    /// <summary>当主撤销官府挂单。</summary>
+    [HttpPost("strongholds/{strongholdId:int}/trade/cancel-order")]
+    public IActionResult StrongholdLordCancelMarketOrder(
+        int strongholdId,
+        [FromBody] CancelMarketOrderRequest request)
+    {
+        if (!Enum.TryParse<MarketCommodityType>(request.Commodity, ignoreCase: true, out var commodity))
+            return BadRequest(new { error = "InvalidCommodity" });
+
+        return ToActionResult(simulationHost.StrongholdLordCancelMarketOrder(
+            strongholdId,
+            request.OrderId,
+            commodity));
+    }
 
     /// <summary>设置 Unit 贸易策略。</summary>
     [HttpPost("units/{unitId:int}/trade/policy")]
@@ -442,6 +529,14 @@ public class StrategyController(
     }
 
     private IActionResult ToPreviewResult(GameResult<StrategyPathPreviewDto> result)
+    {
+        if (result.IsSuccess)
+            return Ok(result.Value);
+
+        return BadRequest(new ApiErrorResponse(result.Error?.Code ?? "Unknown"));
+    }
+
+    private IActionResult ToMarketSnapshotResult(GameResult<StrategyMarketSnapshotDto> result)
     {
         if (result.IsSuccess)
             return Ok(result.Value);

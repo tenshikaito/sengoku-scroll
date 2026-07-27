@@ -2,6 +2,7 @@ using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Battle;
 
@@ -59,8 +60,6 @@ public static class BattleStratagemEvaluator
             && m.Status == MessageCarrierStatus.Arrived);
 
     private static bool HasDeceivedInboundSupply(Unit unit, GameData gameData)
-        => gameData.SupplyConvoys.Values.Any(c =>
-            c.TargetUnitId == unit.Id
-            && c is { Status: SupplyConvoyStatus.Deceived } or { IsDeceived: true }
-            && !c.IsReturningToOrigin);
+        => TransportUnitRules.GetInboundTransportsForUnit(unit.Id, gameData)
+            .Any(t => TransportUnitRules.IsDeceivedTransport(t) && !t.IsReturningToOrigin);
 }

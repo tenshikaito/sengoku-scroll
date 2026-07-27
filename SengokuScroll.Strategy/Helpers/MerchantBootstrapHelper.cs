@@ -97,9 +97,8 @@ public static class MerchantBootstrapHelper
             ForceId = organization.Id,
             StrongholdId = stronghold.Id,
             Type = ActorType.Merchant,
-            Food = MarketConstants.MerchantFoodReserveGo * 2,
+            Food = MarketConstants.MerchantFoodReserveGo * 4,
             Money = ResolveShopMoney(stronghold, houseName),
-            LuxuryGoods = 100,
             CommerceProduction = Math.Max(500, stronghold.CommerceValue / 40),
             CharacterIds = [leaderId],
             SubUnitIds = []

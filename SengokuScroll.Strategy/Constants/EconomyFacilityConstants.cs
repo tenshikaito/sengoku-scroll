@@ -5,8 +5,6 @@ public static class EconomyFacilityConstants
 {
     public const int MarketFacilityTypeId = 101;
 
-    public const int LuxuryWorkshopTypeId = 102;
-
-    /// <summary>启用奢侈品工坊所需的最低商业值。</summary>
-    public const int LuxuryWorkshopMinCommerceValue = 3000;
+    /// <summary>特产工坊（M5+ 物资产出占位；旧档 id=102）。</summary>
+    public const int SpecialtyWorkshopTypeId = 102;
 }

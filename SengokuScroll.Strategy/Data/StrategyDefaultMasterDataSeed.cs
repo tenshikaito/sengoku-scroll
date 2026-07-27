@@ -1,5 +1,6 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Definitions;
+using SengokuScroll.Domain.Definitions;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Enums;
 using SengokuScroll.Strategy.Constants;
@@ -64,8 +65,36 @@ internal static class StrategyDefaultMasterDataSeed
         if (master.Technologies.Count == 0)
             master.Technologies = CreateDefaultTechnologies();
 
+        if (master.Commodities.Count == 0)
+            master.Commodities = CreateCommodities();
+
         SeedMapMasterData(world);
     }
+
+    internal static Dictionary<int, CommodityDefinition> CreateCommodities()
+        => new()
+        {
+            [(int)MarketCommodityType.Food] = new()
+            {
+                Id = (int)MarketCommodityType.Food,
+                Name = "粮食",
+                Description = "可大宗撮合的粮秣。",
+                CommodityType = MarketCommodityType.Food,
+                TradeEnabled = true,
+                DefaultPriceMoneyPerUnit = Strategy.Constants.MarketConstants.DefaultPriceMoneyPerGo,
+                UnitLabel = "合",
+            },
+            [(int)MarketCommodityType.Horse] = new()
+            {
+                Id = (int)MarketCommodityType.Horse,
+                Name = "马匹",
+                Description = "军用与运输用马；库存为 Actor.Horse。",
+                CommodityType = MarketCommodityType.Horse,
+                TradeEnabled = true,
+                DefaultPriceMoneyPerUnit = 120,
+                UnitLabel = "匹",
+            },
+        };
 
     internal static Dictionary<int, TechnologyDefinition> CreateDefaultTechnologies()
         => new()

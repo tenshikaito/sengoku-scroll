@@ -18,9 +18,6 @@ import {
   enterUnitStronghold,
   exitUnitStronghold,
   disbandUnitOrganizationally,
-  createMerchantShop,
-  unitSmashBuyFood,
-  setUnitTradePolicy,
   recordEspionageIntel,
   setStrongholdTaxRates,
   setStrongholdGovernancePriority,
@@ -48,6 +45,7 @@ import {
   type StrategyEconomySettlementDetail,
   type StrategyMovementTraceEntry,
   type StrategySaveSlotSummary,
+  type StrategyUnitState,
   type StrategyWorldState,
   type StrategyMapMasterState,
   type MapPoint,
@@ -70,6 +68,13 @@ import StrategyDirectiveDialog from "@/components/strategy/StrategyDirectiveDial
 import StrategySplitDialog from "@/components/strategy/StrategySplitDialog.vue";
 import StrategyExpeditionDialog from "@/components/strategy/StrategyExpeditionDialog.vue";
 import StrategyTaxRateDialog from "@/components/strategy/StrategyTaxRateDialog.vue";
+import StrategyMarketDialog from "@/components/strategy/StrategyMarketDialog.vue";
+import {
+  isMerchantTradeUnit,
+  isStrongholdMarketOpen,
+  strongholdHasMarketFacility,
+  strongholdMerchantActors,
+} from "@/utils/strategyMarketHelpers";
 import StrategyStrongholdGovernanceDialog, {
   type StrongholdGovernancePriorityValue,
 } from "@/components/strategy/StrategyStrongholdGovernanceDialog.vue";
@@ -557,24 +562,151 @@ const canUnitDisband = computed(() => {
   );
 });
 
-const canUnitTrade = computed(() => {
+const canUnitOpenMarket = computed(() => {
   const unit = selectedUnit.value;
   const sh = unitPopupStronghold.value;
   const ws = state.value;
   if (!unit || !sh || !ws || !selectedUnitDirectlyControlled.value) return false;
-  if (!unit.inStronghold || unit.locationStrongholdId !== sh.id || unit.soldiers <= 0) return false;
+  if (!isMerchantTradeUnit(unit)) return false;
+  if (!unit.inStronghold || unit.locationStrongholdId !== sh.id) return false;
+  if (!isStrongholdMarketOpen(sh)) return false;
   return isPlayerAllyForce(ws, sh.forceId);
 });
 
-const canCreateMerchantShop = computed(
-  () => canLordCommandActiveStronghold.value && menuPopupMode.value === "strongholdCommand",
-);
-
-const createShopTooltip = computed(() => {
-  if (!isLordAtOwnResidence.value) return LORD_AT_RESIDENCE_REQUIRED_TIP;
-  if (!canLordCommandActiveStronghold.value) return LORD_COMMAND_STRONGHOLD_TIP;
-  return "";
+const popupMerchantShops = computed(() => {
+  const ws = state.value;
+  if (!ws) return [];
+  const sh =
+    menuPopupMode.value === "characterCommand"
+      ? activeCharacterStronghold.value
+      : menuPopupMode.value === "strongholdCommand"
+        ? activeStrongholdForCommands.value
+        : unitPopupStronghold.value;
+  return strongholdMerchantActors(sh).map((a) => ({ id: a.id, name: a.name }));
 });
+
+const canViewPersonalMarket = computed(() => {
+  const sh = activeCharacterStronghold.value;
+  if (menuPopupMode.value !== "characterCommand" || !sh) return false;
+  return isStrongholdMarketOpen(sh);
+});
+
+const personalMarketTooltip = computed(() => {
+  const sh = activeCharacterStronghold.value;
+  if (!sh) return "须在城内";
+  if (!strongholdHasMarketFacility(sh)) return "该据点尚未建设市场设施";
+  if (!isStrongholdMarketOpen(sh)) return "围城或封锁中，市场已关闭";
+  return "查看大宗市场行情（个人不可交易）";
+});
+
+const canStrongholdTrade = computed(() => {
+  if (!canLordCommandActiveStronghold.value || menuPopupMode.value !== "strongholdCommand") {
+    return false;
+  }
+  const sh = activeStrongholdForCommands.value;
+  return Boolean(sh && isStrongholdMarketOpen(sh));
+});
+
+const strongholdTradeTooltip = computed(() => {
+  const sh = activeStrongholdForCommands.value;
+  if (!canLordCommandActiveStronghold.value) return LORD_COMMAND_STRONGHOLD_TIP;
+  if (!sh) return LORD_AT_RESIDENCE_REQUIRED_TIP;
+  if (!strongholdHasMarketFacility(sh)) return "该据点尚未建设市场设施";
+  if (!isStrongholdMarketOpen(sh)) return "围城或封锁中，市场已关闭";
+  return "以官府库在本城大宗市场买卖";
+});
+
+const marketDialogVisible = ref(false);
+const marketDialogTradeMode = ref<"view" | "lord" | "unit">("view");
+const marketDialogStrongholdId = ref<number | null>(null);
+const marketDialogStrongholdName = ref("");
+const marketDialogTradeUnit = ref<StrategyUnitState | null>(null);
+
+const marketDialogLordTreasury = computed(() => {
+  const sh = state.value?.strongholds.find((s) => s.id === marketDialogStrongholdId.value);
+  return { money: sh?.money ?? 0, food: sh?.food ?? 0, horse: sh?.horse ?? 0 };
+});
+
+const marketDialogTradeUnitResolved = computed(() => {
+  if (!marketDialogTradeUnit.value || !state.value) return null;
+  return state.value.units.find((u) => u.id === marketDialogTradeUnit.value!.id) ?? marketDialogTradeUnit.value;
+});
+
+function openMarketDialog(options: {
+  strongholdId: number;
+  strongholdName: string;
+  mode: "view" | "lord" | "unit";
+  tradeUnit?: StrategyUnitState | null;
+}) {
+  marketDialogStrongholdId.value = options.strongholdId;
+  marketDialogStrongholdName.value = options.strongholdName;
+  marketDialogTradeMode.value = options.mode;
+  marketDialogTradeUnit.value = options.tradeUnit ?? null;
+  marketDialogVisible.value = true;
+  onCancel();
+}
+
+function handleOpenPersonalMarket() {
+  const sh = activeCharacterStronghold.value;
+  if (!sh || !canViewPersonalMarket.value) {
+    void notifyActionBlocked("无法打开市场", personalMarketTooltip.value);
+    return;
+  }
+  openMarketDialog({ strongholdId: sh.id, strongholdName: sh.name, mode: "view" });
+}
+
+function handleOpenUnitMarket() {
+  const unit = selectedUnit.value;
+  const sh = unitPopupStronghold.value;
+  if (!unit || !sh || !canUnitOpenMarket.value) {
+    void notifyActionBlocked("无法交易", "须为城内商队且市场开放");
+    return;
+  }
+  openMarketDialog({
+    strongholdId: sh.id,
+    strongholdName: sh.name,
+    mode: "unit",
+    tradeUnit: unit,
+  });
+}
+
+function handleOpenStrongholdMarket() {
+  const sh = activeStrongholdForCommands.value;
+  if (!sh || !canStrongholdTrade.value) {
+    void notifyActionBlocked("无法交易", strongholdTradeTooltip.value || "当前无法交易");
+    return;
+  }
+  openMarketDialog({
+    strongholdId: sh.id,
+    strongholdName: sh.name,
+    mode: "lord",
+  });
+}
+
+function handleOpenMerchantShop(actorId: number) {
+  const shop = popupMerchantShops.value.find((s) => s.id === actorId);
+  void notifyActionBlocked(
+    "拜访商家",
+    `${shop?.name ?? "商家"}：个人物品买卖与对话将在后续版本实装（参见 docs/strategy-trade-market-design.md）。`,
+  );
+  onCancel();
+}
+
+async function handleMarketTraded(nextState?: StrategyWorldState) {
+  if (nextState) {
+    state.value = nextState;
+    info.value = "市场成交已更新";
+    return;
+  }
+
+  try {
+    state.value = await getStrategyState();
+    info.value = "市场成交已更新";
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "刷新状态失败";
+    await handleStrategyApiError(message, message);
+  }
+}
 
 const canExpeditionFromStronghold = computed(() => {
   const sh = activeStrongholdForCommands.value;
@@ -2363,114 +2495,6 @@ async function handleBeginUnitDisband() {
   }
 }
 
-async function handleBeginUnitSmashBuyFood() {
-  const unitId = selectedUnitId.value;
-  const unit = selectedUnit.value;
-  if (!unitId || !unit) return;
-
-  try {
-    const { value } = await ElMessageBox.prompt(
-      "输入购粮上限单价（文/石）与数量（0=尽可能多）",
-      "市价购粮",
-      {
-        confirmButtonText: "购粮",
-        cancelButtonText: "取消",
-        inputPlaceholder: "例：120,500",
-        inputValue: "100,0",
-      },
-    );
-    const parts = String(value ?? "")
-      .split(/[,，]/)
-      .map((s) => s.trim());
-    const maxPrice = Number(parts[0]);
-    const quantity = parts[1] ? Number(parts[1]) : 0;
-    if (!Number.isFinite(maxPrice) || maxPrice <= 0) {
-      void notifyActionBlocked("购粮失败", "请输入有效的单价上限");
-      return;
-    }
-
-    loading.value = true;
-    error.value = "";
-    state.value = await unitSmashBuyFood(unitId, {
-      maxPriceMoneyPerGo: maxPrice,
-      quantityGo: Number.isFinite(quantity) ? quantity : 0,
-    });
-    info.value = `${unit.name} 已执行市价购粮`;
-    onCancel();
-  } catch (e) {
-    if (e === "cancel" || e === "close") return;
-    const message = e instanceof Error ? e.message : "购粮失败";
-    await handleStrategyApiError(message, message);
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function handleBeginUnitTradePolicy() {
-  const unitId = selectedUnitId.value;
-  const unit = selectedUnit.value;
-  if (!unitId || !unit) return;
-
-  try {
-    const { value } = await ElMessageBox.prompt(
-      "输入策略与限价：WaitBuyFood 或 WaitSellFood，格式「策略,限价,数量」",
-      "贸易策略",
-      {
-        confirmButtonText: "设定",
-        cancelButtonText: "取消",
-        inputPlaceholder: "WaitBuyFood,100,500",
-        inputValue: unit.tradePolicy && unit.tradePolicy !== "None"
-          ? `${unit.tradePolicy},${unit.tradeLimitPriceMoneyPerGo ?? 100},${unit.tradeQuantityGo ?? 0}`
-          : "WaitBuyFood,100,0",
-      },
-    );
-    const parts = String(value ?? "")
-      .split(/[,，]/)
-      .map((s) => s.trim());
-    const policy = parts[0] as "None" | "WaitBuyFood" | "WaitSellFood";
-    const limitPrice = Number(parts[1]);
-    const quantity = parts[2] ? Number(parts[2]) : 0;
-    if (!["None", "WaitBuyFood", "WaitSellFood"].includes(policy) || !Number.isFinite(limitPrice)) {
-      void notifyActionBlocked("设定失败", "策略须为 None / WaitBuyFood / WaitSellFood");
-      return;
-    }
-
-    loading.value = true;
-    error.value = "";
-    state.value = await setUnitTradePolicy(unitId, {
-      policy,
-      limitPriceMoneyPerGo: limitPrice,
-      quantityGo: Number.isFinite(quantity) ? quantity : 0,
-    });
-    info.value = `${unit.name} 贸易策略已更新`;
-    onCancel();
-  } catch (e) {
-    if (e === "cancel" || e === "close") return;
-    const message = e instanceof Error ? e.message : "设定失败";
-    await handleStrategyApiError(message, message);
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function handleBeginCreateShop() {
-  const sh = activeStrongholdForCommands.value ?? popupStronghold.value;
-  if (!sh) return;
-
-  loading.value = true;
-  error.value = "";
-  try {
-    state.value = await createMerchantShop(sh.id);
-    info.value = `已在 ${sh.name} 创立商店`;
-    onCancel();
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "创立商店失败";
-    await handleStrategyApiError(message, message);
-  } finally {
-    loading.value = false;
-  }
-}
-
 function handleBeginVisit() {
   void notifyActionBlocked("拜访", "拜访、登庸与计谋将在 RPG 模式中扩展");
 }
@@ -3603,9 +3627,12 @@ watch(
             :can-unit-enter-stronghold="menuPopupMode === 'command' && canUnitEnterStronghold"
             :can-unit-exit-stronghold="menuPopupMode === 'command' && canUnitExitStronghold"
             :can-unit-disband="menuPopupMode === 'command' && canUnitDisband"
-            :can-unit-trade="menuPopupMode === 'command' && canUnitTrade"
-            :can-create-shop="canCreateMerchantShop"
-            :create-shop-tooltip="createShopTooltip"
+            :can-unit-open-market="menuPopupMode === 'command' && canUnitOpenMarket"
+            :can-stronghold-trade="canStrongholdTrade"
+            :stronghold-trade-tooltip="strongholdTradeTooltip"
+            :can-view-personal-market="menuPopupMode === 'characterCommand' && canViewPersonalMarket"
+            :personal-market-tooltip="personalMarketTooltip"
+            :merchant-shops="popupMerchantShops"
             :can-leave-stronghold="menuPopupMode === 'characterCommand' ? characterPopupProps.canLeaveStronghold : false"
             :can-character-move="menuPopupMode === 'characterCommand' ? characterPopupProps.canCharacterMove : false"
             :can-enter-stronghold="menuPopupMode === 'characterCommand' ? characterPopupProps.canEnterStronghold : false"
@@ -3636,9 +3663,10 @@ watch(
             @begin-unit-enter-stronghold="handleBeginUnitEnterStronghold"
             @begin-unit-exit-stronghold="handleBeginUnitExitStronghold"
             @begin-unit-disband="handleBeginUnitDisband"
-            @begin-unit-smash-buy-food="handleBeginUnitSmashBuyFood"
-            @begin-unit-trade-policy="handleBeginUnitTradePolicy"
-            @begin-create-shop="handleBeginCreateShop"
+            @open-unit-market="handleOpenUnitMarket"
+            @open-stronghold-market="handleOpenStrongholdMarket"
+            @open-personal-market="handleOpenPersonalMarket"
+            @open-merchant-shop="handleOpenMerchantShop"
             @begin-visit="handleBeginVisit"
             @siege-assault="handleSiegeOrder('Assault')"
             @siege-encircle="handleSiegeOrder('Encircle')"
@@ -3747,6 +3775,20 @@ watch(
       :world-state="state"
       @update:visible="taxRateDialogVisible = $event"
       @confirm="handleTaxRateConfirm"
+    />
+    <StrategyMarketDialog
+      v-if="state"
+      :visible="marketDialogVisible"
+      :world-state="state"
+      :stronghold-id="marketDialogStrongholdId"
+      :stronghold-name="marketDialogStrongholdName"
+      :trade-mode="marketDialogTradeMode"
+      :trade-unit="marketDialogTradeUnitResolved"
+      :lord-money="marketDialogLordTreasury.money"
+      :lord-food="marketDialogLordTreasury.food"
+      :lord-horse="marketDialogLordTreasury.horse"
+      @update:visible="marketDialogVisible = $event"
+      @traded="handleMarketTraded($event)"
     />
     <StrategyStrongholdGovernanceDialog
       v-if="state"

@@ -25,11 +25,7 @@ public static class StrongholdEconomyActions
         if (money > 0)
             stronghold.CivilianActor.Money += money;
 
-        var luxury = MarketCalculator.CalculateDailyLuxuryProduction(stronghold);
-        if (luxury > 0)
-            stronghold.ForceActor.LuxuryGoods += luxury;
-
-        if (food > 0 || money > 0 || luxury > 0)
+        if (food > 0 || money > 0)
         {
             if (gameData.Forces.TryGetValue(stronghold.ForceId, out var force))
                 ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);
