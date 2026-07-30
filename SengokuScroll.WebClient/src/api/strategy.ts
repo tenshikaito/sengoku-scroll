@@ -38,6 +38,8 @@ export {
   strongholdLordCancelMarketOrder,
   setUnitTradePolicy,
   recordEspionageIntel,
+  previewDiplomacyMission,
+  orderDiplomacyMission,
   setStrongholdTaxRates,
   setStrongholdGovernancePriority,
   recruitAtStronghold,

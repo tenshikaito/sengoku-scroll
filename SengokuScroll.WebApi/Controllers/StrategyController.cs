@@ -387,6 +387,22 @@ public class StrategyController(
             request.TargetForceId,
             request.Action));
 
+    /// <summary>外交：预览使节任务成功率与行程。</summary>
+    [HttpPost("diplomacy/mission/preview")]
+    public IActionResult PreviewDiplomacyMission([FromBody] DiplomacyMissionPreviewRequest request)
+        => ToPreviewResult(simulationHost.PreviewDiplomacyMission(
+            request.CharacterId,
+            request.TargetForceId,
+            request.Action));
+
+    /// <summary>外交：派遣使节任务。</summary>
+    [HttpPost("diplomacy/mission")]
+    public IActionResult OrderDiplomacyMission([FromBody] DiplomacyMissionOrderRequest request)
+        => ToActionResult(simulationHost.OrderDiplomacyMission(
+            request.CharacterId,
+            request.TargetForceId,
+            request.Action));
+
     /// <summary>获取当前世界状态。</summary>
     [HttpGet("state")]
     public IActionResult GetState()
@@ -529,6 +545,14 @@ public class StrategyController(
     }
 
     private IActionResult ToPreviewResult(GameResult<StrategyPathPreviewDto> result)
+    {
+        if (result.IsSuccess)
+            return Ok(result.Value);
+
+        return BadRequest(new ApiErrorResponse(result.Error?.Code ?? "Unknown"));
+    }
+
+    private IActionResult ToPreviewResult(GameResult<StrategyDiplomacyMissionPreviewDto> result)
     {
         if (result.IsSuccess)
             return Ok(result.Value);

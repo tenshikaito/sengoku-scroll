@@ -214,7 +214,7 @@ public class SupplyConvoyDispatchHelper(
         return true;
     }
 
-    /// <summary>扫描同势力据点间粮价差，派遣贸易运输队（M4-c）。</summary>
+    /// <summary>扫描商家店铺余粮与跨城价差，仅商家组织派出贸易队（武家只派补给/贡赋）。</summary>
     public int DispatchTradeConvoys()
     {
         var gameData = WorldContext.GameWorld.GameData;
@@ -224,30 +224,34 @@ public class SupplyConvoyDispatchHelper(
         {
             foreach (var origin in gameData.Strongholds.Values)
             {
-                if (!TradeMarketAiHelper.ShouldDispatchTrade(origin, destination, gameData))
-                    continue;
-
-                var cargo = TradeMarketAiHelper.CalculateTradeCargoGo(origin, destination);
-                if (cargo <= 0)
-                    continue;
-
-                if (!TryCreateTradeConvoy(origin, destination, gameData, cargo))
-                    continue;
-
-                created++;
-
-                if (origin.ForceId == scenarioMeta.PlayerForceId)
+                foreach (var merchant in origin.MerchantActors)
                 {
-                    dayOutcomeBuffer.AddEvent(new StrategyEventDto
-                    {
-                        Category = "TradeConvoyDispatched",
-                        Brief = $"📦 贸易队 {origin.Name}→{destination.Name}",
-                        Message =
-                            $"📦 贸易运输队自 {origin.Name} 出发，向 {destination.Name} 运送 🌾{cargo:N0}"
-                    });
-                }
+                    if (!TradeMarketAiHelper.ShouldDispatchTrade(origin, destination, merchant, gameData))
+                        continue;
 
-                break;
+                    var cargo = TradeMarketAiHelper.CalculateTradeCargoGo(merchant, destination);
+                    if (cargo <= 0)
+                        continue;
+
+                    if (!TryCreateTradeConvoy(origin, destination, merchant, gameData, cargo))
+                        continue;
+
+                    created++;
+
+                    // 业务：玩家封地内商户出队时给玩家一条摘要
+                    if (origin.ForceId == scenarioMeta.PlayerForceId)
+                    {
+                        dayOutcomeBuffer.AddEvent(new StrategyEventDto
+                        {
+                            Category = "TradeConvoyDispatched",
+                            Brief = $"📦 贸易队 {merchant.Name} {origin.Name}→{destination.Name}",
+                            Message =
+                                $"📦 {merchant.Name}贸易队自 {origin.Name} 出发，向 {destination.Name} 运送 🌾{cargo:N0}"
+                        });
+                    }
+
+                    break;
+                }
             }
         }
 
@@ -257,6 +261,7 @@ public class SupplyConvoyDispatchHelper(
     private bool TryCreateTradeConvoy(
         Stronghold origin,
         Stronghold destination,
+        StrongholdActor merchant,
         GameData gameData,
         int foodCargo)
     {
@@ -269,19 +274,24 @@ public class SupplyConvoyDispatchHelper(
                 WorldContext.GameWorld,
                 origin,
                 destination,
+                merchant,
                 foodCargo,
                 pathfindingService) is not null;
         }
 
-        return TryCreateLegacyTradeConvoy(origin, destination, gameData, foodCargo);
+        return TryCreateLegacyTradeConvoy(origin, destination, merchant, gameData, foodCargo);
     }
 
     private bool TryCreateLegacyTradeConvoy(
         Stronghold origin,
         Stronghold destination,
+        StrongholdActor merchant,
         GameData gameData,
         int foodCargo)
     {
+        if (merchant.Food < foodCargo)
+            return false;
+
         var path = pathfindingService.CalculatePath(
             new MapPathAgent(origin.Location, TradeMarketAiHelper.ResolvePathForceId(origin, gameData)),
             destination.Location);
@@ -289,16 +299,13 @@ public class SupplyConvoyDispatchHelper(
         if (path is null || path.Count <= 1)
             return false;
 
-        origin.ForceActor.Food -= foodCargo;
-
-        if (gameData.Forces.TryGetValue(origin.ForceId, out var originForce))
-            ForceEconomyActions.SyncForceTreasuryFromStrongholds(originForce, gameData);
+        merchant.Food -= foodCargo;
 
         ConvoyUnitFactory.CreateTransportUnit(
             WorldContext.GameWorld,
-            $"{origin.Name}贸易→{destination.Name}",
-            origin.ForceId,
-            ResolveConvoyLeaderId(origin, gameData),
+            $"{merchant.Name}贸易→{destination.Name}",
+            merchant.ForceId,
+            ResolveMerchantTradeLeaderId(merchant, origin, gameData),
             origin.Location,
             origin.Id,
             targetUnitId: 0,
@@ -308,7 +315,7 @@ public class SupplyConvoyDispatchHelper(
             cargoPopulation: 0,
             TransportPurpose.Trade,
             RouteCalculator.ToDailyRouteQueuePoint2(path),
-            kindOverride: UnitKind.Convoy);
+            kindOverride: UnitKind.Merchant);
 
         return true;
     }
@@ -549,5 +556,27 @@ public class SupplyConvoyDispatchHelper(
 
         return gameData.Characters.Values
             .FirstOrDefault(c => c.ForceId == origin.ForceId && c.StrongholdId == origin.Id)?.Id ?? 0;
+    }
+
+    /// <summary>商家贸易队总将：仅店员/商家组织角色；不回退武家代官。</summary>
+    private static int ResolveMerchantTradeLeaderId(
+        StrongholdActor merchant,
+        Stronghold origin,
+        GameData gameData)
+    {
+        foreach (var characterId in merchant.CharacterIds)
+        {
+            if (characterId <= 0)
+                continue;
+            if (!gameData.Characters.TryGetValue(characterId, out var staff) || staff.IsDead)
+                continue;
+            return staff.Id;
+        }
+
+        return gameData.Characters.Values
+            .FirstOrDefault(c =>
+                c.ForceId == merchant.ForceId
+                && c.StrongholdId == origin.Id
+                && !c.IsDead)?.Id ?? 0;
     }
 }

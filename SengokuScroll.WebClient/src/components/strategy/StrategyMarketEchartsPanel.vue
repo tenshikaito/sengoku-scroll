@@ -60,6 +60,24 @@ const K_PERIOD_TABS: { key: MarketKPeriod; label: string }[] = [
 const UP_COLOR = "#dc2626";
 const DOWN_COLOR = "#16a34a";
 
+/** 相对初版设计的默认显示放大倍数（可见 K 线根数反比、柱宽正比）。 */
+const DEFAULT_DISPLAY_ZOOM = 2.5;
+/** 初版默认最多可见 K 线根数（80 根 @ 1.0x）。 */
+const BASE_DEFAULT_VISIBLE_BARS = 80;
+const DEFAULT_VISIBLE_BARS = Math.max(
+  1,
+  Math.round(BASE_DEFAULT_VISIBLE_BARS / DEFAULT_DISPLAY_ZOOM),
+);
+
+/** 与 grid left/right 保持一致，用于估算 category 带宽。 */
+const CHART_GRID_LEFT = 52;
+const CHART_GRID_RIGHT = 18;
+/** 蜡烛实体占格距比例；与 DEFAULT_DISPLAY_ZOOM 解耦，保留间隙避免粘连。 */
+const CANDLE_WIDTH_RATIO = 0.62;
+const MIN_CANDLE_BAR_WIDTH = 5;
+const MAX_CANDLE_BAR_WIDTH = 35;
+const DEFAULT_CANDLE_BAR_WIDTH = 11;
+
 const kPeriod = ref<MarketKPeriod>("day");
 const subTab = ref<"volume" | "turnover">("volume");
 const zoomRange = ref({ start: 0, end: 100 });
@@ -97,7 +115,53 @@ function defaultZoomEnd(): number {
 }
 
 function defaultZoomStart(barCount: number): number {
-  return barCount > 80 ? 100 - Math.round((80 / barCount) * 100) : 0;
+  return barCount > DEFAULT_VISIBLE_BARS
+    ? 100 - Math.round((DEFAULT_VISIBLE_BARS / barCount) * 100)
+    : 0;
+}
+
+function countVisibleBars(totalBars: number, startPct: number, endPct: number): number {
+  if (totalBars <= 0) return 1;
+  const span = Math.max(0, endPct - startPct) / 100;
+  return Math.max(1, Math.ceil(totalBars * span));
+}
+
+/** 强制奇数像素柱宽，避免 ECharts 偶数宽蜡烛影线左右偏移。 */
+function toOddPixelWidth(raw: number): number {
+  let width = Math.floor(raw);
+  width = Math.max(MIN_CANDLE_BAR_WIDTH, Math.min(MAX_CANDLE_BAR_WIDTH, width));
+  if (width % 2 === 0) width -= 1;
+  return Math.max(MIN_CANDLE_BAR_WIDTH, width);
+}
+
+function resolveChartGridWidth(): number {
+  const chartWidth = chart?.getWidth() ?? chartRef.value?.clientWidth ?? 0;
+  return Math.max(0, chartWidth - CHART_GRID_LEFT - CHART_GRID_RIGHT);
+}
+
+function resolveOddCandleBarWidth(visibleBarCount: number): number {
+  const gridWidth = resolveChartGridWidth();
+  if (gridWidth <= 0) return DEFAULT_CANDLE_BAR_WIDTH;
+  const bandWidth = gridWidth / Math.max(visibleBarCount, 1);
+  return toOddPixelWidth(bandWidth * CANDLE_WIDTH_RATIO);
+}
+
+function syncDefaultZoomRange() {
+  zoomRange.value = {
+    start: defaultZoomStart(chartBars.value.length),
+    end: defaultZoomEnd(),
+  };
+}
+
+function computeOddCandleBarWidth(): number {
+  const totalBars = chartBars.value.length;
+  if (totalBars <= 0) return DEFAULT_CANDLE_BAR_WIDTH;
+  const visibleCount = countVisibleBars(
+    totalBars,
+    zoomRange.value.start,
+    zoomRange.value.end,
+  );
+  return resolveOddCandleBarWidth(visibleCount);
 }
 
 function buildSubSeriesData(bars: ReturnType<typeof aggregateMarketBars>) {
@@ -113,7 +177,7 @@ function buildSubSeriesData(bars: ReturnType<typeof aggregateMarketBars>) {
   }));
 }
 
-function buildOption(useSavedZoom: boolean): echarts.EChartsCoreOption {
+function buildOption(): echarts.EChartsCoreOption {
   const bars = chartBars.value;
   const labels = bars.map((b) => b.label);
   const meta = displayMetaResolved.value;
@@ -128,8 +192,8 @@ function buildOption(useSavedZoom: boolean): echarts.EChartsCoreOption {
     subTab.value === "volume"
       ? `成交量（${meta.volumeUnitLabel}）`
       : "成交额（贯）";
-  const start = useSavedZoom ? zoomRange.value.start : defaultZoomStart(bars.length);
-  const end = useSavedZoom ? zoomRange.value.end : defaultZoomEnd();
+  const { start, end } = zoomRange.value;
+  const barWidth = resolveOddCandleBarWidth(countVisibleBars(bars.length, start, end));
 
   return {
     animation: false,
@@ -219,6 +283,7 @@ function buildOption(useSavedZoom: boolean): echarts.EChartsCoreOption {
       {
         type: "candlestick",
         data: candleData,
+        barWidth,
         itemStyle: {
           color: UP_COLOR,
           color0: DOWN_COLOR,
@@ -231,9 +296,21 @@ function buildOption(useSavedZoom: boolean): echarts.EChartsCoreOption {
         xAxisIndex: 1,
         yAxisIndex: 1,
         data: buildSubSeriesData(bars),
+        barWidth,
       },
     ],
   };
+}
+
+function updateBarWidthsOnly() {
+  if (!chart || !isReady.value || chartBars.value.length === 0) return;
+  const barWidth = computeOddCandleBarWidth();
+  chart.setOption(
+    {
+      series: [{ barWidth }, { barWidth }],
+    },
+    false,
+  );
 }
 
 function captureZoomRange() {
@@ -246,14 +323,19 @@ function captureZoomRange() {
   }
 }
 
+function onChartDataZoom() {
+  captureZoomRange();
+  updateBarWidthsOnly();
+}
+
 function ensureChart() {
   if (!chartRef.value || chart) return;
   chart = echarts.init(chartRef.value);
-  chart.on("dataZoom", captureZoomRange);
+  chart.on("dataZoom", onChartDataZoom);
 }
 
 function disposeChart() {
-  chart?.off("dataZoom", captureZoomRange);
+  chart?.off("dataZoom", onChartDataZoom);
   chart?.dispose();
   chart = null;
   zoomRange.value = { start: 0, end: 100 };
@@ -265,8 +347,11 @@ function renderFull(resetZoom = true) {
   if (!isReady.value || !chartRef.value) return;
   ensureChart();
   if (!chart) return;
-  chart.setOption(buildOption(!resetZoom), true);
+  if (resetZoom) syncDefaultZoomRange();
+  chart.setOption(buildOption(), true);
   chart.resize();
+  captureZoomRange();
+  updateBarWidthsOnly();
 }
 
 function updateSubSeriesOnly() {
@@ -278,10 +363,11 @@ function updateSubSeriesOnly() {
     subTab.value === "volume"
       ? `成交量（${meta.volumeUnitLabel}）`
       : "成交额（贯）";
+  const barWidth = computeOddCandleBarWidth();
   chart.setOption(
     {
       yAxis: [{}, { name: subName }],
-      series: [{}, { data: buildSubSeriesData(bars) }],
+      series: [{ barWidth }, { data: buildSubSeriesData(bars), barWidth }],
       dataZoom: [
         { start: zoomRange.value.start, end: zoomRange.value.end },
         { start: zoomRange.value.start, end: zoomRange.value.end },
@@ -307,13 +393,14 @@ function updateChartDataOnly() {
     subTab.value === "volume"
       ? `成交量（${meta.volumeUnitLabel}）`
       : "成交额（贯）";
+  const barWidth = computeOddCandleBarWidth();
   chart.setOption(
     {
       xAxis: [{ data: labels }, { data: labels }],
       yAxis: [{ name: meta.priceUnitLabel }, { name: subName }],
       series: [
-        { data: candleData },
-        { data: buildSubSeriesData(bars) },
+        { data: candleData, barWidth },
+        { data: buildSubSeriesData(bars), barWidth },
       ],
       dataZoom: [
         { start: zoomRange.value.start, end: zoomRange.value.end },
@@ -328,6 +415,12 @@ function scheduleRender(resetZoom = false) {
   void nextTick(() => {
     requestAnimationFrame(() => {
       renderFull(resetZoom);
+      requestAnimationFrame(() => {
+        if (!chart || !isReady.value) return;
+        chart.resize();
+        captureZoomRange();
+        updateBarWidthsOnly();
+      });
     });
   });
 }
@@ -335,7 +428,9 @@ function scheduleRender(resetZoom = false) {
 function bindResizeObserver() {
   if (!chartRef.value || resizeObserver) return;
   resizeObserver = new ResizeObserver(() => {
-    if (isReady.value) chart?.resize();
+    if (!isReady.value) return;
+    chart?.resize();
+    updateBarWidthsOnly();
   });
   resizeObserver.observe(chartRef.value);
 }

@@ -16,6 +16,7 @@ import {
   type StrategyMapInteractionStateSnapshot,
 } from "@/strategyMapInteraction/StrategyMapInteractionMachine";
 import { SplitSpawnSelectionInteractionState } from "@/strategyMapInteraction/states/SplitSpawnSelectionInteractionState";
+import { DiplomacyForceSelectionInteractionState } from "@/strategyMapInteraction/states/DiplomacyForceSelectionInteractionState";
 import {
   isLordInStrongholdId,
   isLordOnMap,
@@ -34,6 +35,9 @@ export interface UseStrategyMapInteractionOptions {
   selectedCell: Ref<{ x: number; y: number } | null>;
   hoverCell: Ref<MapHoverCellPayload>;
   playerForceId?: number;
+  /** 外交地图选点：返回 true 表示接受并退出。 */
+  onDiplomacyForceStrongholdPicked?: (strongholdId: number) => boolean;
+  onDiplomacyForcePickCancelled?: () => void;
 }
 
 export function useStrategyMapInteraction(options: UseStrategyMapInteractionOptions) {
@@ -235,9 +239,12 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
       pendingSplitSubUnitIds.value = [];
     },
     getCellEntityOptions: () => cellEntityOptions.value,
-    setCellEntityOptions: (options) => {
-      cellEntityOptions.value = [...options];
+    setCellEntityOptions: (nextOptions) => {
+      cellEntityOptions.value = [...nextOptions];
     },
+    onDiplomacyForceStrongholdPicked: (strongholdId) =>
+      options.onDiplomacyForceStrongholdPicked?.(strongholdId) ?? false,
+    onDiplomacyForcePickCancelled: () => options.onDiplomacyForcePickCancelled?.(),
     transitionTo: (state) => machine.transitionTo(state),
   });
 
@@ -295,6 +302,8 @@ export function useStrategyMapInteraction(options: UseStrategyMapInteractionOpti
     onBeginExpedition: () => machine.onBeginExpedition(),
     enterSplitSpawnSelection: () =>
       machine.transitionTo(new SplitSpawnSelectionInteractionState()),
+    enterDiplomacyForceSelection: () =>
+      machine.transitionTo(new DiplomacyForceSelectionInteractionState()),
     onConfirmBattle: () => machine.onConfirmBattle(),
     onBattlePreviewReady: () => machine.onBattlePreviewReady(),
     onCancel: () => machine.onCancel(),

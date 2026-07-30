@@ -46,9 +46,6 @@ public static class CommodityTradeModule
             TaxExemptOnRest = taxExemptOnRest,
         });
 
-        if (result.FilledQuantityGo > 0)
-            MarketAiRefreshHelper.RefreshAfterTrade(stronghold, gameData, commodity, taxLedger);
-
         return result.FilledQuantityGo;
     }
 
@@ -83,9 +80,6 @@ public static class CommodityTradeModule
             CommitInventoryOnRest = commitInventoryOnRest,
             TaxExemptOnRest = taxExemptOnRest,
         });
-
-        if (result.FilledQuantityGo > 0 || result.RestingQuantityGo > 0)
-            MarketAiRefreshHelper.RefreshAfterTrade(stronghold, gameData, commodity, taxLedger);
 
         return result.FilledQuantityGo;
     }

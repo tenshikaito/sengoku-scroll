@@ -237,6 +237,35 @@ public static class StrategyScenarioLoader
         return map;
     }
 
+    private static Dictionary<int, UnitTypeDefinition> BuildUnitTypes(
+        IReadOnlyList<StrategyUnitTypeDefinition>? definitions)
+    {
+        if (definitions is null or { Count: 0 })
+            return [];
+
+        var unitTypes = new Dictionary<int, UnitTypeDefinition>();
+        foreach (var definition in definitions)
+        {
+            unitTypes[definition.Id] = new UnitTypeDefinition
+            {
+                Id = definition.Id,
+                Name = definition.Name,
+                Description = definition.Description ?? definition.Name,
+                Attack = definition.Attack,
+                Defense = definition.Defense,
+                AttackRange = definition.AttackRange,
+                Movement = definition.Movement,
+                SightRange = definition.SightRange,
+                CultureId = definition.CultureId,
+                Cost = definition.Cost,
+                MaintenanceMoney = definition.MaintenanceMoney,
+                MaintenanceFood = definition.MaintenanceFood,
+            };
+        }
+
+        return unitTypes;
+    }
+
     private static GameWorld BuildWorld(StrategyScenarioDocument document)
     {
         var terrainByKey = document.Map.Terrains.ToDictionary(t => t.Key, StringComparer.OrdinalIgnoreCase);
@@ -327,7 +356,7 @@ public static class StrategyScenarioLoader
                 Religions = [],
                 StrongholdTypes = [],
                 DefenseFacilityTypes = StrongholdDefenseRules.CreateDefaultDefenseFacilityTypes(),
-                UnitTypes = [],
+                UnitTypes = BuildUnitTypes(document.Scenario.UnitTypes),
                 Characters = [],
                 Technologies = StrategyDefaultMasterDataSeed.CreateDefaultTechnologies(),
                 Commodities = [],

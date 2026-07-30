@@ -82,7 +82,7 @@ internal static class StrategyDefaultMasterDataSeed
                 CommodityType = MarketCommodityType.Food,
                 TradeEnabled = true,
                 DefaultPriceMoneyPerUnit = Strategy.Constants.MarketConstants.DefaultPriceMoneyPerGo,
-                UnitLabel = "合",
+                UnitLabel = "石",
             },
             [(int)MarketCommodityType.Horse] = new()
             {
@@ -372,7 +372,7 @@ internal static class StrategyDefaultMasterDataSeed
             }
         };
 
-    private static Dictionary<int, UnitTypeDefinition> CreateUnitTypes()
+    internal static Dictionary<int, UnitTypeDefinition> CreateUnitTypes()
         => new()
         {
             [StrategyTroopTypes.Ashigaru] = new()

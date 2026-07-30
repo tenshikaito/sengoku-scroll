@@ -318,3 +318,25 @@ public sealed class RealmInnerVassalRequest
     /** appoint | revoke */
     public required string Action { get; init; }
 }
+
+/// <summary>外交使节任务预览。</summary>
+public sealed class DiplomacyMissionPreviewRequest
+{
+    public int CharacterId { get; init; }
+
+    public required int TargetForceId { get; init; }
+
+    /** Ally | War | Peace */
+    public required string Action { get; init; }
+}
+
+/// <summary>外交使节任务下达。</summary>
+public sealed class DiplomacyMissionOrderRequest
+{
+    public required int CharacterId { get; init; }
+
+    public required int TargetForceId { get; init; }
+
+    /** Ally | War | Peace */
+    public required string Action { get; init; }
+}

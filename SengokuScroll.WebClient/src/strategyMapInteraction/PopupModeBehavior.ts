@@ -1,6 +1,11 @@
 import type { StrategyMapPopupMode } from "./types";
 
-export type CornerHintMode = "moveSelect" | "attackSelect" | "mergeSelect" | "splitSelect";
+export type CornerHintMode =
+  | "moveSelect"
+  | "attackSelect"
+  | "mergeSelect"
+  | "splitSelect"
+  | "diplomacyForceSelect";
 
 export type MenuPopupMode = Exclude<
   StrategyMapPopupMode,
@@ -56,6 +61,13 @@ class SplitSelectPopupModeBehavior extends MapPopupModeBehavior {
   readonly menuPopupMode = null;
 }
 
+class DiplomacyForceSelectPopupModeBehavior extends MapPopupModeBehavior {
+  readonly mode = "diplomacyForceSelect" as const;
+  readonly usesCorner = true;
+  readonly cornerHintMode = "diplomacyForceSelect" as const;
+  readonly menuPopupMode = null;
+}
+
 class CommandPopupModeBehavior extends MapPopupModeBehavior {
   readonly mode = "command" as const;
   readonly usesCorner = false;
@@ -105,6 +117,7 @@ const POPUP_MODE_BEHAVIORS: MapPopupModeBehavior[] = [
   new AttackSelectPopupModeBehavior(),
   new MergeSelectPopupModeBehavior(),
   new SplitSelectPopupModeBehavior(),
+  new DiplomacyForceSelectPopupModeBehavior(),
   new CommandPopupModeBehavior(),
   new ForeignCommandPopupModeBehavior(),
   new CharacterCommandPopupModeBehavior(),

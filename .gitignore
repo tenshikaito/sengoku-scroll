@@ -46,3 +46,7 @@ Desktop.ini
 /model.xlsx
 /rule.xlsx
 /screen.xlsx
+
+## 本地打包产物
+/build/
+SengokuScroll.WebApi/wwwroot/

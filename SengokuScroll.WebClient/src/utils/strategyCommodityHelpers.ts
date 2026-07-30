@@ -27,7 +27,7 @@ const FALLBACK_COMMODITIES: MarketCommodityMeta[] = [
     description: "可大宗撮合的粮秣。",
     tradeEnabled: true,
     defaultPriceMoneyPerUnit: 50,
-    unitLabel: "合",
+    unitLabel: "石",
     priceUnitLabel: "贯/石",
     volumeUnitLabel: "石",
     quantityStepLabel: "石",
@@ -58,13 +58,26 @@ function readField(entry: StrategyMasterDataEntry, key: string): string {
   return String(fields[camel] ?? fields[key] ?? "").trim();
 }
 
+/** 粮食市场 UI 一律用石；兼容旧 master 下发「合」。 */
+function resolveDisplayUnitLabel(commodityType: MarketCommodityTab, rawUnitLabel: string, fallback: string): string {
+  if (commodityType === "Food") {
+    if (!rawUnitLabel || rawUnitLabel === "合")
+      return "石";
+  }
+  return rawUnitLabel || fallback;
+}
+
 function mapMasterEntry(entry: StrategyMasterDataEntry): MarketCommodityMeta | null {
   const commodityType = readField(entry, "commodityType") as MarketCommodityTab;
   if (commodityType !== "Food" && commodityType !== "Horse")
     return null;
 
   const fallback = FALLBACK_COMMODITIES.find((item) => item.key === commodityType)!;
-  const unitLabel = readField(entry, "unitLabel") || fallback.unitLabel;
+  const unitLabel = resolveDisplayUnitLabel(
+    commodityType,
+    readField(entry, "unitLabel"),
+    fallback.unitLabel,
+  );
   const tradeEnabledRaw = readField(entry, "tradeEnabled");
   const defaultPriceRaw = Number.parseInt(readField(entry, "defaultPriceMoneyPerUnit"), 10);
 

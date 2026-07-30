@@ -10,6 +10,7 @@ defineProps<{
 defineEmits<{
   showIntel: [];
   cancel: [];
+  openDiplomacy: [action: "Ally" | "War" | "Peace"];
 }>();
 
 function swallowPointer(event: Event) {
@@ -43,31 +44,31 @@ function showUnavailableTip(reason: string) {
         tooltip="设定势力默认方针功能尚未实装"
         @click="showUnavailableTip('设定势力默认方针功能尚未实装')"
       >
-        📜 设定势力默认方针
+        📜 方针
       </StrategyMapActionButton>
       <StrategyMapActionButton
-        variant="muted"
+        variant="primary"
         :tooltip-side="tooltipSide"
-        tooltip="提议同盟功能尚未实装"
-        @click="showUnavailableTip('提议同盟功能尚未实装')"
+        tooltip="派遣使节提议同盟"
+        @click="$emit('openDiplomacy', 'Ally')"
       >
-        🤝 提议同盟
+        🤝 同盟
       </StrategyMapActionButton>
       <StrategyMapActionButton
-        variant="muted"
+        variant="primary"
         :tooltip-side="tooltipSide"
-        tooltip="宣战功能尚未实装"
-        @click="showUnavailableTip('宣战功能尚未实装')"
+        tooltip="派遣使节宣战"
+        @click="$emit('openDiplomacy', 'War')"
       >
-        🤝 宣战
+        ⚔ 宣战
       </StrategyMapActionButton>
       <StrategyMapActionButton
-        variant="muted"
+        variant="primary"
         :tooltip-side="tooltipSide"
-        tooltip="议和功能尚未实装"
-        @click="showUnavailableTip('议和功能尚未实装')"
+        tooltip="派遣使节议和"
+        @click="$emit('openDiplomacy', 'Peace')"
       >
-        🤝 议和
+        🕊 议和
       </StrategyMapActionButton>
       <StrategyMapActionButton
         variant="muted"

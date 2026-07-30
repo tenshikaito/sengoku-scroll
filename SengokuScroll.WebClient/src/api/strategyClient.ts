@@ -78,10 +78,14 @@ async function fetchLive<T>(
     let detail = response.statusText;
     try {
       const errBody = await response.json();
-      if (errBody?.errorCode) detail = String(errBody.errorCode);
+      if (errBody?.message) detail = String(errBody.message);
+      else if (errBody?.errorCode) detail = String(errBody.errorCode);
       else if (errBody?.code) detail = String(errBody.code);
     } catch {
-      /* ignore */
+      if (response.status === 500 || response.status === 502) {
+        detail =
+          "策略 API（5100）可能未启动。请运行：dotnet run --project SengokuScroll.WebApi --launch-profile http";
+      }
     }
 
     recordDiagnostic({
@@ -736,6 +740,54 @@ export const recordEspionageIntel = (payload: {
       }).then(normalizeStrategyWorldState),
     () => {
       throw new Error("Mock 模式不支持谍报");
+    }
+  );
+
+/** 预览外交使节任务成功率。 */
+export const previewDiplomacyMission = (payload: {
+  characterId: number;
+  targetForceId: number;
+  action: "Ally" | "War" | "Peace";
+}) =>
+  request(
+    "POST",
+    "/diplomacy/mission/preview",
+    () =>
+      fetchLive<{
+        successChancePercent?: number;
+        SuccessChancePercent?: number;
+        travelDays?: number;
+        TravelDays?: number;
+        idleOfficers?: { characterId?: number; CharacterId?: number; name?: string; Name?: string }[];
+        IdleOfficers?: { characterId?: number; CharacterId?: number; name?: string; Name?: string }[];
+      }>("POST", "/diplomacy/mission/preview", payload).then((raw) => ({
+        successChancePercent: raw.successChancePercent ?? raw.SuccessChancePercent ?? 0,
+        travelDays: raw.travelDays ?? raw.TravelDays ?? 0,
+        idleOfficers: (raw.idleOfficers ?? raw.IdleOfficers ?? []).map((o) => ({
+          characterId: o.characterId ?? o.CharacterId ?? 0,
+          name: o.name ?? o.Name ?? "",
+        })),
+      })),
+    () => ({
+      successChancePercent: 50,
+      travelDays: 7,
+      idleOfficers: [] as { characterId: number; name: string }[],
+    })
+  );
+
+/** 派遣外交使节任务。 */
+export const orderDiplomacyMission = (payload: {
+  characterId: number;
+  targetForceId: number;
+  action: "Ally" | "War" | "Peace";
+}) =>
+  request(
+    "POST",
+    "/diplomacy/mission",
+    () =>
+      fetchLive<unknown>("POST", "/diplomacy/mission", payload).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持外交使节任务");
     }
   );
 

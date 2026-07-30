@@ -6,6 +6,7 @@ using SengokuScroll.Domain.Types;
 using SengokuScroll.Strategy.Actions;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Rules;
@@ -18,10 +19,12 @@ public interface IStrategyMarketSystem : IGameSystem
 }
 
 /// <summary>
-/// 市场系统：市民 AI 挂单 → 连续撮合 → 日 K 线（M4-b）。
+/// 市场系统：日初撮合存量挂单 → AI 补单 → 日 K（M4-b）。
+/// 先撮合再补单，且补单时不 prune 既有挂单，避免日推进后簿面被清空。
 /// </summary>
 public class StrategyMarketSystem(
     IGameContext context,
+    StrategyScenarioMeta scenarioMeta,
     MerchantTaxLedger taxLedger,
     StrategyIntelligenceLedger intelligenceLedger) : IStrategyMarketSystem
 {
@@ -31,10 +34,18 @@ public class StrategyMarketSystem(
     /// <inheritdoc />
     public void Update()
     {
-        var gameData = context.GameWorldContext.GameWorld.GameData;
+        var world = context.GameWorldContext.GameWorld;
+        var gameData = world.GameData;
         var date = gameData.GameDate;
+        var dayContext = new MarketAiDayContext
+        {
+            World = world,
+            GameData = gameData,
+            ScenarioMeta = scenarioMeta,
+            TaxLedger = taxLedger,
+            AllowOpportunisticSmash = false,
+        };
 
-        // 阶段1：逐可贸易据点——AI 挂单
         foreach (var stronghold in context.GameWorldContext.EachStronghold())
         {
             if (!MarketRules.CanTrade(stronghold, gameData))
@@ -42,23 +53,35 @@ public class StrategyMarketSystem(
 
             MarketActions.RemoveZeroQuantityOrders(stronghold, date);
 
-            CivilianMarketAiHelper.EvaluateAndPlaceBuyOrders(stronghold);
-            GovernmentMarketAiHelper.EvaluateAndPlaceBuyOrders(stronghold);
-            GovernmentMarketAiHelper.EvaluateAndPlaceSellOrders(stronghold);
-            MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold, MarketCommodityType.Food);
-            HorseMarketAiHelper.EvaluateAndPlaceOrders(stronghold);
-            MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold, MarketCommodityType.Horse);
+            var signals = MarketContextSignalsHelper.Resolve(stronghold, dayContext);
 
-            MarketActions.RemoveDeprecatedCommodityOrders(stronghold);
-
-            // 阶段2：连续撮合成交、写 K 线、记录价格波动情报
             var fallback = stronghold.Market.LastClosePriceMoneyPerGo > 0
                 ? stronghold.Market.LastClosePriceMoneyPerGo
                 : MarketConstants.DefaultPriceMoneyPerGo;
 
             var previousClose = fallback;
             var result = MarketCalculator.MatchOrders(stronghold, fallback, date);
-            MarketActions.ApplyMatchResult(stronghold, result, taxLedger);
+            MarketActions.ApplyMatchResult(stronghold, result, taxLedger, date);
+
+            MarketBootstrapHelper.EnsureMarketMakerInventories(stronghold);
+
+            // 阶段2：限价补单（低买高卖 + 邻城套利锚价）；不在日更中机会砸单，避免清空簿面
+            CivilianMarketAiHelper.EvaluateAndPlaceBuyOrders(stronghold, signals, dayContext);
+            GovernmentMarketAiHelper.EvaluateAndPlaceBuyOrders(stronghold, signals, dayContext);
+            GovernmentMarketAiHelper.EvaluateAndPlaceSellOrders(stronghold, signals, dayContext);
+            MerchantMarketAiHelper.EvaluateAndPlaceOrders(
+                stronghold,
+                MarketCommodityType.Food,
+                signals,
+                dayContext);
+            HorseMarketAiHelper.EvaluateAndPlaceOrders(stronghold);
+            MerchantMarketAiHelper.EvaluateAndPlaceOrders(
+                stronghold,
+                MarketCommodityType.Horse,
+                signals,
+                dayContext);
+
+            MarketActions.RemoveDeprecatedCommodityOrders(stronghold);
             MarketActions.SetDailyBarDate(stronghold, date);
 
             MaybeRecordPriceIntel(stronghold, date, previousClose, result.SessionClose);
@@ -77,7 +100,6 @@ public class StrategyMarketSystem(
             return;
 
         var deltaBp = Math.Abs(newClose - previousClose) * EconomyConstants.BasisPointsPer100Percent / previousClose;
-        // 业务：价格波动超过阈值时记入情报台账供 AI/玩家参考
         if (deltaBp < MarketConstants.PriceIntelThresholdBp)
             return;
 

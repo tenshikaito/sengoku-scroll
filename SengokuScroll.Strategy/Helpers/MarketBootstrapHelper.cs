@@ -36,6 +36,60 @@ public static class MarketBootstrapHelper
         }
     }
 
+    /// <summary>日更 AI 补单前补足做市库存/资金（保留既有挂单）。</summary>
+    public static void EnsureMarketMakerInventories(Stronghold stronghold)
+    {
+        if (!MarketRules.CanTrade(stronghold))
+            return;
+
+        var lastClose = stronghold.Market.LastClosePriceMoneyPerGo > 0
+            ? stronghold.Market.LastClosePriceMoneyPerGo
+            : MarketConstants.DefaultPriceMoneyPerGo;
+
+        EnsureBuyerMoney(
+            stronghold,
+            stronghold.CivilianActor.Id,
+            MarketConstants.MerchantMaxBuyFoodGoPerLevel,
+            lastClose);
+
+        stronghold.ForceActor.Horse = Math.Max(stronghold.ForceActor.Horse, 120);
+
+        foreach (var merchant in stronghold.MerchantActors)
+        {
+            EnsureSellerFood(stronghold, merchant.Id, MarketConstants.MerchantMaxSellFoodGoPerLevel);
+            EnsureBuyerMoney(
+                stronghold,
+                merchant.Id,
+                MarketConstants.MerchantMaxBuyFoodGoPerLevel,
+                lastClose);
+            merchant.Horse = Math.Max(merchant.Horse, MarketConstants.MerchantHorseReserve + 24);
+        }
+    }
+
+    private static void EnsureBuyerMoney(Stronghold stronghold, int actorId, int buyQuantityGo, int price)
+    {
+        if (!MarketActions.TryGetActorPublic(stronghold, actorId, out var buyer))
+            return;
+
+        buyer.Money = Math.Max(buyer.Money, buyQuantityGo * price);
+    }
+
+    private static void ClearFoodOrders(Stronghold stronghold)
+    {
+        var toRemove = stronghold.Market.Orders
+            .Where(o => o.Commodity == MarketCommodityType.Food)
+            .ToList();
+        MarketOrderCommitHelper.RefundAndRemoveOrders(stronghold, toRemove);
+    }
+
+    private static void ClearHorseOrders(Stronghold stronghold)
+    {
+        var toRemove = stronghold.Market.Orders
+            .Where(o => o.Commodity == MarketCommodityType.Horse)
+            .ToList();
+        MarketOrderCommitHelper.RefundAndRemoveOrders(stronghold, toRemove);
+    }
+
     private static void EnsureSellerFood(Stronghold stronghold, int actorId, int sellQuantityGo)
     {
         if (!MarketActions.TryGetActorPublic(stronghold, actorId, out var seller))
@@ -109,7 +163,7 @@ public static class MarketBootstrapHelper
             ? market.LastClosePriceMoneyPerGo
             : MarketConstants.DefaultPriceMoneyPerGo;
 
-        market.Orders.RemoveAll(o => o.Commodity == MarketCommodityType.Food);
+        ClearFoodOrders(stronghold);
 
         var merchants = stronghold.MerchantActors.ToList();
 
@@ -130,6 +184,8 @@ public static class MarketBootstrapHelper
             var bidActor = level % 3 == 0 ? stronghold.ForceActor.Id : stronghold.CivilianActor.Id;
             var bidTaxExempt = bidActor == stronghold.ForceActor.Id || bidActor == stronghold.CivilianActor.Id;
 
+            EnsureBuyerMoney(stronghold, bidActor, bidQty, bidPrice);
+
             MarketActions.AddLimitOrder(
                 stronghold,
                 MarketRules.BuySide,
@@ -138,13 +194,6 @@ public static class MarketBootstrapHelper
                 bidQty,
                 MarketCommodityType.Food,
                 bidTaxExempt);
-
-            if (bidActor == stronghold.CivilianActor.Id)
-            {
-                stronghold.CivilianActor.Money = Math.Max(
-                    stronghold.CivilianActor.Money,
-                    bidQty * bidPrice);
-            }
         }
 
         SeedPlayerTestOrderAtQuote(stronghold, gameDate, quotePrice: 95);
@@ -213,7 +262,7 @@ public static class MarketBootstrapHelper
         if (lastClose <= 0)
             lastClose = CommodityInventoryHelper.ResolveDefaultPrice(null, MarketCommodityType.Horse);
 
-        market.Orders.RemoveAll(o => o.Commodity == MarketCommodityType.Horse);
+        ClearHorseOrders(stronghold);
 
         stronghold.ForceActor.Horse = Math.Max(stronghold.ForceActor.Horse, 120);
         foreach (var merchant in stronghold.MerchantActors)
@@ -246,6 +295,8 @@ public static class MarketBootstrapHelper
             var bidActor = level % 2 == 0 ? stronghold.ForceActor.Id : stronghold.CivilianActor.Id;
             var bidTaxExempt = bidActor == stronghold.ForceActor.Id || bidActor == stronghold.CivilianActor.Id;
 
+            EnsureBuyerMoney(stronghold, bidActor, bidQty, bidPrice);
+
             MarketActions.AddLimitOrder(
                 stronghold,
                 MarketRules.BuySide,
@@ -254,13 +305,6 @@ public static class MarketBootstrapHelper
                 bidQty,
                 MarketCommodityType.Horse,
                 bidTaxExempt);
-
-            if (bidActor == stronghold.CivilianActor.Id)
-            {
-                stronghold.CivilianActor.Money = Math.Max(
-                    stronghold.CivilianActor.Money,
-                    bidQty * bidPrice);
-            }
         }
     }
 
@@ -276,8 +320,10 @@ public static class MarketBootstrapHelper
         var qty = (48 + stronghold.Id * 7) * LogisticsConstants.GoPerKoku;
         EnsureSellerFood(stronghold, stronghold.ForceActor.Id, qty);
 
-        stronghold.Market.Orders.RemoveAll(o =>
-            o.Commodity == MarketCommodityType.Food && o.PriceMoneyPerGo == quotePrice);
+        var toRemove = stronghold.Market.Orders
+            .Where(o => o.Commodity == MarketCommodityType.Food && o.PriceMoneyPerGo == quotePrice)
+            .ToList();
+        MarketOrderCommitHelper.RefundAndRemoveOrders(stronghold, toRemove);
 
         MarketActions.AddOrMergeSellOrder(
             stronghold,

@@ -17,6 +17,7 @@ public class MarketAndHarvestTests
     public void AddOrMergeBuyOrder_MergesQuantityAtSamePrice()
     {
         var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
+        MarketTestOrderSeedHelper.EnsureBuyFunds(stronghold, stronghold.ForceActor.Id, 94, 800);
 
         MarketActions.AddOrMergeBuyOrder(
             stronghold,
@@ -45,6 +46,7 @@ public class MarketAndHarvestTests
     public void AddOrMergeSellOrder_MergesQuantityAtSamePrice()
     {
         var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
+        MarketTestOrderSeedHelper.EnsureSellStock(stronghold, stronghold.ForceActor.Id, 700);
 
         MarketActions.AddOrMergeSellOrder(
             stronghold,
@@ -153,6 +155,48 @@ public class MarketAndHarvestTests
         Assert.Equal(100, stronghold.CivilianActor.Food);
         Assert.Equal(10_000 - 5000, stronghold.CivilianActor.Money);
         Assert.Equal(4900, stronghold.ForceActor.Food);
+    }
+
+    [Fact]
+    public void MatchOrders_DoesNotReduceOrderQuantityBeforeSuccessfulSettlement()
+    {
+        var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
+        stronghold.CivilianActor.Food = 0;
+        stronghold.CivilianActor.Money = 0;
+        stronghold.ForceActor.Food = 5000;
+
+        var buyOrder = new Domain.Entities.MarketOrder
+        {
+            Id = 1,
+            Side = MarketRules.BuySide,
+            ActorId = stronghold.CivilianActor.Id,
+            PriceMoneyPerGo = 60,
+            QuantityGo = 100
+        };
+        var sellOrder = new Domain.Entities.MarketOrder
+        {
+            Id = 2,
+            Side = MarketRules.SellSide,
+            ActorId = stronghold.ForceActor.Id,
+            PriceMoneyPerGo = 50,
+            QuantityGo = 200,
+            TaxExempt = true
+        };
+        stronghold.Market.Orders.Add(buyOrder);
+        stronghold.Market.Orders.Add(sellOrder);
+
+        var ledger = new Diagnostics.MerchantTaxLedger();
+        var result = MarketCalculator.MatchOrders(stronghold, 50);
+
+        Assert.Single(result.Trades);
+        Assert.Equal(100, buyOrder.QuantityGo);
+        Assert.Equal(200, sellOrder.QuantityGo);
+
+        var count = Actions.MarketActions.ApplyMatchResult(stronghold, result, ledger);
+
+        Assert.Equal(0, count);
+        Assert.Equal(100, buyOrder.QuantityGo);
+        Assert.Equal(200, sellOrder.QuantityGo);
     }
 
     [Fact]
@@ -267,7 +311,7 @@ public class MarketAndHarvestTests
         Assert.True(sells.All(o => o.TaxExempt));
         Assert.Equal(2000, sells.Sum(o => o.QuantityGo));
         Assert.True(sells[0].QuantityGo >= sells[^1].QuantityGo);
-        Assert.Equal(41, sells[0].PriceMoneyPerGo);
+        Assert.Equal(40, sells[0].PriceMoneyPerGo);
     }
 
     [Fact]

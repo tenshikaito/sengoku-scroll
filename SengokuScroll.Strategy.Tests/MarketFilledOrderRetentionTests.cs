@@ -22,6 +22,7 @@ public class MarketFilledOrderRetentionTests
         var qty = 100 * LogisticsConstants.GoPerKoku;
 
         stronghold.Market.Orders.Clear();
+        MarketTestOrderSeedHelper.EnsureBuyFunds(stronghold, actor.Id, 80, qty);
         MarketActions.AddLimitOrder(
             stronghold,
             MarketRules.BuySide,
@@ -32,8 +33,7 @@ public class MarketFilledOrderRetentionTests
             taxExempt: true,
             gameData.GameDate);
         var order = Assert.Single(stronghold.Market.Orders);
-        order.MoneyCommitted = true;
-        order.CommittedMoneyGo = order.PriceMoneyPerGo * qty;
+        Assert.True(order.MoneyCommitted);
         order.QuantityGo = 0;
         MarketActions.MarkOrderFullyFilled(order, gameData.GameDate);
 
@@ -66,18 +66,18 @@ public class MarketFilledOrderRetentionTests
         var actor = stronghold.ForceActor;
 
         stronghold.Market.Orders.Clear();
+        var sellQty = 50 * LogisticsConstants.GoPerKoku;
+        MarketTestOrderSeedHelper.EnsureSellStock(stronghold, actor.Id, sellQty);
         MarketActions.AddLimitOrder(
             stronghold,
             MarketRules.SellSide,
             actor.Id,
             95,
-            50 * LogisticsConstants.GoPerKoku,
+            sellQty,
             MarketCommodityType.Food,
             taxExempt: true,
             gameData.GameDate);
-        var order = Assert.Single(stronghold.Market.Orders);
-        order.InventoryCommitted = true;
-        order.CommittedInventoryGo = order.QuantityGo;
+        Assert.Single(stronghold.Market.Orders);
 
         gameData.GameDate = gameData.GameDate.AddDays(1);
         MarketActions.RemoveZeroQuantityOrders(stronghold, gameData.GameDate);

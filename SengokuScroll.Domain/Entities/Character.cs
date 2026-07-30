@@ -48,6 +48,9 @@ public class Character : CharacterDefinition, IMovable
     /// <summary>进行中的募兵/征兵任务；无任务时为 null。</summary>
     public CharacterRecruitTask? RecruitTask { get; set; }
 
+    /// <summary>进行中的外交使节任务；无任务时为 null。</summary>
+    public CharacterDiplomacyMission? DiplomacyMission { get; set; }
+
     /// <summary>据点发布的募兵/征兵任务令；抵达目标后由 AI 转为执行任务。</summary>
     public CharacterRecruitAssignment? RecruitAssignment { get; set; }
 

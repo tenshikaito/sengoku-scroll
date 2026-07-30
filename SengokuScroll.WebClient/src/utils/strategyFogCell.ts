@@ -133,6 +133,12 @@ export function intelEntityCountAtCell(worldState: StrategyWorldState, x: number
   return count;
 }
 
+/** 底栏是否可展示该格地图静态情报（地形/区域/道路/地标）。未探索格不展示。 */
+export function canShowTileMapIntel(worldState: StrategyWorldState, x: number, y: number): boolean {
+  if (fogDisabled(worldState)) return true;
+  return isTileExplored(worldState, x, y);
+}
+
 /** 未探索格不展示实体悬浮情报。 */
 export function canShowCellHoverIntel(worldState: StrategyWorldState, x: number, y: number): boolean {
   if (fogDisabled(worldState)) return intelEntityCountAtCell(worldState, x, y) > 0;

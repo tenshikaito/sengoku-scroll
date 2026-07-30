@@ -23,10 +23,7 @@ public static class HorseMarketAiHelper
         var actor = stronghold.ForceActor;
         var surplus = actor.Horse;
         if (surplus < MarketConstants.GovernmentMinSellQuantityGo)
-        {
-            ClearSide(stronghold, actor.Id, MarketRules.SellSide);
             return;
-        }
 
         var sellBudget = Math.Min(surplus, MarketConstants.GovernmentMaxHorseSellQuantity);
         var reference = MarketMakerAiHelper.ResolveReferencePrice(stronghold, MarketCommodityType.Horse);
@@ -53,24 +50,15 @@ public static class HorseMarketAiHelper
         var actor = stronghold.ForceActor;
         var bestAsk = MarketMakerAiHelper.ResolveBestAsk(stronghold, MarketCommodityType.Horse);
         if (bestAsk <= 0)
-        {
-            ClearSide(stronghold, actor.Id, MarketRules.BuySide);
             return;
-        }
 
         var reference = MarketMakerAiHelper.ResolveReferencePrice(stronghold, MarketCommodityType.Horse);
         if (bestAsk > reference)
-        {
-            ClearSide(stronghold, actor.Id, MarketRules.BuySide);
             return;
-        }
 
         var moneyBudget = Math.Min(actor.Money / 10, MarketConstants.GovernmentMaxHorseBuyMoney);
         if (moneyBudget < bestAsk)
-        {
-            ClearSide(stronghold, actor.Id, MarketRules.BuySide);
             return;
-        }
 
         var allocations = MarketMakerAiHelper.BuildMoneyBidAllocations(
             reference,
@@ -91,11 +79,10 @@ public static class HorseMarketAiHelper
     }
 
     private static void ClearSide(Stronghold stronghold, int actorId, string side)
-        => MarketMakerAiHelper.SyncBookSide(
+        => MarketActions.PruneAiRestingOrders(
             stronghold,
             actorId,
             side,
             MarketCommodityType.Horse,
-            taxExempt: true,
-            []);
+            keepPrices: new HashSet<int>());
 }

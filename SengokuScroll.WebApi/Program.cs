@@ -1,9 +1,13 @@
+using System.Diagnostics;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using SengokuScroll.Localization;
 using SengokuScroll.Localization.Abstractions;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Extensions;
 using SengokuScroll.Strategy.Hosting;
 using SengokuScroll.Strategy.Persistence;
+using SengokuScroll.WebApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,7 +46,12 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("default");
 app.UseAuthorization();
+
+ClientStaticWebHelper.UseClientStaticWebIfAvailable(app);
+
 app.MapControllers();
+
+ClientStaticWebHelper.MapClientSpaFallbackIfAvailable(app);
 
 var defaultScenarioId = app.Configuration["Strategy:DefaultScenarioId"] ?? "mini_kanto";
 var simulationHost = app.Services.GetRequiredService<StrategySimulationHost>();
@@ -59,6 +68,32 @@ else
     app.Logger.LogInformation(
         "Strategy simulation loaded scenario {ScenarioId} on startup",
         defaultScenarioId);
+}
+
+if (app.Configuration.GetValue("Strategy:OpenBrowserOnStart", app.Environment.IsProduction()))
+{
+    app.Lifetime.ApplicationStarted.Register(() =>
+    {
+        try
+        {
+            var addresses = app.Services.GetRequiredService<IServer>()
+                .Features
+                .Get<IServerAddressesFeature>()
+                ?.Addresses;
+            var url = addresses?.FirstOrDefault(a =>
+                          a.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                      ?? "http://127.0.0.1:5100";
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Failed to open browser on startup");
+        }
+    });
 }
 
 app.Run();

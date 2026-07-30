@@ -110,4 +110,42 @@ public static class MarketConstants
 
     /// <summary>单次减税民心恢复上限。</summary>
     public const int PopularFeelingsTaxDecreaseMaxBonus = 5;
+
+    // --- Actor 仓位 / 抢筹 / 情绪 / 邻城套利（M4 AI 增强）---
+
+    /// <summary>目标资金占比（万分比）：Money / (Money + Stock×中枢价)。</summary>
+    public const int TargetMoneyShareBp = 4000;
+
+    /// <summary>仓位偏离死区（万分比）；未超出则不主动再平衡。</summary>
+    public const int PositionDeadbandBp = 800;
+
+    /// <summary>相对公允价下跌达到此折扣（万分比）视为崩溃，可大单砸买并承接。</summary>
+    public const int OpportunityCrashDiscountBp = 1000;
+
+    /// <summary>相对公允价上涨达到此溢价（万分比）视为过热，可大单砸卖并挂卖承接。</summary>
+    public const int OpportunityRallyPremiumBp = 1000;
+
+    /// <summary>抢筹砸单量相对「补到目标仓位」量的倍数（万分比，10000=1×）。</summary>
+    public const int OpportunitySmashSizeBp = 15_000;
+
+    /// <summary>抢筹后在现价挂承接单的量（相对已成交量，万分比）。</summary>
+    public const int OpportunityRestingFollowBp = 5000;
+
+    /// <summary>开战/敌军压境时目标资金占比下调（更囤货，万分比）。</summary>
+    public const int WarHoardMoneyShareShiftBp = 1500;
+
+    /// <summary>收粮临近/当日时目标资金占比上调（更愿砸货，万分比）。</summary>
+    public const int HarvestDumpMoneyShareShiftBp = 1200;
+
+    /// <summary>收粮前瞻天数：此窗口内视为丰收抛压预期。</summary>
+    public const int HarvestFearLeadDays = 10;
+
+    /// <summary>邻城套利：曼哈顿距离上限（格）。</summary>
+    public const int RegionalArbitrageMaxDistanceTiles = 8;
+
+    /// <summary>邻城运输成本：每格相对货价万分比。</summary>
+    public const int RegionalTransportCostBpPerTile = 200;
+
+    /// <summary>邻城套利相对本城中枢的最小净利（万分比）。</summary>
+    public const int RegionalArbitrageMinEdgeBp = 800;
 }

@@ -19,7 +19,7 @@
 
 - 已删除 **`LuxuryGoods`** 与 **`MarketCommodityType.Luxury`**（旧占位）。
 - **运输队**：`UnitKind.Convoy`；**`Unit.Horse`** 表示队中持有的马匹，`Food`/`Money` 表示载重。
-- **`CommodityDefinition` master**（`GameMasterData.Commodities`）：名称、描述、是否可交易、默认价、`UnitLabel`；经 `WorldState.MasterData.Commodities` 下发前端，**UI 单位/文案不再硬编码**（粮食 UI 仍按 1 石 = 360 合换算展示）。
+- **`CommodityDefinition` master**（`GameMasterData.Commodities`）：名称、描述、是否可交易、默认价、`UnitLabel`（粮食 UI=**石**，马=匹）；经 `WorldState.MasterData.Commodities` 下发前端。内部库存仍为合，展示按 `GO_PER_KOKU`（1 石 = 1000 合）换算。
 
 ---
 
@@ -27,7 +27,7 @@
 
 | 枚举 | Master 名 | 库存字段 | 默认价 | UI 数量单位 | 砸单 API |
 |------|-----------|----------|--------|-------------|----------|
-| `Food` | 粮食 | `Food`（合） | 50 贯/合（展示为贯/石） | 石 | `smash-*-food` |
+| `Food` | 粮食 | `Food`（合） | 50 文/合（展示 **贯/石**） | **石** | `smash-*-food` |
 | `Horse` | 马匹 | `Horse`（匹） | 120 贯/匹 | 匹 | `smash-*-horse` |
 
 - 订单簿、日 K、昨收 **按品类隔离**（`StrongholdMarket.PriceHistoryByCommodity`、`ResolveLastClose(commodity)`）。
@@ -213,6 +213,26 @@
 - **跨据点套利** `TradeMarketAiHelper`：比较两地中枢价差（已去掉市民 +10% 溢价）
 - **演示 seed**：`MarketBootstrapHelper` 约 1 年随机 K 线 + 20 档演示单（日更 AI 会覆盖）
 
+### ✅ 阶段 2.1（2026-07-27 · 成交与领队修正）
+
+- **中枢穿越**：紧缺市民 / 有外部近价买盘时，AI 卖盘可挂中枢价促成交叉
+- **撮合-结算原子化**：`MatchOrders` 不预扣量；`ApplyMatchResult` 结算成功后再填单
+- **禁止自成交**：同一 Actor 买卖单不再互相撮合
+- **商户无买盘抛售**：排除本店后若无外部买盘、或外部最高买 &lt; 中枢 → 撤本店买盘，卖盘挂到买一（或低于中枢≥捡漏折扣）引导跌价与次日捡漏
+- **贸易队总将**：仅商家店员 / 组织角色；**禁止**回退武家代官（修复「今井屋商队显示酒井忠次」）
+- **移民队**：`LeaderId=0`（无总将）；武家代官不会兼任移民队长
+- **派出主体**：跨城贸易队仅商家组织派出；武家只派补给/贡赋
+- **非史实收入**：固定 **80%**（`FictionalIncomePenaltyBp=8000`）
+
+### ✅ 阶段 2.2（2026-07-28 · Actor 仓位 / 情绪 / 抢筹 / 邻城套利）
+
+- **仓位平衡**：目标资金占比（默认 40%）；钱多物少且价合适 → 买到平衡；货多钱少 → 卖到平衡
+- **机会抢筹**：相对公允价崩盘（≥10%）时，大单以卖一砸买；吃完后**同价挂买单承接**；过热则对称砸卖+挂卖
+- **情绪**：敌对/敌军压境/围城 → 囤积（减卖加买）；收粮日及前瞻窗口 → 抛压（减买加卖、易 undercut）
+- **邻城套利挂价**：扣每格运费后，出口抬高本城卖价锚、进口压低买价锚；跨城贸易队价差门槛计入运费
+- **日更顺序**：机会砸单 → 挂单 → 撮合（砸单不走 Refresh，防递归）
+- 参与方：市民 / 官府 / 商户 / 寺社 均可机会砸单
+
 ### ✅ 阶段 3（2026-07-27 · 多品类 + UI）
 
 - **`CommodityDefinition` master** + `CommodityTradeModule` / `CommodityInventoryHelper` 统一读写库存
@@ -231,7 +251,6 @@
 - 关税策略 UI、2 月情报快照 API
 - 分时/成交量 Tab 数据（现仅日 K）
 - **事件驱动粮价**（战争、围城恐慌、谣言等，见 §15）
-- **中枢价穿越成交**（买卖盘 intentional overlap，见 §14.2）
 
 ---
 
@@ -241,10 +260,10 @@
 
 ```
 1. RemoveZeroQuantityOrders
-2. RemoveDeprecatedCommodityOrders（清除未定义枚举的旧品类单，保留 Food/Horse）
-3. CivilianMarketAiHelper      → 多档买单（缺粮时；仅 Food）
-4. GovernmentMarketAiHelper    → 多档买/卖（储备调节；Food）
-5. MerchantMarketAiHelper      → 多档买/卖（做市；按品类）
+2. MarketPositionAiHelper      → 仓位/情绪机会砸单（可挂承接）
+3. CivilianMarketAiHelper      → 多档买单（缺粮/囤积/捡漏；仅 Food）
+4. GovernmentMarketAiHelper    → 多档买/卖（储备 + 情绪 + 邻城锚价）
+5. MerchantMarketAiHelper      → 多档买/卖（做市 + 邻城套利 + 抛售）
 6. HorseMarketAiHelper         → 马匹做市（Horse）
 7. MatchOrders + ApplyMatchResult → 写分品类 K 线、LastClose
 8. UnitTradeActions.ProcessAutoTradePolicies
@@ -253,13 +272,14 @@
 | Actor | 订单簿 | 方向 | 现货砸单 | 说明 |
 |-------|--------|------|----------|------|
 | **ForceActor（官府）** | ✅ | 买+卖 | ✅ 当主交易 | 免税；储备线 2 万合 |
-| **CivilianActor（市民）** | ✅ | 仅买 | ❌ | 聚合人口；余粮 &lt; 7 天挂买单 |
-| **MerchantActors（商户）** | ✅ | 买+卖 | ❌ | 成交收 **贸易税** |
+| **CivilianActor（市民）** | ✅ | 仅买 | ❌ | 聚合人口；余粮 &lt; 7 天挂买单（清洲开局粮极厚时几乎无民间需求） |
+| **MerchantActors（商户）** | ✅ | 买+卖 | ❌ | 成交收 **贸易税**；无外部买盘时低价抛售 |
 | **ReligionActors（寺社）** | ❌ | — | ✅ `ReligionTradeActions` | 不进 AI 日更挂单 |
-| **Unit 商队** | ❌ | — | ✅ `UnitTradeActions` | `AllowRestingOrder=false` |
+| **Unit 商队** | ❌ | — | ✅ `UnitTradeActions` | `AllowRestingOrder=false`；总将=店员，非武家代官 |
+| **Unit 移民** | ❌ | — | ❌ | `LeaderId=0`，无总将 |
 | **玩家大名** | ✅ | 买+卖 | ✅ | 带 `MoneyCommitted`/`InventoryCommitted` 的限价单受保护 |
 
-**中枢价**：`LastClosePriceMoneyPerGo`（昨收/最近有量成交的收盘价）。AI 挂单以此为基准 ±N 贯，**不在中枢同价挂 AI 单**（演示 seed 与玩家单除外）。
+**中枢价**：`LastClosePriceMoneyPerGo`（昨收/最近有量成交的收盘价）。AI 挂单以此为基准 ±N 贯；紧缺/抢成交时可挂中枢或低于中枢（见 §14.2）。
 
 ---
 
@@ -270,8 +290,9 @@
 - 盘口两侧都有量，但 **日 K 成交量长期为 0**，收盘价几乎不动
 - 或 K 线历史有波动，但 **当日/live 盘口与 K 线中枢不一致**
 - 玩家 **砸单** 后价格突然跳变，AI 日更却不推动价格
+- **清洲等粮仓城成交量特别少**：通常 **不是撮合坏了**，而是民间需求不足（市民余粮 ≥ 7 天不挂买单）+ 官府也不缺粮
 
-### 14.2 根因 A：结构性买卖价差（⚠️ 部分缓解）
+### 14.2 根因 A：结构性买卖价差（✅ 已缓解）
 
 | 侧 | AI 挂价 | 示例（中枢=100） |
 |----|---------|------------------|
@@ -281,13 +302,12 @@
 撮合条件：`最高买价 ≥ 最低卖价`（`MarketCalculator`）。  
 当所有 AI 严格分布在中枢两侧时，**最高买 &lt; 最低卖 → 日更可能零成交**。
 
-**2026-07-27 缓解**（未完全消除 spread）：
+**2026-07-27 缓解**：
 
-- AI 买盘定价参考 **`ResolveBestAsk`**（可见最低卖价），紧缺时可 **捡漏** 低于中枢的卖单
+- AI 买盘定价参考 **`ResolveBestAsk`**；紧缺时可挂中枢交叉
+- 商户卖盘：有外部买盘且买价 ≥ 中枢时挂中枢交叉；**否则低价抢成交**（贴买一，或无买盘时低于中枢≥捡漏折扣）并撤本店买盘
+- 撮合 **禁止同一 Actor 自成交**
 - 玩家/当主 **砸单** 后 **`MarketAiRefreshHelper`** 按新品位重挂 AI 单
-- 演示 seed 在首次加载时可有交叉单，**第一次日更后** 仍可能被 AI spread 替换
-
-仍待 **P0**：中枢穿越 / spread 收窄（§16）。
 
 ### 14.3 根因 B：演示 K 线与 live 订单簿脱节
 
@@ -295,22 +315,21 @@
 - 日更 `MatchOrders` 若无成交：`VolumeGo=0`，`Close=LastClose` 平盘追加
 - UI 左侧 K 线含 **历史随机波动**；右侧 live 盘口来自 **当前 AI 单**，二者可长期不一致
 
-### 14.4 根因 C：撮合与结算两阶段不一致（🔧 缺陷）
+### 14.4 根因 C：撮合与结算两阶段不一致（✅ 已修）
 
-1. `MatchOrders` 在内存中 **先扣减** 订单数量并生成 `TradeExecution`
-2. `ApplyMatchResult` 结算时若 **买方 `Money` 不足** 或 **卖方库存不足**，该笔 **跳过结算**
-
-结果：可能出现「订单量被吃掉但未交割/未记 K 线」的不一致（玩家在 spread 交叉或演示单密集时更易触发）。
+旧缺陷：`MatchOrders` 先扣订单量，结算失败时量已丢失。  
+**现况**：撮合仅在工作副本上扣量；`ApplyMatchResult` 结算成功后再写回订单 / MarkFilled。
 
 ### 14.5 根因 D：AI 不挂单的常见条件
 
 | 条件 | 后果 |
 |------|------|
-| 市民余粮 ≥ 7 天 | 市民 **不挂买单** |
+| 市民余粮 ≥ 7 天 | 市民 **不挂买单**（清洲开局粮厚 → 成交量低属预期） |
 | 官府粮 ≤ 储备 2 万合 | 官府 **不挂卖单** |
 | 官府粮 ≥ 储备 | 官府 **不挂买单** |
 | 商户 `Money` ≤ 营运准备金 | 商户 **不挂买单** |
 | 商户 `Food` ≤ 储备 5000 合 | 商户 **不挂卖单** |
+| 无外部买盘 / 买价 &lt; 中枢 | 商户 **低价抛售**（撤本店买盘） |
 | 据点 **被围城** | `CanTrade=false`，**整个市场停更** |
 | 无 Market 设施 | 不撮合、不显示市场 |
 
@@ -334,7 +353,7 @@
 | 因素 | 方向/机制 | 状态 | 代码/备注 |
 |------|-----------|------|-----------|
 | 买卖盘交叉 | 最高买 ≥ 最低卖 → 连续撮合，成交价=卖单挂价 | ✅ | `MarketCalculator.MatchOrders` |
-| **中枢 spread 无交叉** | AI 买&lt;中枢&lt;卖 → **日更零成交** | ⚠️ | 见 §14.2 |
+| **中枢 spread 无交叉** | AI 买&lt;中枢&lt;卖 → 日更零成交 | ✅ 已靠穿越/低价抛售缓解 | 见 §14.2 |
 | 买方资金不足 | 撮合后结算跳过，可能不落 K 线 | ⚠️ | `ApplyMatchResult` |
 | 卖方粮不足 | 同上 | ⚠️ | `MarketInventoryHelper` |
 | 商户卖单 | 收 **贸易税** 5% | ✅ | `TradeTaxBasisPoints` |
@@ -406,8 +425,8 @@
 
 | 优先级 | 项 | 说明 |
 |--------|-----|------|
-| P0 | **中枢穿越 / spread 收窄** | 紧缺市民或商户可在 `中枢` 或 ±0 档挂单，使日更有量 |
-| P0 | **撮合-结算原子化** | 结算失败则不扣订单量，或回滚 |
+| ✅ | **中枢穿越 / 商户低价抢成交** | 已实装（§14.2 / 阶段 2.1） |
+| ✅ | **撮合-结算原子化** | 已实装 |
 | P1 | 演示 K 线与 live 盘对齐 | seed 后首日即用 AI 中枢，或 K 线从实装日起算 |
 | P1 | 事件→粮价表（§15.5） | 围城/谣言/战争 modifier |
 | P2 | 情报传播接 Trade AI | 套利不只看本地 LastClose |
@@ -423,6 +442,9 @@
 | 撮合 | `MarketCalculator.cs` |
 | 结算 / K 线 | `MarketActions.cs` |
 | 做市算法 | `MarketMakerAiHelper.cs` |
+| 仓位/抢筹 | `MarketPositionAiHelper.cs` · `ActorMarketTradeActions.cs` |
+| 情绪信号 | `MarketContextSignalsHelper.cs` |
+| 邻城套利锚价 | `MarketRegionalArbitrageHelper.cs` |
 | 官府/市民/商户 AI | `*MarketAiHelper.cs` |
 | 玩家/商队/寺社现货 | `StrongholdLordTradeActions` / `UnitTradeActions` / `ReligionTradeActions` |
 | 演示 seed | `MarketBootstrapHelper.cs`（`SeedDemoHorseData` / 粮食 K 线） |

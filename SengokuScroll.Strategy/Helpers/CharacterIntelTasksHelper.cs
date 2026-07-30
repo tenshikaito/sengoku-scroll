@@ -29,7 +29,7 @@ public static class CharacterIntelTasksHelper
         }
 
         var rows = new List<StrategyCharacterTaskDto>();
-        rows.AddRange(MapOperationalTasks(character, strongholds));
+        rows.AddRange(MapOperationalTasks(character, gameData, strongholds));
         rows.AddRange(BuildPersonalTasks(character, gameData, meta, strongholds));
         rows.AddRange(BuildLifeTasks(character, gameData, meta, strongholds));
         return rows;
@@ -43,7 +43,7 @@ public static class CharacterIntelTasksHelper
         IReadOnlyDictionary<int, Stronghold> strongholds)
     {
         var dtos = new List<StrategyCharacterTaskDto>();
-        dtos.AddRange(MapOperationalTasks(character, strongholds));
+        dtos.AddRange(MapOperationalTasks(character, gameData, strongholds));
         dtos.AddRange(BuildPersonalTasks(character, gameData, meta, strongholds));
         dtos.AddRange(BuildLifeTasks(character, gameData, meta, strongholds));
 
@@ -59,6 +59,7 @@ public static class CharacterIntelTasksHelper
 
     private static IEnumerable<StrategyCharacterTaskDto> MapOperationalTasks(
         Character character,
+        GameData gameData,
         IReadOnlyDictionary<int, Stronghold> strongholds)
     {
         if (character.RecruitAssignment is { } assignment && character.RecruitTask is null)
@@ -88,6 +89,18 @@ public static class CharacterIntelTasksHelper
                     _ => "进行中",
                 },
                 Remaining = $"{Math.Max(0, task.DeadlineDaysRemaining)}日",
+            };
+        }
+
+        if (character.DiplomacyMission is { } diplomacyMission)
+        {
+            yield return new StrategyCharacterTaskDto
+            {
+                TaskCategory = "Force",
+                Name = ResolveDiplomacyMissionLabel(diplomacyMission.Action),
+                Target = ResolveForceName(gameData, diplomacyMission.TargetForceId),
+                Status = "出使中",
+                Remaining = $"{Math.Max(0, diplomacyMission.RemainingDays)}日",
             };
         }
 
@@ -328,6 +341,14 @@ public static class CharacterIntelTasksHelper
         => gameData.Forces.TryGetValue(forceId, out var force) && !string.IsNullOrWhiteSpace(force.Name)
             ? force.Name.Trim()
             : $"势力#{forceId}";
+
+    private static string ResolveDiplomacyMissionLabel(string action)
+        => action switch
+        {
+            "Ally" => "同盟",
+            "War" => "宣战",
+            _ => "议和",
+        };
 
     private static Stronghold? ResolveHomeStronghold(
         Character character,

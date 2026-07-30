@@ -6,6 +6,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- build.cmd 发布时传入 /p:EmbedWebClient=true，将 wwwroot 编入程序集而非输出目录 -->
+  <PropertyGroup Condition="'$(EmbedWebClient)' == 'true'">
+    <DisableStaticWebAssets>true</DisableStaticWebAssets>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(EmbedWebClient)' == 'true'">
+    <EmbeddedResource Include="wwwroot\**\*" />
+    <Content Remove="wwwroot\**\*" />
+    <None Remove="wwwroot\**\*" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
   </ItemGroup>

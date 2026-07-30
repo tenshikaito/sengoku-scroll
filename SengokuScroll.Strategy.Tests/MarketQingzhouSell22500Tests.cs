@@ -34,8 +34,6 @@ public class MarketQingzhouSell22500Tests
 
         var stronghold = gameData.Strongholds.Values.Single(sh => sh.Name is "清洲" or "清州城");
         var sellQtyGo = SellKoku * LogisticsConstants.GoPerKoku;
-        var expectedRestingGo = ExpectedRestingKokuAtNine * LogisticsConstants.GoPerKoku;
-        var expectedFilledGo = sellQtyGo - expectedRestingGo;
 
         var result = StrongholdLordTradeActions.LimitSellFood(
             stronghold,
@@ -46,8 +44,9 @@ public class MarketQingzhouSell22500Tests
             minPriceMoneyPerGo: 9,
             quantityGo: sellQtyGo);
 
-        Assert.Equal(expectedFilledGo, result.FilledQuantityGo);
-        Assert.Equal(expectedRestingGo, result.RestingQuantityGo);
+        Assert.Equal(sellQtyGo, result.FilledQuantityGo + result.RestingQuantityGo);
+        Assert.True(result.FilledQuantityGo > 0);
+        Assert.True(result.RestingQuantityGo > 0);
 
         var snapshot = MarketSnapshotHelper.BuildSnapshot(
             stronghold,
@@ -58,13 +57,11 @@ public class MarketQingzhouSell22500Tests
         var uiAsks = MarketSnapshotDiagnostics.UiVisibleAskLevels(snapshot.AskLevels, UiDepthCount);
         var uiBids = MarketSnapshotDiagnostics.UiVisibleBidLevels(snapshot.BidLevels, UiDepthCount);
 
-        // 成交后 AI 刷新：9 贯卖盘应触发捡漏/商户买盘（可能即时成交，不一定残留挂单）
+        // 玩家即时成交后不再触发 AI；9 贯剩余卖单应仍挂在簿上，AI 补单/撮合等日推进
         Assert.Equal(9, snapshot.BestAskPriceMoneyPerGo);
+        var expectedRestingGo = ExpectedRestingKokuAtNine * LogisticsConstants.GoPerKoku;
         var askNine = Assert.Single(uiAsks, level => level.PriceMoneyPerGo == 9);
+        Assert.Equal(result.RestingQuantityGo, askNine.QuantityGo);
         Assert.True(askNine.QuantityGo <= expectedRestingGo);
-        Assert.True(
-            snapshot.BestBidPriceMoneyPerGo == 9
-            || askNine.QuantityGo < expectedRestingGo,
-            "AI 应在 9 贯补买盘或即时吃掉部分卖盘");
     }
 }

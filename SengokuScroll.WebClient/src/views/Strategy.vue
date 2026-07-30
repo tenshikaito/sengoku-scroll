@@ -19,6 +19,8 @@ import {
   exitUnitStronghold,
   disbandUnitOrganizationally,
   recordEspionageIntel,
+  previewDiplomacyMission,
+  orderDiplomacyMission,
   setStrongholdTaxRates,
   setStrongholdGovernancePriority,
   recruitAtStronghold,
@@ -67,6 +69,9 @@ import StrategyBattleResultDialog from "@/components/strategy/StrategyBattleResu
 import StrategyDirectiveDialog from "@/components/strategy/StrategyDirectiveDialog.vue";
 import StrategySplitDialog from "@/components/strategy/StrategySplitDialog.vue";
 import StrategyExpeditionDialog from "@/components/strategy/StrategyExpeditionDialog.vue";
+import StrategyDiplomacyDialog, {
+  type DiplomacyMissionAction,
+} from "@/components/strategy/StrategyDiplomacyDialog.vue";
 import StrategyTaxRateDialog from "@/components/strategy/StrategyTaxRateDialog.vue";
 import StrategyMarketDialog from "@/components/strategy/StrategyMarketDialog.vue";
 import {
@@ -153,6 +158,7 @@ import {
   type ApiErrorResolveContext,
 } from "@/apiErrors/ApiErrorMessageBehaviors";
 import { isForeignIntelRestricted } from "@/utils/strategyIntelDisplay";
+import { validateDiplomacyMissionTarget } from "@/utils/strategyIntelSystemData";
 import {
   isLordAtResidence,
   LORD_AT_RESIDENCE_REQUIRED_TIP,
@@ -189,6 +195,7 @@ import {
 import { messageCategoryLabel } from "@/utils/messageCategories";
 import {
   canShowCellHoverIntel,
+  canShowTileMapIntel,
   convoysAtCellForIntel,
   isTileVisible,
   messengersAtCellForIntel,
@@ -256,6 +263,21 @@ const movementTrace = ref<StrategyMovementTraceEntry[]>([]);
 const moveCommittedWaypoints = ref<MapPoint[]>([]);
 const movePendingRelay = ref<MapPoint | null>(null);
 
+const diplomacyDialogVisible = ref(false);
+const diplomacyAction = ref<DiplomacyMissionAction>("Ally");
+const diplomacyCharacterId = ref<number | null>(null);
+const diplomacyTargetForceId = ref<number | null>(null);
+const diplomacyInitialTargetForceId = ref<number | null>(null);
+const diplomacySuccessChance = ref<number | null>(null);
+const diplomacyTravelDays = ref<number | null>(null);
+const diplomacyPreviewLoading = ref(false);
+const diplomacyForcePickActive = ref(false);
+
+const onDiplomacyForceStrongholdPickedRef = ref<(strongholdId: number) => boolean>(
+  () => false
+);
+const onDiplomacyForcePickCancelledRef = ref<() => void>(() => {});
+
 const mapInteraction = useStrategyMapInteraction({
   worldState: state,
   selectedUnitId,
@@ -264,6 +286,9 @@ const mapInteraction = useStrategyMapInteraction({
   selectedConvoyId,
   selectedCell,
   hoverCell,
+  onDiplomacyForceStrongholdPicked: (strongholdId) =>
+    onDiplomacyForceStrongholdPickedRef.value(strongholdId),
+  onDiplomacyForcePickCancelled: () => onDiplomacyForcePickCancelledRef.value(),
 });
 
 const {
@@ -291,6 +316,7 @@ const {
   onBeginAttack,
   onBeginMerge,
   enterSplitSpawnSelection,
+  enterDiplomacyForceSelection,
   pendingMergeTargetUnitId,
   pendingSplitSubUnitIds,
   onConfirmBattle,
@@ -302,6 +328,10 @@ const {
   onBattleFailed,
   enterExecutingCommand,
 } = mapInteraction;
+
+const isDiplomacyForcePicking = computed(
+  () => popupMode.value === "diplomacyForceSelect" || diplomacyForcePickActive.value
+);
 
 const previewRoutePoints = ref<MapPoint[]>([]);
 const battlePreview = ref<StrategyBattlePreview | null>(null);
@@ -992,19 +1022,23 @@ function bindMapTopOverlayObserver() {
   mapTopOverlayResizeObserver.observe(el);
 }
 
-/** 浏览态悬停：固定格点悬浮框，移入框内可滚动而不消失。 */
-const showHoverIntel = computed(
-  () =>
-    stateId.value === "navigate" &&
-    popupMode.value === "none" &&
+/** 浏览态 / 外交地图选势力：固定格点悬浮框，移入框内可滚动而不消失。 */
+const showHoverIntel = computed(() => {
+  const hoverIntelModeActive =
+    (stateId.value === "navigate" && popupMode.value === "none") ||
+    (stateId.value === "diplomacyForceSelect" && popupMode.value === "diplomacyForceSelect");
+  return (
+    hoverIntelModeActive &&
     !intelDialogVisible.value &&
     !messageDialogVisible.value &&
     !battleConfirmVisible.value &&
     !battleResultVisible.value &&
+    !diplomacyDialogVisible.value &&
     intelPinnedCell.value !== null &&
     state.value !== null &&
     canShowCellHoverIntel(state.value, intelPinnedCell.value.x, intelPinnedCell.value.y)
-);
+  );
+});
 
 function intelBoxCountAt(x: number, y: number): number {
   if (!state.value) return 0;
@@ -1227,12 +1261,16 @@ function onMinimapNavigate(payload: { worldX: number; worldY: number }) {
 }
 
 const intelRoad = computed(() => {
-  if (!mapMaster.value || intelX.value === null || intelY.value === null) return null;
-  return roadAtCell(mapMaster.value, intelX.value, intelY.value);
+  if (!mapMaster.value || intelBarX.value === null || intelBarY.value === null) return null;
+  if (state.value && !canShowTileMapIntel(state.value, intelBarX.value, intelBarY.value)) return null;
+  return roadAtCell(mapMaster.value, intelBarX.value, intelBarY.value);
 });
 
 const intelTileInfo = computed(() => {
   if (!mapMaster.value || intelBarX.value === null || intelBarY.value === null) {
+    return { terrainName: null, regionName: null };
+  }
+  if (state.value && !canShowTileMapIntel(state.value, intelBarX.value, intelBarY.value)) {
     return { terrainName: null, regionName: null };
   }
   return mapTileInfo(mapMaster.value, intelBarX.value, intelBarY.value);
@@ -1240,6 +1278,7 @@ const intelTileInfo = computed(() => {
 
 const intelLandmark = computed(() => {
   if (!mapMaster.value || intelBarX.value === null || intelBarY.value === null) return null;
+  if (state.value && !canShowTileMapIntel(state.value, intelBarX.value, intelBarY.value)) return null;
   return landmarkAtCell(mapMaster.value, intelBarX.value, intelBarY.value);
 });
 
@@ -1816,6 +1855,147 @@ function handleBeginExpedition() {
   }
   expeditionDialogVisible.value = true;
 }
+
+const lordResidenceStrongholdId = computed(() => {
+  if (!state.value) return null;
+  const force = playerForce.value;
+  if (force?.lordResidenceStrongholdId && force.lordResidenceStrongholdId > 0) {
+    return force.lordResidenceStrongholdId;
+  }
+  const residence = state.value.strongholds.find(
+    (s) => s.forceId === state.value!.playerForceId && s.isLordResidence
+  );
+  return residence?.id ?? null;
+});
+
+function openDiplomacyDialog(
+  action: DiplomacyMissionAction,
+  initialTargetForceId: number | null = null
+) {
+  diplomacyAction.value = action;
+  diplomacyInitialTargetForceId.value = initialTargetForceId;
+  diplomacyTargetForceId.value = initialTargetForceId;
+  diplomacySuccessChance.value = null;
+  diplomacyTravelDays.value = null;
+  diplomacyForcePickActive.value = false;
+  closeForceCommandMenu();
+  handlePopupCancel();
+  diplomacyDialogVisible.value = true;
+}
+
+async function refreshDiplomacyPreview() {
+  if (!diplomacyDialogVisible.value) return;
+  const characterId = diplomacyCharacterId.value;
+  const targetForceId = diplomacyTargetForceId.value;
+  if (!characterId || !targetForceId) {
+    diplomacySuccessChance.value = null;
+    diplomacyTravelDays.value = null;
+    return;
+  }
+
+  diplomacyPreviewLoading.value = true;
+  try {
+    const preview = await previewDiplomacyMission({
+      characterId,
+      targetForceId,
+      action: diplomacyAction.value,
+    });
+    diplomacySuccessChance.value = preview.successChancePercent;
+    diplomacyTravelDays.value = preview.travelDays;
+  } catch (err) {
+    diplomacySuccessChance.value = null;
+    ElMessage.warning(err instanceof Error ? err.message : "无法预览外交成功率");
+  } finally {
+    diplomacyPreviewLoading.value = false;
+  }
+}
+
+async function handleDiplomacyConfirm() {
+  const characterId = diplomacyCharacterId.value;
+  const targetForceId = diplomacyTargetForceId.value;
+  if (!characterId || !targetForceId) return;
+
+  try {
+    const next = await orderDiplomacyMission({
+      characterId,
+      targetForceId,
+      action: diplomacyAction.value,
+    });
+    state.value = next;
+    diplomacyDialogVisible.value = false;
+    info.value = `已派遣使节执行${
+      diplomacyAction.value === "Ally" ? "同盟" : diplomacyAction.value === "War" ? "宣战" : "议和"
+    }任务`;
+  } catch (err) {
+    void notifyActionBlocked("外交任务失败", err instanceof Error ? err.message : "未知错误");
+  }
+}
+
+function beginDiplomacyForcePick() {
+  diplomacyForcePickActive.value = true;
+  diplomacyDialogVisible.value = false;
+  closeForceCommandMenu();
+  battlePreview.value = null;
+  battleConfirmVisible.value = false;
+  resetMovePath();
+  if (popupMode.value !== "none") {
+    onCancel();
+  }
+  enterDiplomacyForceSelection();
+}
+
+/** 外交地图选点校验：通过后填入势力并恢复对话框。 */
+function applyDiplomacyForceFromStronghold(strongholdId: number): boolean {
+  const ws = state.value;
+  if (!ws) return false;
+
+  const sh = ws.strongholds.find((s) => s.id === strongholdId);
+  if (!sh) {
+    ElMessage.warning("无效据点");
+    return false;
+  }
+
+  const forceId = sh.forceId;
+  if (forceId === ws.playerForceId) {
+    ElMessage.warning("请选择其他势力的据点");
+    return false;
+  }
+
+  const force = ws.forces.find((f) => f.id === forceId);
+  if (!force) {
+    ElMessage.warning("无法识别势力");
+    return false;
+  }
+
+  if (force.status === "InnerVassal") {
+    ElMessage.warning("内藩请走外政，不可作为外交对象");
+    return false;
+  }
+
+  if ((force.category ?? "Military") !== "Military") {
+    ElMessage.warning("请选择武家势力据点");
+    return false;
+  }
+
+  diplomacyTargetForceId.value = forceId;
+  diplomacyInitialTargetForceId.value = forceId;
+  diplomacyForcePickActive.value = false;
+  diplomacyDialogVisible.value = true;
+  void refreshDiplomacyPreview();
+  const missionError = validateDiplomacyMissionTarget(ws, diplomacyAction.value, forceId);
+  if (!missionError) {
+    ElMessage.success(`已选择 ${force.name}`);
+  }
+  return true;
+}
+
+function cancelDiplomacyForcePick() {
+  diplomacyForcePickActive.value = false;
+  diplomacyDialogVisible.value = true;
+}
+
+onDiplomacyForceStrongholdPickedRef.value = applyDiplomacyForceFromStronghold;
+onDiplomacyForcePickCancelledRef.value = cancelDiplomacyForcePick;
 
 function handleBeginTaxRate() {
   const sh = activeStrongholdForCommands.value;
@@ -3216,6 +3396,12 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 function handleStrategyKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape" && isDiplomacyForcePicking.value) {
+    event.preventDefault();
+    onCancel();
+    return;
+  }
+
   if (event.code !== "Space" && event.key !== " ") return;
   if (isTypingTarget(event.target)) return;
   if (initialLoading.value || !state.value) return;
@@ -3268,7 +3454,7 @@ watch(
     <el-alert v-if="error" type="error" :title="error" show-icon :closable="false" class="error-bar" />
 
     <div class="strategy-body">
-      <aside class="side-panel">
+      <aside class="side-panel" :class="{ 'side-panel--pick-mode': isDiplomacyForcePicking }">
         <h3>调试</h3>
         <el-button size="small" :loading="loading" @click="reloadScenario">重新加载剧本</el-button>
         <el-button size="small" @click="goToGameStartSettings">开局设置</el-button>
@@ -3409,7 +3595,7 @@ watch(
             :map-convoy-selection-enabled="mapConvoySelectionEnabled"
             :map-cell-selection-enabled="mapCellSelectionEnabled"
             :map-stronghold-selection-enabled="mapStrongholdSelectionEnabled"
-            :map-hover-suppressed="intelDialogVisible"
+            :map-hover-suppressed="intelDialogVisible || diplomacyDialogVisible"
             :map-color-mode="mapColorMode"
             @select-unit="handleSelectUnit"
             @select-character="handleSelectCharacter"
@@ -3422,7 +3608,7 @@ watch(
           />
 
           <div
-            v-if="state"
+            v-if="state && !isDiplomacyForcePicking"
             ref="mapTopOverlayRef"
             class="map-overlay map-overlay--top"
             @pointerdown.stop
@@ -3507,6 +3693,7 @@ watch(
                   :force-name="playerForce.name"
                   tooltip-side="right"
                   @show-intel="openForceIntelFromMenu"
+                  @open-diplomacy="openDiplomacyDialog($event)"
                   @cancel="closeForceCommandMenu"
                 />
               </div>
@@ -3520,6 +3707,7 @@ watch(
           <div
             v-if="state"
             class="map-overlay map-overlay--bottom"
+            :class="{ 'map-overlay--pick-mode': isDiplomacyForcePicking }"
             @pointerdown.stop
             @click.stop
             @wheel.stop
@@ -3581,7 +3769,11 @@ watch(
             </div>
           </div>
 
-          <div v-if="state" class="map-unit-roster-float" :style="unitRosterFloatStyle">
+          <div
+            v-if="state && !isDiplomacyForcePicking"
+            class="map-unit-roster-float"
+            :style="unitRosterFloatStyle"
+          >
             <StrategyOperableUnitList
               :world-state="state"
               :selected-unit-id="selectedUnitId"
@@ -3667,6 +3859,7 @@ watch(
             @open-stronghold-market="handleOpenStrongholdMarket"
             @open-personal-market="handleOpenPersonalMarket"
             @open-merchant-shop="handleOpenMerchantShop"
+            @open-diplomacy="openDiplomacyDialog($event, popupStronghold?.forceId ?? null)"
             @begin-visit="handleBeginVisit"
             @siege-assault="handleSiegeOrder('Assault')"
             @siege-encircle="handleSiegeOrder('Encircle')"
@@ -3763,10 +3956,26 @@ watch(
       v-if="state"
       :visible="expeditionDialogVisible"
       :stronghold="selectedStronghold"
-      :characters="state.characters ?? []"
-      :player-force-id="state.playerForceId"
+      :world-state="state"
       @update:visible="expeditionDialogVisible = $event"
       @confirm="handleExpeditionConfirm"
+    />
+    <StrategyDiplomacyDialog
+      v-if="state"
+      :visible="diplomacyDialogVisible"
+      :action="diplomacyAction"
+      :world-state="state"
+      :lord-residence-stronghold-id="lordResidenceStrongholdId"
+      :initial-target-force-id="diplomacyInitialTargetForceId"
+      :success-chance-percent="diplomacySuccessChance"
+      :travel-days="diplomacyTravelDays"
+      :preview-loading="diplomacyPreviewLoading"
+      @update:visible="diplomacyDialogVisible = $event"
+      @update:character-id="diplomacyCharacterId = $event"
+      @update:target-force-id="diplomacyTargetForceId = $event"
+      @request-preview="refreshDiplomacyPreview"
+      @pick-force-from-map="beginDiplomacyForcePick"
+      @confirm="handleDiplomacyConfirm"
     />
     <StrategyTaxRateDialog
       v-if="state"

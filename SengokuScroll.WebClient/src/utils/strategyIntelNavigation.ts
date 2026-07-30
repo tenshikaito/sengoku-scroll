@@ -77,6 +77,27 @@ export function resolveIntelLinkId(
   return id;
 }
 
+const INTEL_LINK_ID_FALLBACKS: Partial<Record<string, string[]>> = {
+  forceNameLinkId: ["forceId"],
+  strongholdNameLinkId: ["strongholdId", "id"],
+  lordNameLinkId: ["lordId"],
+  mayorNameLinkId: ["mayorId"],
+  residenceNameLinkId: ["residenceStrongholdId"],
+};
+
+function resolveIntelLinkIdWithFallbacks(
+  row: Record<string, unknown>,
+  idField: string,
+): number | null {
+  const direct = resolveIntelLinkId(row, idField);
+  if (direct != null) return direct;
+  for (const fallbackField of INTEL_LINK_ID_FALLBACKS[idField] ?? []) {
+    const fallback = resolveIntelLinkId(row, fallbackField);
+    if (fallback != null) return fallback;
+  }
+  return null;
+}
+
 export function isIntelLinkableCellValue(value: unknown): boolean {
   const trimmed = String(value ?? "").trim();
   if (!trimmed || trimmed === "—" || trimmed === UNKNOWN_INTEL) return false;
@@ -141,7 +162,7 @@ export function resolveIntelCellNavigateTarget(
   const link = resolveIntelColumnLink(col);
   if (!link) return null;
   if (!isIntelLinkableCellValue(row[col.prop])) return null;
-  const entityId = resolveIntelLinkId(row, link.idField);
+  const entityId = resolveIntelLinkIdWithFallbacks(row, link.idField);
   if (entityId == null) return null;
   const target: IntelNavigateTarget =
     link.kind === "masterData"

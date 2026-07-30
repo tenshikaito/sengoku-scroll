@@ -1,16 +1,26 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import type {
-  StrategyCharacterSummaryState,
   StrategyDeployCompositionEntry,
   StrategyStrongholdState,
+  StrategyWorldState,
 } from "@/api/strategyTypes";
+import StrategyIntelSystemTable from "@/components/strategy/StrategyIntelSystemTable.vue";
+import {
+  PERSON_LIST_COLUMN_PRESETS,
+  PERSON_PERSONAL_DEV_ONLY_PROPS,
+  type PersonListPreset,
+} from "@/utils/strategyIntelSystemColumns";
+import { isIntelDevFieldsVisible } from "@/utils/strategyIntelDev";
+import {
+  buildTroopAllocationMarks,
+  expeditionCommanderRows,
+} from "@/utils/strategyRecruitDialogs";
 
 const props = defineProps<{
   visible: boolean;
   stronghold: StrategyStrongholdState | null;
-  characters: StrategyCharacterSummaryState[];
-  playerForceId: number;
+  worldState: StrategyWorldState;
 }>();
 
 const emit = defineEmits<{
@@ -24,10 +34,10 @@ const emit = defineEmits<{
 }>();
 
 const deployToMap = ref(false);
-
 const unitName = ref("");
 const commanderId = ref<number | null>(null);
 const troopCounts = ref<Record<number, number>>({});
+const personListPreset = ref<PersonListPreset>("status");
 
 const troopOptions = computed(() => {
   const pools = props.stronghold?.garrisonTroopPools ?? [];
@@ -48,22 +58,30 @@ const troopOptions = computed(() => {
   ];
 });
 
-const availableCommanders = computed(() =>
-  props.characters.filter(
-    (c) =>
-      c.forceId === props.playerForceId &&
-      !c.isDead &&
-      c.locationType === "Stronghold" &&
-      c.strongholdId === props.stronghold?.id &&
-      (c.forceStatus === "Idle" || c.forceStatus === "Task")
-  )
+const commanderRows = computed(() => {
+  const sh = props.stronghold;
+  if (!sh) return [];
+  return expeditionCommanderRows(props.worldState, sh.id);
+});
+
+const personListColumns = computed(() => {
+  const cols = PERSON_LIST_COLUMN_PRESETS[personListPreset.value];
+  if (personListPreset.value === "personal" && !isIntelDevFieldsVisible()) {
+    const devProps = new Set<string>(PERSON_PERSONAL_DEV_ONLY_PROPS);
+    return cols.filter((col) => !devProps.has(col.prop));
+  }
+  return cols;
+});
+
+const personListRows = computed(
+  () => commanderRows.value as unknown as Array<Record<string, unknown>>,
 );
 
 const totalSoldiers = computed(() =>
   troopOptions.value.reduce(
     (sum, opt) => sum + Math.max(0, troopCounts.value[opt.typeId] ?? 0),
-    0
-  )
+    0,
+  ),
 );
 
 const poolRemaining = computed(() => {
@@ -102,19 +120,30 @@ const canConfirm = computed(() => {
   });
 });
 
+function clampTroopCount(value: number, max: number): number {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(max, Math.max(0, n));
+}
+
+function resetTroopAllocation() {
+  const nextCounts: Record<number, number> = {};
+  for (const opt of troopOptions.value) {
+    nextCounts[opt.typeId] = 0;
+  }
+  troopCounts.value = nextCounts;
+}
+
 watch(
   () => [props.visible, props.stronghold?.id, props.stronghold?.garrisonTroopPools] as const,
   ([visible]) => {
     if (!visible || !props.stronghold) return;
     unitName.value = `${props.stronghold.name}队`;
     deployToMap.value = false;
-    const nextCounts: Record<number, number> = {};
-    for (const opt of troopOptions.value) {
-      nextCounts[opt.typeId] = 0;
-    }
-    troopCounts.value = nextCounts;
-    commanderId.value = availableCommanders.value[0]?.id ?? null;
-  }
+    personListPreset.value = "status";
+    resetTroopAllocation();
+    commanderId.value = commanderRows.value[0]?.id ?? null;
+  },
 );
 
 function cropPatternLabel(pattern: string | undefined): string {
@@ -126,6 +155,19 @@ function cropPatternLabel(pattern: string | undefined): string {
     default:
       return "单季作";
   }
+}
+
+function onCommanderSelect(row: Record<string, unknown> | null) {
+  if (!row) return;
+  commanderId.value = Number(row.id);
+}
+
+function onTroopSliderChange(typeId: number, value: number, max: number) {
+  troopCounts.value[typeId] = clampTroopCount(value, max);
+}
+
+function troopMarks(max: number): Record<number, string> {
+  return buildTroopAllocationMarks(max);
 }
 
 function close() {
@@ -161,9 +203,9 @@ function submit() {
   <el-dialog
     :model-value="visible"
     :title="stronghold ? `组建 — ${stronghold.name}` : '组建'"
-    width="520px"
+    width="min(820px, 96vw)"
     append-to-body
-    class="strategy-dialog-centered-footer"
+    class="strategy-dialog-centered-footer expedition-dialog-root"
     @update:model-value="emit('update:visible', $event)"
   >
     <p v-if="stronghold" class="hint">
@@ -178,41 +220,46 @@ function submit() {
     </div>
 
     <div class="field">
-      <label>总将</label>
-      <el-select v-model="commanderId" placeholder="选择将领" style="width: 100%">
-        <el-option
-          v-for="c in availableCommanders"
-          :key="c.id"
-          :label="`${c.name ?? `#${c.id}`}（统 ${c.leadership ?? 0} / 武 ${c.power ?? 0}）`"
-          :value="c.id"
-        />
-      </el-select>
-      <p v-if="!availableCommanders.length" class="hint warn">该城无可用将领。</p>
-    </div>
-
-    <div class="field">
-      <label>组建后</label>
-      <el-radio-group v-model="deployToMap">
-        <el-radio :value="false">在城中（默认）</el-radio>
-        <el-radio :value="true">立即出城</el-radio>
-      </el-radio-group>
+      <label>将领</label>
+      <el-tabs v-model="personListPreset" class="layer-tabs">
+        <el-tab-pane label="状态" name="status" />
+        <el-tab-pane label="仕官" name="office" />
+        <el-tab-pane label="命令" name="order" />
+        <el-tab-pane label="个人" name="personal" />
+        <el-tab-pane label="能力1" name="ability1" />
+        <el-tab-pane label="能力2" name="ability2" />
+      </el-tabs>
+      <StrategyIntelSystemTable
+        :rows="personListRows"
+        :columns="personListColumns"
+        :current-id="commanderId"
+        :links-enabled="false"
+        scroll-wrap
+        :max-height="280"
+        empty-text="该城无可用将领"
+        @current-change="onCommanderSelect"
+      />
     </div>
 
     <div class="field">
       <label>兵种分配（驻城池）</label>
       <div class="troop-grid">
         <div v-for="opt in troopOptions" :key="opt.typeId" class="troop-row">
-          <span>{{ opt.typeName }}</span>
-          <div class="troop-input">
-            <el-input-number
-              v-model="troopCounts[opt.typeId]"
-              :min="0"
-              :max="opt.max"
-              :step="100"
-              controls-position="right"
-            />
-            <span class="pool-cap">/ {{ opt.max.toLocaleString() }}</span>
-          </div>
+          <span class="troop-label">{{ opt.typeName }}</span>
+          <el-slider
+            :model-value="troopCounts[opt.typeId] ?? 0"
+            class="troop-slider"
+            :min="0"
+            :max="opt.max"
+            :step="1"
+            :marks="troopMarks(opt.max)"
+            :disabled="opt.max <= 0"
+            @update:model-value="onTroopSliderChange(opt.typeId, $event as number, opt.max)"
+          />
+          <span class="troop-value">
+            {{ (troopCounts[opt.typeId] ?? 0).toLocaleString() }}
+            / {{ opt.max.toLocaleString() }}
+          </span>
         </div>
       </div>
       <p class="hint">
@@ -225,9 +272,17 @@ function submit() {
       </p>
     </div>
 
+    <div class="field">
+      <label>组建后</label>
+      <el-radio-group v-model="deployToMap">
+        <el-radio :value="false">在城中</el-radio>
+        <el-radio :value="true">立即出城</el-radio>
+      </el-radio-group>
+    </div>
+
     <template #footer>
       <el-button @click="close">取消</el-button>
-      <el-button type="primary" :disabled="!canConfirm" @click="submit">确认组建</el-button>
+      <el-button type="primary" :disabled="!canConfirm" @click="submit">确认</el-button>
     </template>
   </el-dialog>
 </template>
@@ -243,10 +298,6 @@ function submit() {
   color: #86efac;
 }
 
-.hint.warn {
-  color: #fbbf24;
-}
-
 .field {
   margin-bottom: 14px;
 }
@@ -254,32 +305,68 @@ function submit() {
 .field > label {
   display: block;
   font-size: 0.82rem;
-  color: #cbd5e1;
+  color: #334155;
+  font-weight: 600;
   margin-bottom: 6px;
+}
+
+.layer-tabs :deep(.el-tabs__header) {
+  margin-bottom: 8px;
+}
+
+.layer-tabs :deep(.el-tabs__item) {
+  font-size: 0.85rem;
 }
 
 .troop-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 14px;
 }
 
 .troop-row {
   display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 10px;
+  grid-template-columns: 56px minmax(0, 1fr) minmax(120px, max-content);
   align-items: center;
+  gap: 12px;
 }
 
-.troop-input {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pool-cap {
-  font-size: 0.78rem;
-  color: #64748b;
+.troop-label {
+  font-size: 0.85rem;
+  color: #334155;
   white-space: nowrap;
+}
+
+.troop-value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.troop-slider {
+  padding: 0 8px 32px 0;
+}
+
+.troop-slider :deep(.el-slider__marks-text) {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 10px;
+  white-space: nowrap;
+}
+
+.troop-slider :deep(.el-slider__stop) {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #94a3b8;
+}
+
+.troop-slider :deep(.el-slider__button) {
+  width: 16px;
+  height: 16px;
 }
 </style>

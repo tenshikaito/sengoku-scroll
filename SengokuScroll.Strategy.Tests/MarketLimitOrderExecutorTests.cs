@@ -49,22 +49,16 @@ public class MarketLimitOrderExecutorTests
         stronghold.CivilianActor.Food = 2_000_000;
 
         var sellQtyGo = 50 * LogisticsConstants.GoPerKoku;
-        MarketActions.AddLimitOrder(
+        MarketTestOrderSeedHelper.PlaceSell(
             stronghold,
-            MarketRules.SellSide,
             stronghold.CivilianActor.Id,
             96,
-            sellQtyGo,
-            MarketCommodityType.Food,
-            taxExempt: true);
-        MarketActions.AddLimitOrder(
+            sellQtyGo);
+        MarketTestOrderSeedHelper.PlaceSell(
             stronghold,
-            MarketRules.SellSide,
             stronghold.CivilianActor.Id,
             98,
-            sellQtyGo,
-            MarketCommodityType.Food,
-            taxExempt: true);
+            sellQtyGo);
 
         var fillQtyGo = sellQtyGo * 2;
         var restingQty = 50 * LogisticsConstants.GoPerKoku;
@@ -111,14 +105,11 @@ public class MarketLimitOrderExecutorTests
         var restingQty = 120 * LogisticsConstants.GoPerKoku;
         actor.Money = restingQty * 90 + 10_000;
 
-        MarketActions.AddLimitOrder(
+        MarketTestOrderSeedHelper.PlaceSell(
             stronghold,
-            MarketRules.SellSide,
             stronghold.CivilianActor.Id,
             96,
-            200 * LogisticsConstants.GoPerKoku,
-            MarketCommodityType.Food,
-            taxExempt: true);
+            200 * LogisticsConstants.GoPerKoku);
 
         var result = MarketLimitOrderExecutor.ExecuteLimitBuy(new MarketLimitOrderExecutor.LimitBuyRequest
         {
@@ -177,14 +168,12 @@ public class MarketLimitOrderExecutorTests
         for (var i = 0; i < depth; i++)
         {
             var price = fromPrice - i;
-            MarketActions.AddLimitOrder(
+            var qty = (100 + i) * LogisticsConstants.GoPerKoku;
+            MarketTestOrderSeedHelper.PlaceBuy(
                 stronghold,
-                MarketRules.BuySide,
                 stronghold.CivilianActor.Id,
                 price,
-                (100 + i) * LogisticsConstants.GoPerKoku,
-                MarketCommodityType.Food,
-                taxExempt: true);
+                qty);
         }
     }
 
@@ -193,14 +182,12 @@ public class MarketLimitOrderExecutorTests
         for (var i = 0; i < depth; i++)
         {
             var price = fromPrice + i;
-            MarketActions.AddLimitOrder(
+            var qty = (100 + i) * LogisticsConstants.GoPerKoku;
+            MarketTestOrderSeedHelper.PlaceSell(
                 stronghold,
-                MarketRules.SellSide,
                 stronghold.CivilianActor.Id,
                 price,
-                (100 + i) * LogisticsConstants.GoPerKoku,
-                MarketCommodityType.Food,
-                taxExempt: true);
+                qty);
         }
     }
 

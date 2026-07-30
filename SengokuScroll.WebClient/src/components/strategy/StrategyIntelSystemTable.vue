@@ -11,22 +11,29 @@ import {
   type IntelNavigateTarget,
 } from "@/utils/strategyIntelNavigation";
 
-const props = defineProps<{
-  rows: Array<Record<string, unknown>>;
-  columns: IntelTableColumnDef[];
-  emptyText?: string;
-  maxHeight?: number | string;
-  highlightCurrent?: boolean;
-  rowClassName?: (row: Record<string, unknown>) => string;
-  /** 高亮指定 id 的行（与 rows[].id 对应，表示当前选中项）。 */
-  currentId?: number | null;
-  /** 外层滚动容器（宽高不足时出现滚动条）。 */
-  scrollWrap?: boolean;
-  /** 表格铺满容器宽度（消除 el-scrollbar__view 右侧空白）。 */
-  fillWidth?: boolean;
-  /** 不为当前正在查看的实体生成链接。 */
-  excludeEntity?: IntelExcludeEntity | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    rows: Array<Record<string, unknown>>;
+    columns: IntelTableColumnDef[];
+    emptyText?: string;
+    maxHeight?: number | string;
+    highlightCurrent?: boolean;
+    rowClassName?: (row: Record<string, unknown>) => string;
+    /** 高亮指定 id 的行（与 rows[].id 对应，表示当前选中项）。 */
+    currentId?: number | null;
+    /** 外层滚动容器（宽高不足时出现滚动条）。 */
+    scrollWrap?: boolean;
+    /** 表格铺满容器宽度（消除 el-scrollbar__view 右侧空白）。 */
+    fillWidth?: boolean;
+    /** 不为当前正在查看的实体生成链接。 */
+    excludeEntity?: IntelExcludeEntity | null;
+    /** 是否渲染可点击跳转链接；外交/组建等无导航上下文对话框设为 false。 */
+    linksEnabled?: boolean;
+  }>(),
+  {
+    linksEnabled: true,
+  },
+);
 
 const emit = defineEmits<{
   "current-change": [row: Record<string, unknown> | null];
@@ -109,6 +116,7 @@ function cellNavigateTarget(
   row: Record<string, unknown>,
   col: IntelTableColumnDef,
 ): IntelNavigateTarget | null {
+  if (!props.linksEnabled) return null;
   return resolveIntelCellNavigateTarget(row, col, props.excludeEntity);
 }
 

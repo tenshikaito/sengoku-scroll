@@ -13,12 +13,14 @@ namespace SengokuScroll.Strategy.Actions;
 /// <summary>市场成交与 K 线写入（M4-b/d）。</summary>
 public static class MarketActions
 {
-    /// <summary>执行撮合结果并更新 Actor 库存；返回成交笔数。</summary>
+    /// <summary>执行撮合结果并更新 Actor 库存；返回实际结算笔数。</summary>
     public static int ApplyMatchResult(
         Stronghold stronghold,
         MarketCalculator.MatchResult result,
-        MerchantTaxLedger taxLedger)
+        MerchantTaxLedger taxLedger,
+        GameDate? gameDate = null)
     {
+        var settled = 0;
         foreach (var trade in result.Trades)
         {
             var totalMoney = trade.PriceMoneyPerGo * trade.QuantityGo;
@@ -26,9 +28,23 @@ public static class MarketActions
                 || !TryGetActor(stronghold, trade.SellerActorId, out var seller))
                 continue;
 
-            // 业务：买方资金或卖方库存不足则跳过该笔成交
-            if (!trade.BuyerMoneyCommitted && buyer.Money < totalMoney)
+            // 业务：买方资金或卖方库存不足则跳过该笔；订单量未在撮合阶段扣除，故安全
+            if (trade.BuyerMoneyCommitted)
+            {
+                var buyOrder = stronghold.Market.Orders.FirstOrDefault(o => o.Id == trade.BuyOrderId);
+                if (buyOrder is null || buyOrder.CommittedMoneyGo < totalMoney)
+                    continue;
+            }
+            else if (buyer.Money < totalMoney)
+            {
                 continue;
+            }
+
+            if (!trade.SellerInventoryCommitted
+                && !MarketInventoryHelper.TryPeekStock(seller, trade.Commodity, trade.QuantityGo))
+            {
+                continue;
+            }
 
             if (!trade.SellerInventoryCommitted
                 && !MarketInventoryHelper.TryRemoveStock(seller, trade.Commodity, trade.QuantityGo))
@@ -40,6 +56,10 @@ public static class MarketActions
                 buyer.Money -= totalMoney;
             MarketInventoryHelper.AddStock(buyer, trade.Commodity, trade.QuantityGo);
             seller.Money += totalMoney;
+
+            // 业务：结算成功后才扣减订单簿挂单量
+            ApplyOrderFill(stronghold, trade.BuyOrderId, trade.QuantityGo, trade.PriceMoneyPerGo, isBuy: true, gameDate);
+            ApplyOrderFill(stronghold, trade.SellOrderId, trade.QuantityGo, trade.PriceMoneyPerGo, isBuy: false, gameDate);
 
             // 业务：非免税卖方的成交按万分比征收交易税并入台账
             if (!trade.SellerTaxExempt)
@@ -53,11 +73,39 @@ public static class MarketActions
                     taxLedger.Accrue(stronghold.Id, seller.Id, tax);
                 }
             }
+
+            settled++;
         }
 
-        AppendDailyBar(stronghold, result);
+        MarketActions.RemoveZeroQuantityOrders(stronghold, gameDate);
+        AppendDailyBar(stronghold, result, gameDate);
 
-        return result.Trades.Count;
+        return settled;
+    }
+
+    private static void ApplyOrderFill(
+        Stronghold stronghold,
+        int orderId,
+        int quantityGo,
+        int priceMoneyPerGo,
+        bool isBuy,
+        GameDate? gameDate)
+    {
+        var order = stronghold.Market.Orders.FirstOrDefault(o => o.Id == orderId);
+        if (order is null || quantityGo <= 0)
+            return;
+
+        order.QuantityGo = Math.Max(0, order.QuantityGo - quantityGo);
+        if (isBuy && order.MoneyCommitted)
+            order.CommittedMoneyGo = Math.Max(0, order.CommittedMoneyGo - priceMoneyPerGo * quantityGo);
+        if (!isBuy && order.InventoryCommitted)
+            order.CommittedInventoryGo = Math.Max(0, order.CommittedInventoryGo - quantityGo);
+
+        if (order.QuantityGo <= 0)
+            MarketOrderCommitHelper.RefundCommitment(stronghold, order);
+
+        if (order.QuantityGo <= 0 && gameDate is not null)
+            MarkOrderFullyFilled(order, gameDate.Value);
     }
 
     /// <summary>玩家砸单成交写入当日 K 线与 LastClose（即时刷新行情 UI）。</summary>
@@ -172,24 +220,25 @@ public static class MarketActions
     /// <summary>清除零余量挂单；官府已成单仅保留至成交当日结束。</summary>
     public static void RemoveZeroQuantityOrders(Stronghold stronghold, GameDate? gameDate = null)
     {
-        stronghold.Market.Orders.RemoveAll(o =>
+        foreach (var order in stronghold.Market.Orders.Where(o => o.QuantityGo <= 0).ToList())
         {
-            if (o.QuantityGo > 0)
-                return false;
+            if (gameDate is not null && IsFilledOrderVisibleToday(stronghold, order, gameDate.Value))
+                continue;
 
-            if (gameDate is null)
-                return true;
-
-            return !IsFilledOrderVisibleToday(stronghold, o, gameDate.Value);
-        });
+            MarketOrderCommitHelper.RefundCommitment(stronghold, order);
+            stronghold.Market.Orders.Remove(order);
+        }
     }
 
     /// <summary>移除已废弃商品种类的挂单（如旧档 Luxury）。</summary>
     public static void RemoveDeprecatedCommodityOrders(Stronghold stronghold)
         => stronghold.Market.Orders.RemoveAll(o => !Enum.IsDefined(o.Commodity));
 
-    /// <summary>写入日 K 线并滚动删除过期记录。</summary>
-    public static void AppendDailyBar(Stronghold stronghold, MarketCalculator.MatchResult result)
+    /// <summary>写入日 K 线并滚动删除过期记录；与当日玩家成交共用一根 K 线。</summary>
+    public static void AppendDailyBar(
+        Stronghold stronghold,
+        MarketCalculator.MatchResult result,
+        GameDate? gameDate = null)
     {
         if (result.Trades.Count == 0)
             return;
@@ -221,12 +270,29 @@ public static class MarketActions
                 stronghold.Market.SetLastClose(commodity, close);
 
             var history = stronghold.Market.ResolveMutablePriceHistory(commodity);
+            var resolvedLow = low == int.MaxValue ? close : low;
+            if (gameDate is not null
+                && history.Count > 0
+                && IsSameCalendarDay(history[^1].Date, gameDate.Value))
+            {
+                var bar = history[^1];
+                if (bar.Open <= 0)
+                    bar.Open = open;
+
+                bar.High = Math.Max(bar.High, high);
+                bar.Low = bar.Low <= 0 ? resolvedLow : Math.Min(bar.Low, resolvedLow);
+                bar.Close = close;
+                bar.VolumeGo += volume;
+                bar.TurnoverMoney += turnover;
+                continue;
+            }
+
             history.Add(new DailyPriceBar
             {
-                Date = default,
+                Date = gameDate ?? default,
                 Open = open,
                 High = high,
-                Low = low == int.MaxValue ? close : low,
+                Low = resolvedLow,
                 Close = close,
                 VolumeGo = volume,
                 TurnoverMoney = turnover,
@@ -259,12 +325,15 @@ public static class MarketActions
         if (quantityGo <= 0 || limitPrice <= 0)
             return;
 
-        stronghold.Market.Orders.RemoveAll(o =>
-            MarketRules.IsBuyOrder(o)
-            && o.ActorId == stronghold.CivilianActor.Id
-            && o.Commodity == MarketCommodityType.Food);
+        var toRemove = stronghold.Market.Orders
+            .Where(o =>
+                MarketRules.IsBuyOrder(o)
+                && o.ActorId == stronghold.CivilianActor.Id
+                && o.Commodity == MarketCommodityType.Food)
+            .ToList();
+        MarketOrderCommitHelper.RefundAndRemoveOrders(stronghold, toRemove);
 
-        AddOrder(stronghold, MarketRules.BuySide, stronghold.CivilianActor.Id, limitPrice, quantityGo,
+        AddLimitOrder(stronghold, MarketRules.BuySide, stronghold.CivilianActor.Id, limitPrice, quantityGo,
             MarketCommodityType.Food, taxExempt: true);
     }
 
@@ -274,14 +343,17 @@ public static class MarketActions
         if (quantityGo <= 0 || askPrice <= 0)
             return;
 
-        stronghold.Market.Orders.RemoveAll(o =>
-            MarketRules.IsSellOrder(o)
-            && o.ActorId == stronghold.ForceActor.Id
-            && o.Commodity == MarketCommodityType.Food
-            && o.PriceMoneyPerGo == askPrice
-            && !MarketRules.IsPlayerRestingOrder(o));
+        var toRemove = stronghold.Market.Orders
+            .Where(o =>
+                MarketRules.IsSellOrder(o)
+                && o.ActorId == stronghold.ForceActor.Id
+                && o.Commodity == MarketCommodityType.Food
+                && o.PriceMoneyPerGo == askPrice
+                && !MarketRules.IsPlayerRestingOrder(o))
+            .ToList();
+        MarketOrderCommitHelper.RefundAndRemoveOrders(stronghold, toRemove);
 
-        AddOrder(
+        AddLimitOrder(
             stronghold,
             MarketRules.SellSide,
             stronghold.ForceActor.Id,
@@ -297,12 +369,15 @@ public static class MarketActions
         if (quantityGo <= 0 || limitPrice <= 0)
             return;
 
-        stronghold.Market.Orders.RemoveAll(o =>
-            MarketRules.IsBuyOrder(o)
-            && o.ActorId == stronghold.ForceActor.Id
-            && o.Commodity == MarketCommodityType.Food
-            && o.PriceMoneyPerGo == limitPrice
-            && !MarketRules.IsPlayerRestingOrder(o));
+        var toRemove = stronghold.Market.Orders
+            .Where(o =>
+                MarketRules.IsBuyOrder(o)
+                && o.ActorId == stronghold.ForceActor.Id
+                && o.Commodity == MarketCommodityType.Food
+                && o.PriceMoneyPerGo == limitPrice
+                && !MarketRules.IsPlayerRestingOrder(o))
+            .ToList();
+        MarketOrderCommitHelper.RefundAndRemoveOrders(stronghold, toRemove);
 
         AddLimitOrder(
             stronghold,
@@ -314,7 +389,7 @@ public static class MarketActions
             taxExempt: true);
     }
 
-    /// <summary>AI 挂单：同 Actor 同侧同价同步至目标量（不触碰玩家限价单）。</summary>
+    /// <summary>AI 挂单：同 Actor 同侧同价同步至目标量（不触碰玩家限价单）；统一锁资。</summary>
     public static void SyncAiRestingOrder(
         Stronghold stronghold,
         int actorId,
@@ -338,26 +413,61 @@ public static class MarketActions
         if (targetQuantityGo <= 0)
         {
             if (existing is not null)
+            {
+                MarketOrderCommitHelper.RefundCommitment(stronghold, existing);
                 stronghold.Market.Orders.Remove(existing);
+            }
+
             return;
         }
 
         if (existing is not null)
         {
-            existing.QuantityGo = targetQuantityGo;
-            if (existing.OriginalQuantityGo > 0)
-                existing.OriginalQuantityGo = Math.Max(existing.OriginalQuantityGo, targetQuantityGo);
+            if (isBuy)
+                MarketOrderCommitHelper.SyncBuyQuantity(stronghold, existing, targetQuantityGo);
+            else
+                MarketOrderCommitHelper.SyncSellQuantity(stronghold, existing, targetQuantityGo);
+
+            if (existing.QuantityGo <= 0)
+            {
+                MarketOrderCommitHelper.RefundCommitment(stronghold, existing);
+                stronghold.Market.Orders.Remove(existing);
+            }
+
             return;
         }
+
+        var affordableQty = isBuy
+            ? MarketOrderCommitHelper.ResolveAffordableBuyQuantity(
+                stronghold,
+                actorId,
+                priceMoneyPerGo,
+                targetQuantityGo)
+            : MarketOrderCommitHelper.ResolveAffordableSellQuantity(
+                stronghold,
+                actorId,
+                commodity,
+                targetQuantityGo);
+
+        if (affordableQty <= 0)
+            return;
 
         AddOrder(
             stronghold,
             side,
             actorId,
             priceMoneyPerGo,
-            targetQuantityGo,
+            affordableQty,
             commodity,
             taxExempt);
+
+        var added = stronghold.Market.Orders[^1];
+        var committed = isBuy
+            ? MarketOrderCommitHelper.TryCommitBuyQuantity(stronghold, added, affordableQty)
+            : MarketOrderCommitHelper.TryCommitSellQuantity(stronghold, added, affordableQty);
+
+        if (!committed)
+            stronghold.Market.Orders.RemoveAt(stronghold.Market.Orders.Count - 1);
     }
 
     /// <summary>撤销 Actor AI 挂单中不在保留价位集合内的订单。</summary>
@@ -369,12 +479,18 @@ public static class MarketActions
         IReadOnlySet<int> keepPrices)
     {
         var isBuy = MarketRules.IsBuySide(side);
-        stronghold.Market.Orders.RemoveAll(o =>
-            (isBuy ? MarketRules.IsBuyOrder(o) : MarketRules.IsSellOrder(o))
-            && o.ActorId == actorId
-            && o.Commodity == commodity
-            && !keepPrices.Contains(o.PriceMoneyPerGo)
-            && !MarketRules.IsPlayerRestingOrder(o));
+        foreach (var order in stronghold.Market.Orders
+                     .Where(o =>
+                         (isBuy ? MarketRules.IsBuyOrder(o) : MarketRules.IsSellOrder(o))
+                         && o.ActorId == actorId
+                         && o.Commodity == commodity
+                         && !keepPrices.Contains(o.PriceMoneyPerGo)
+                         && !MarketRules.IsPlayerRestingOrder(o))
+                     .ToList())
+        {
+            MarketOrderCommitHelper.RefundCommitment(stronghold, order);
+            stronghold.Market.Orders.Remove(order);
+        }
     }
 
     /// <summary>商户 AI 卖单：同 Actor 同价同步至目标量（不触碰玩家限价单）。</summary>
@@ -429,27 +545,7 @@ public static class MarketActions
             return false;
         }
 
-        if (MarketRules.IsBuyOrder(order))
-        {
-            var refundMoney = order.CommittedMoneyGo > 0
-                ? order.CommittedMoneyGo
-                : order.MoneyCommitted
-                    ? order.PriceMoneyPerGo * order.QuantityGo
-                    : 0;
-            if (refundMoney > 0)
-                actor.Money += refundMoney;
-        }
-
-        if (MarketRules.IsSellOrder(order))
-        {
-            var refundGo = order.CommittedInventoryGo > 0
-                ? order.CommittedInventoryGo
-                : order.InventoryCommitted
-                    ? order.QuantityGo
-                    : 0;
-            if (refundGo > 0)
-                MarketInventoryHelper.AddStock(actor, order.Commodity, refundGo);
-        }
+        MarketOrderCommitHelper.RefundCommitment(stronghold, order);
 
         stronghold.Market.Orders.Remove(order);
         error = null;
@@ -496,10 +592,20 @@ public static class MarketActions
                 existing.CommittedMoneyGo += limitPrice * quantityGo;
             }
 
+            StampPlayerRestingMetadata(existing, createdDate);
             return true;
         }
 
-        AddLimitOrder(stronghold, MarketRules.BuySide, actorId, limitPrice, quantityGo, commodity, taxExempt, createdDate);
+        AddLimitOrder(
+            stronghold,
+            MarketRules.BuySide,
+            actorId,
+            limitPrice,
+            quantityGo,
+            commodity,
+            taxExempt,
+            createdDate,
+            commitRestingResources: !commitMoney);
         if (commitMoney)
         {
             var added = stronghold.Market.Orders[^1];
@@ -550,10 +656,20 @@ public static class MarketActions
                 existing.CommittedInventoryGo += quantityGo;
             }
 
+            StampPlayerRestingMetadata(existing, createdDate);
             return true;
         }
 
-        AddLimitOrder(stronghold, MarketRules.SellSide, actorId, askPrice, quantityGo, commodity, taxExempt, createdDate);
+        AddLimitOrder(
+            stronghold,
+            MarketRules.SellSide,
+            actorId,
+            askPrice,
+            quantityGo,
+            commodity,
+            taxExempt,
+            createdDate,
+            commitRestingResources: !commitInventory);
         if (commitInventory)
         {
             var added = stronghold.Market.Orders[^1];
@@ -564,8 +680,8 @@ public static class MarketActions
         return true;
     }
 
-    /// <summary>追加限价单（不合并同 Actor 既有挂单；用于演示 seed）。</summary>
-    public static void AddLimitOrder(
+    /// <summary>追加限价单（不合并同 Actor 既有挂单；演示 seed / 测试）。</summary>
+    public static bool AddLimitOrder(
         Stronghold stronghold,
         string side,
         int actorId,
@@ -573,12 +689,46 @@ public static class MarketActions
         int quantityGo,
         MarketCommodityType commodity,
         bool taxExempt,
-        GameDate? createdDate = null)
+        GameDate? createdDate = null,
+        bool commitRestingResources = true)
     {
         if (quantityGo <= 0 || price <= 0)
-            return;
+            return false;
 
-        AddOrder(stronghold, side, actorId, price, quantityGo, commodity, taxExempt, createdDate);
+        var isBuy = MarketRules.IsBuySide(side);
+        var affordableQty = commitRestingResources
+            ? isBuy
+                ? MarketOrderCommitHelper.ResolveAffordableBuyQuantity(
+                    stronghold,
+                    actorId,
+                    price,
+                    quantityGo)
+                : MarketOrderCommitHelper.ResolveAffordableSellQuantity(
+                    stronghold,
+                    actorId,
+                    commodity,
+                    quantityGo)
+            : quantityGo;
+
+        if (affordableQty <= 0)
+            return false;
+
+        AddOrder(stronghold, side, actorId, price, affordableQty, commodity, taxExempt, createdDate);
+        if (!commitRestingResources)
+            return true;
+
+        var added = stronghold.Market.Orders[^1];
+        var committed = isBuy
+            ? MarketOrderCommitHelper.TryCommitBuyQuantity(stronghold, added, affordableQty)
+            : MarketOrderCommitHelper.TryCommitSellQuantity(stronghold, added, affordableQty);
+
+        if (!committed)
+        {
+            stronghold.Market.Orders.RemoveAt(stronghold.Market.Orders.Count - 1);
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>通用卖单 upsert（M4-d）。</summary>
@@ -593,12 +743,15 @@ public static class MarketActions
         if (quantityGo <= 0 || askPrice <= 0)
             return;
 
-        stronghold.Market.Orders.RemoveAll(o =>
-            MarketRules.IsSellOrder(o)
-            && o.ActorId == actorId
-            && o.Commodity == commodity);
+        var toRemove = stronghold.Market.Orders
+            .Where(o =>
+                MarketRules.IsSellOrder(o)
+                && o.ActorId == actorId
+                && o.Commodity == commodity)
+            .ToList();
+        MarketOrderCommitHelper.RefundAndRemoveOrders(stronghold, toRemove);
 
-        AddOrder(stronghold, MarketRules.SellSide, actorId, askPrice, quantityGo, commodity, taxExempt);
+        AddLimitOrder(stronghold, MarketRules.SellSide, actorId, askPrice, quantityGo, commodity, taxExempt);
     }
 
     private static void AddOrder(
@@ -635,6 +788,17 @@ public static class MarketActions
     {
         if (order.OriginalQuantityGo <= 0)
             order.OriginalQuantityGo = order.QuantityGo;
+    }
+
+    /// <summary>玩家限价合并进同 Actor 同价既有挂单时打上挂单日，避免日推进 AI 刷新误删/改量。</summary>
+    private static void StampPlayerRestingMetadata(MarketOrder order, GameDate? createdDate)
+    {
+        if (createdDate is null || createdDate.Value.Year <= 0)
+            return;
+
+        order.CreatedYear = createdDate.Value.Year;
+        order.CreatedMonth = createdDate.Value.Month;
+        order.CreatedDay = createdDate.Value.Day;
     }
 
     public static bool TryGetActorPublic(Stronghold stronghold, int actorId, out StrongholdActor actor)

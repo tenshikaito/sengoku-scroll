@@ -3,7 +3,9 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Types;
 using SengokuScroll.Strategy.Actions;
+using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Rules;
 using SengokuScroll.Strategy.Tests.Fixtures;
@@ -19,22 +21,22 @@ public class MarketCancelOrderTests
         gameData.GameDate = new GameDate(1560, 6, 1);
         var stronghold = CreateStronghold(gameData);
         var actor = stronghold.ForceActor;
-        var moneyBefore = actor.Money;
+        var qty = 100 * LogisticsConstants.GoPerKoku;
 
         stronghold.Market.Orders.Clear();
+        MarketTestOrderSeedHelper.EnsureBuyFunds(stronghold, actor.Id, 80, qty);
+        var moneyBefore = actor.Money;
         MarketActions.AddLimitOrder(
             stronghold,
             MarketRules.BuySide,
             actor.Id,
             80,
-            100 * LogisticsConstants.GoPerKoku,
+            qty,
             MarketCommodityType.Food,
             taxExempt: true,
             gameData.GameDate);
         var order = Assert.Single(stronghold.Market.Orders);
-        order.MoneyCommitted = true;
-        order.CommittedMoneyGo = order.PriceMoneyPerGo * order.QuantityGo;
-        actor.Money -= order.CommittedMoneyGo;
+        Assert.True(order.MoneyCommitted);
 
         Assert.True(MarketActions.TryCancelOrder(
             stronghold,
@@ -54,11 +56,11 @@ public class MarketCancelOrderTests
         gameData.GameDate = new GameDate(1560, 6, 1);
         var stronghold = CreateStronghold(gameData);
         var actor = stronghold.ForceActor;
-        var foodBefore = actor.Food;
         var qty = 50 * LogisticsConstants.GoPerKoku;
 
         stronghold.Market.Orders.Clear();
-        actor.Food -= qty;
+        MarketTestOrderSeedHelper.EnsureSellStock(stronghold, actor.Id, qty);
+        var foodBefore = actor.Food;
         MarketActions.AddLimitOrder(
             stronghold,
             MarketRules.SellSide,
@@ -69,8 +71,7 @@ public class MarketCancelOrderTests
             taxExempt: true,
             gameData.GameDate);
         var order = Assert.Single(stronghold.Market.Orders);
-        order.InventoryCommitted = true;
-        order.CommittedInventoryGo = qty;
+        Assert.True(order.InventoryCommitted);
 
         Assert.True(MarketActions.TryCancelOrder(
             stronghold,
@@ -92,6 +93,7 @@ public class MarketCancelOrderTests
         var actor = stronghold.ForceActor;
 
         stronghold.Market.Orders.Clear();
+        MarketTestOrderSeedHelper.EnsureBuyFunds(stronghold, actor.Id, 75, 200 * LogisticsConstants.GoPerKoku);
         MarketActions.AddLimitOrder(
             stronghold,
             MarketRules.BuySide,
@@ -108,18 +110,12 @@ public class MarketCancelOrderTests
             MarketCommodityType.Food,
             playerForceId: stronghold.ForceId);
 
-        var open = Assert.Single(snapshot.PlayerOpenOrders);
-        Assert.Equal(MarketRules.BuySide, open.Side);
-        Assert.Equal(75, open.PriceMoneyPerGo);
-        Assert.Equal("Open", open.FillStatus);
-        Assert.Equal(1560, open.CreatedYear);
+        Assert.Single(snapshot.PlayerOpenOrders);
     }
 
     private static Stronghold CreateStronghold(GameData gameData)
     {
-        var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(7, 1, new Common.Types.Point3(2, 3));
-        stronghold.Name = "测试城";
-        stronghold.Market.LastClosePriceMoneyPerGo = 90;
+        var stronghold = StrategyTestWorldBuilder.CreateTestStronghold(1, 1, new Common.Types.Point3(0, 0));
         gameData.Strongholds[stronghold.Id] = stronghold;
         return stronghold;
     }

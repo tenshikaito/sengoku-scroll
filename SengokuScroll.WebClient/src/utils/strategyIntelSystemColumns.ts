@@ -89,7 +89,7 @@ const PERSONALITY_DEV_COLUMNS: IntelTableColumnDef[] = [
 ];
 
 const FORCE_ALL: IntelTableColumnDef[] = [
-  { prop: "name", label: "名称", minWidth: 88 },
+  { prop: "name", label: "名称", minWidth: 88, link: { kind: "force", idField: "id" } },
   { prop: "lordName", label: "当主", minWidth: 80 },
   { prop: "forceType", label: "类型", width: 56, align: "center" },
   { prop: "residenceName", label: "居城", minWidth: 88 },
@@ -134,7 +134,7 @@ export const FORCE_LIST_COLUMN_PRESETS: Record<ForceListPreset, IntelTableColumn
 };
 
 const STRONGHOLD_ALL: IntelTableColumnDef[] = [
-  { prop: "name", label: "名称", minWidth: 96 },
+  { prop: "name", label: "名称", minWidth: 96, link: { kind: "stronghold", idField: "id" } },
   { prop: "category", label: "类型", width: 72 },
   { prop: "scale", label: "规模", width: 56, align: "center" },
   { prop: "forceName", label: "势力", minWidth: 80 },
@@ -325,7 +325,7 @@ export const STANCE_EFFECT_COLUMNS: IntelTableColumnDef[] = [
 ];
 
 const PERSON_ALL: IntelTableColumnDef[] = [
-  { prop: "name", labelKey: "ui.intel.column.personName", label: "姓名", minWidth: 88 },
+  { prop: "name", labelKey: "ui.intel.column.personName", label: "姓名", minWidth: 88, link: { kind: "person", idField: "id" } },
   { prop: "personType", label: "身份", width: 72, align: "center" },
   { prop: "forceName", label: "势力", minWidth: 80 },
   { prop: "strongholdName", label: "据点", minWidth: 96 },
@@ -464,7 +464,7 @@ export const FORCE_PERSON_COLUMNS: IntelTableColumnDef[] = pickColumns(PERSON_AL
 export const DIPLOMACY_BRIEF_COLUMNS: IntelTableColumnDef[] = [
   { prop: "forceName", label: "势力", minWidth: 96, link: { kind: "force", idField: "forceId" } },
   { prop: "lordName", label: "当主", minWidth: 80 },
-  { prop: "relation", label: "关系", width: 56, align: "center" },
+  { prop: "relation", label: "亲疏", width: 56, align: "center" },
   { prop: "trust", label: "信赖", width: 56, align: "center" },
   { prop: "diplomacyStatus", label: "状态", width: 64, toneField: "diplomacyTone" },
   { prop: "politicalStatus", label: "地位", width: 64 },

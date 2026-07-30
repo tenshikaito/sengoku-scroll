@@ -79,7 +79,8 @@ export type StrategyMapPopupMode =
   | "moveSelect"
   | "attackSelect"
   | "mergeSelect"
-  | "splitSelect";
+  | "splitSelect"
+  | "diplomacyForceSelect";
 
 /** 状态类可读写的 UI 上下文；状态切换通过 transitionTo 完成。 */
 export interface StrategyMapInteractionContext {
@@ -159,6 +160,15 @@ export interface StrategyMapInteractionContext {
   getCellEntityOptions(): readonly MapCellEntityOption[];
 
   setCellEntityOptions(options: readonly MapCellEntityOption[]): void;
+
+  /**
+   * 外交地图选点：据点选中后做校验；返回 true 表示接受并退出选点态。
+   * 未注入时视为拒绝。
+   */
+  onDiplomacyForceStrongholdPicked?(strongholdId: number): boolean;
+
+  /** 外交地图选点取消（右键 / Esc）。 */
+  onDiplomacyForcePickCancelled?(): void;
 
   transitionTo(state: import("./StrategyMapInteractionState").StrategyMapInteractionState): void;
 }

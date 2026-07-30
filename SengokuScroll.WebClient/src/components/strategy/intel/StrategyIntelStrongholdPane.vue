@@ -7,6 +7,7 @@ import type { IntelRealmFilterMode } from "@/utils/intelRealmFilter";
 import type { IntelNavigateRequest, IntelNavigateTarget } from "@/utils/strategyIntelNavigation";
 import {
   cityActorTableColumns,
+  PERSON_LIST_COLUMN_PRESETS,
   STRONGHOLD_CROP_CYCLE_COLUMNS,
   STRONGHOLD_DEFENSE_COLUMNS,
   STRONGHOLD_FACTION_PERSON_COLUMNS,
@@ -16,6 +17,7 @@ import {
   STRONGHOLD_TECHNOLOGY_COLUMNS,
   type StrongholdListPreset,
 } from "@/utils/strategyIntelSystemColumns";
+import { strongholdOfficerRows } from "@/utils/strategyRecruitDialogs";
 import {
   strongholdCropCycleTableRows,
   strongholdCultureDetailRows,
@@ -52,6 +54,7 @@ const emit = defineEmits<{
 const listPreset = ref<StrongholdListPreset>("status");
 const detailTab = ref<
   | "basic"
+  | "officers"
   | "garrison"
   | "defense"
   | "production"
@@ -66,6 +69,29 @@ const detailTab = ref<
 const selectedStrongholdId = ref<number | null>(null);
 const selectedCityActorId = ref<number | null>(null);
 const cityActorContentTab = ref<"persons" | "production">("persons");
+
+const selectedStronghold = computed(() =>
+  selectedStrongholdId.value != null
+    ? props.worldState.strongholds.find((s) => s.id === selectedStrongholdId.value) ?? null
+    : null,
+);
+
+/** 本家据点均显示「现任」；敌方/中立据点不显示。 */
+const showStrongholdOfficerTab = computed(
+  () =>
+    selectedStronghold.value != null &&
+    selectedStronghold.value.forceId === props.worldState.playerForceId,
+);
+
+const strongholdOfficerListRows = computed(() => {
+  if (!showStrongholdOfficerTab.value || selectedStrongholdId.value == null) return [];
+  return strongholdOfficerRows(
+    props.worldState,
+    selectedStrongholdId.value,
+  ) as unknown as Array<Record<string, unknown>>;
+});
+
+const strongholdOfficerColumns = PERSON_LIST_COLUMN_PRESETS.status;
 
 const activeCityActorKind = computed<"Merchant" | "Religion" | null>(() => {
   if (detailTab.value === "merchants") return "Merchant";
@@ -248,6 +274,9 @@ watch(
     selectedCityActorId.value = null;
     cityActorContentTab.value = "persons";
     syncDefaultCityActorSelection();
+    if (!showStrongholdOfficerTab.value && detailTab.value === "officers") {
+      detailTab.value = "basic";
+    }
   }
 );
 
@@ -338,6 +367,7 @@ watch(
     <div class="detail-section" :class="{ 'detail-section--solo': detailOnly }">
       <el-tabs v-model="detailTab" class="layer-tabs layer-tabs--detail">
         <el-tab-pane label="基本" name="basic" />
+        <el-tab-pane v-if="showStrongholdOfficerTab" label="现任" name="officers" />
         <el-tab-pane label="常备兵" name="garrison" />
         <el-tab-pane label="城防" name="defense" />
         <el-tab-pane label="生产" name="production" />
@@ -358,6 +388,19 @@ watch(
           @navigate="onIntelNavigate"
         />
         <p v-else class="placeholder">请选择据点。</p>
+      </div>
+
+      <div v-else-if="detailTab === 'officers'" class="detail-body">
+        <StrategyIntelSystemTable
+          :rows="strongholdOfficerListRows"
+          :columns="strongholdOfficerColumns"
+          :highlight-current="false"
+          scroll-wrap
+          :max-height="320"
+          empty-text="该据点暂无驻城将领"
+          :exclude-entity="excludeEntity"
+          @navigate="onIntelNavigate"
+        />
       </div>
 
       <div v-else-if="detailTab === 'garrison'" class="detail-body">

@@ -19,6 +19,6 @@ public sealed class CommodityDefinition
     /// <summary>无历史成交时的默认单价（文/单位）。</summary>
     public int DefaultPriceMoneyPerUnit { get; set; }
 
-    /// <summary>显示单位（合/匹等）。</summary>
+    /// <summary>市场 UI 显示单位（粮食为石、马匹为匹；内部库存仍为合/匹）。</summary>
     public required string UnitLabel { get; set; }
 }

@@ -227,8 +227,8 @@ M0 计划确认（✅）→ M1 领域与引擎（下一步）→ M2 策略单机
 
 | # | 任务 | 负责层 | 状态 |
 |---|------|--------|------|
-| 1 | 按 §3.2 跑通 1 局：加载 → 移动/攻击 → 方针 → 月结 → 存档/读档 | 联调 | 待做 |
-| 2 | Live WebApi 重启后验证 `tileRegionNames` / `landmarks` 非 Mock 补全 | 后端 | 待做 |
+| 1 | 按 §3.2 跑通 1 局：加载 → 移动/攻击 → 方针 → 月结 → 存档/读档 | 联调 | ✅ `M3PlaythroughAcceptanceTests` |
+| 2 | Live WebApi 重启后验证 `tileRegionNames` / `landmarks` 非 Mock 补全 | 后端 | ✅ 改由 `GET /strategy/map`（RegionIds + Landmarks）验收 |
 | 3 | 清除旧 localStorage mock 存档或确认 `enrichStrategyMapState` 生效 | 前端 | ✅ |
 
 ---
@@ -237,13 +237,13 @@ M0 计划确认（✅）→ M1 领域与引擎（下一步）→ M2 策略单机
 
 | 优先级 | 内容 | 说明 |
 |--------|------|------|
-| **P0** | **据点 ↔ 地标关联** | `Stronghold.IsHistorical` 贯通；建造时检测格点 `GameMapMasterData.Landmarks` |
-| **P0** | **虚拟据点收入减益** | `EconomyRules` 按难度档位对无地标背书据点施加税收系数；史实据点不变 |
+| **P0** | **据点 ↔ 地标关联** | ✅ `IsHistorical` 加载贯通；建造时检测可再打磨 |
+| **P0** | **虚拟据点收入减益** | ✅ `gameOptions.fictionalIncomePenaltyBp` + 难度覆盖 |
 | **P1** | 更多剧本/区域网格/地标数据 | 编辑器或 JSON 批量维护 `regionGrid`、`landmarks` |
-| **P1** | 兵种 `UnitTypes` 配置化 | 见 §M4 原列表 |
-| **P2** | 外交/谍报/战争分数 | 原 M4 范围 |
+| **P1** | 兵种 `UnitTypes` 配置化 | ✅ 剧本 `unitTypes[]` → `GameMasterData.UnitTypes`；缺省走内置 seed |
+| **P2** | 外交/谍报/战争分数 | 外交使节任务 UI/API ✅；战争分数等仍待 |
 | **P2** | 大地图渲染管线 | RM VX 式 2×3 autotile 地形 chunk 烘焙；道路枚举 overlay；主数据与 `worldState` 分离 |
-| **P2** | 路径战争迷雾 / 难度三档 | 见 §6.6 |
+| **P2** | 路径战争迷雾 / 难度三档 | 见 §6.6（尚未与 Fog/`GameStartOptions` 统一） |
 
 ---
 

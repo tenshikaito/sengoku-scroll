@@ -55,17 +55,68 @@ public static class MarketMakerAiHelper
             .DefaultIfEmpty(0)
             .Min();
 
-    public static int ResolveEffectiveBidPrice(int referencePrice, int level, int bestAsk)
+    /// <summary>当前订单簿最高有效买价；0 表示无买盘。可排除指定 Actor（避免自成交定价）。</summary>
+    public static int ResolveBestBid(
+        Stronghold stronghold,
+        MarketCommodityType commodity,
+        int excludeActorId = 0)
+        => stronghold.Market.Orders
+            .Where(o =>
+                MarketRules.IsBuyOrder(o)
+                && o.Commodity == commodity
+                && o.QuantityGo > 0
+                && (excludeActorId <= 0 || o.ActorId != excludeActorId))
+            .Select(o => o.PriceMoneyPerGo)
+            .DefaultIfEmpty(0)
+            .Max();
+
+    public static int AskPrice(
+        int referencePrice,
+        int level,
+        bool crossAtReference = false,
+        int bestBid = 0,
+        bool undercutForFill = false)
     {
-        var raw = BidPrice(referencePrice, level);
-        return bestAsk > 0 ? Math.Max(raw, bestAsk) : raw;
+        // 业务：无外部买盘或买盘低于中枢时，低价抢成交 / 引导跌价（并触发次日捡漏买）
+        if (undercutForFill)
+        {
+            if (bestBid > 0)
+                return Math.Max(1, bestBid + Math.Max(0, level - 1));
+
+            // 业务：无买盘时首档至少低于中枢「捡漏折扣」，否则次日市民/官府仍不买
+            var dumpAnchor = Math.Max(
+                1,
+                referencePrice
+                * (EconomyConstants.BasisPointsPer100Percent - MarketConstants.BargainBuyDiscountThresholdBp)
+                / EconomyConstants.BasisPointsPer100Percent);
+            return Math.Max(1, dumpAnchor - (level - 1));
+        }
+
+        // 业务：cross 时首档挂在中枢，使买卖盘可交叉成交
+        if (crossAtReference)
+            return referencePrice + Math.Max(0, level - 1);
+
+        return referencePrice + level;
     }
 
-    public static int AskPrice(int referencePrice, int level)
-        => referencePrice + level;
+    public static int BidPrice(int referencePrice, int level, bool crossAtReference = false)
+    {
+        // 业务：紧缺时买盘首档可挂中枢价（±0），否则严格低于中枢
+        if (crossAtReference)
+            return Math.Max(1, referencePrice - Math.Max(0, level - 1));
 
-    public static int BidPrice(int referencePrice, int level)
-        => Math.Max(1, referencePrice - level);
+        return Math.Max(1, referencePrice - level);
+    }
+
+    public static int ResolveEffectiveBidPrice(
+        int referencePrice,
+        int level,
+        int bestAsk,
+        bool crossAtReference = false)
+    {
+        var raw = BidPrice(referencePrice, level, crossAtReference);
+        return bestAsk > 0 ? Math.Max(raw, bestAsk) : raw;
+    }
 
     /// <summary>非线性档权重（万分点整数，避免浮点）。</summary>
     public static int LevelWeightBp(int level, BookSkew skew)
@@ -129,7 +180,10 @@ public static class MarketMakerAiHelper
         int defaultMinGo,
         BookSkew skew,
         bool asksAboveReference,
-        int bestAsk = 0)
+        int bestAsk = 0,
+        bool crossAtReference = false,
+        int bestBid = 0,
+        bool undercutAsks = false)
     {
         if (totalGo <= 0)
             return [];
@@ -165,9 +219,9 @@ public static class MarketMakerAiHelper
             if (qty < minQty)
                 continue;
 
-            var price = asksAboveReference
-                ? AskPrice(referencePrice, level)
-                : ResolveEffectiveBidPrice(referencePrice, level, bestAsk);
+            var price = asksAboveReference || undercutAsks
+                ? AskPrice(referencePrice, level, crossAtReference, bestBid, undercutAsks)
+                : ResolveEffectiveBidPrice(referencePrice, level, bestAsk, crossAtReference);
 
             allocations.Add(new LevelAllocation(price, qty));
             placedGo += qty;
@@ -192,7 +246,8 @@ public static class MarketMakerAiHelper
         int maxPerLevel,
         int defaultMinGo,
         BookSkew skew,
-        int bestAsk = 0)
+        int bestAsk = 0,
+        bool crossAtReference = false)
     {
         if (moneyBudget <= 0 || referencePrice <= 0)
             return [];
@@ -206,7 +261,8 @@ public static class MarketMakerAiHelper
             defaultMinGo,
             skew,
             asksAboveReference: false,
-            bestAsk);
+            bestAsk,
+            crossAtReference);
 
         var remainingMoney = moneyBudget;
         var allocations = new List<LevelAllocation>();
@@ -231,6 +287,7 @@ public static class MarketMakerAiHelper
         return allocations;
     }
 
+    /// <summary>同步 Actor 一侧若干价位目标量；无 allocation 时不操作，且不 prune 既有挂单。</summary>
     public static void SyncBookSide(
         Stronghold stronghold,
         int actorId,
@@ -239,7 +296,9 @@ public static class MarketMakerAiHelper
         bool taxExempt,
         IReadOnlyList<LevelAllocation> allocations)
     {
-        var activePrices = new HashSet<int>();
+        if (allocations.Count == 0)
+            return;
+
         foreach (var level in allocations)
         {
             if (level.QuantityGo <= 0 || level.PriceMoneyPerGo <= 0)
@@ -253,10 +312,7 @@ public static class MarketMakerAiHelper
                 level.QuantityGo,
                 commodity,
                 taxExempt);
-            activePrices.Add(level.PriceMoneyPerGo);
         }
-
-        MarketActions.PruneAiRestingOrders(stronghold, actorId, side, commodity, activePrices);
     }
 
     /// <summary>市民口粮紧缺时，买盘偏近中枢。</summary>

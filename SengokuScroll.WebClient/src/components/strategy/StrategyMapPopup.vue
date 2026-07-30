@@ -110,13 +110,16 @@ const emit = defineEmits<{
   openStrongholdMarket: [];
   openPersonalMarket: [];
   openMerchantShop: [actorId: number];
+  openDiplomacy: [action: "Ally" | "War" | "Peace"];
   showIntel: [];
   cancel: [];
 }>();
 
 type StrongholdMenuView = "categories" | "military" | "domestic" | "personnel" | "merchants";
+type ForeignStrongholdMenuView = "root" | "diplomacy";
 
 const strongholdMenuView = ref<StrongholdMenuView>("categories");
+const foreignStrongholdMenuView = ref<ForeignStrongholdMenuView>("root");
 const characterMenuView = ref<StrongholdMenuView>("categories");
 
 const merchantShopList = computed(() => props.merchantShops ?? []);
@@ -147,6 +150,9 @@ watch(
     }
     if (mode !== "characterCommand") {
       characterMenuView.value = "categories";
+    }
+    if (mode !== "foreignStrongholdCommand") {
+      foreignStrongholdMenuView.value = "root";
     }
   },
 );
@@ -909,39 +915,85 @@ function onCharacterEspionageClick() {
 
     <template v-else-if="mode === 'foreignStrongholdCommand'">
       <div class="actions actions--vertical">
-        <template v-if="canSiege && siegeStrongholdId">
+        <template v-if="foreignStrongholdMenuView === 'root'">
+          <template v-if="canSiege && siegeStrongholdId">
+            <StrategyMapActionButton
+              :variant="siegeUnavailable ? 'muted' : 'primary'"
+              :tooltip="siegeTooltip"
+              :tooltip-side="tooltipSide"
+              @click="emit('siegeAssault')"
+            >
+              ⚔ 强攻
+            </StrategyMapActionButton>
+            <StrategyMapActionButton
+              :variant="siegeUnavailable ? 'muted' : 'primary'"
+              :tooltip="siegeTooltip"
+              :tooltip-side="tooltipSide"
+              @click="emit('siegeEncircle')"
+            >
+              ⭕ 包围
+            </StrategyMapActionButton>
+            <div class="divider" />
+          </template>
           <StrategyMapActionButton
-            :variant="siegeUnavailable ? 'muted' : 'primary'"
-            :tooltip="siegeTooltip"
+            variant="primary"
             :tooltip-side="tooltipSide"
-            @click="emit('siegeAssault')"
+            tooltip="对外交涉：同盟 / 宣战 / 议和"
+            @click="foreignStrongholdMenuView = 'diplomacy'"
           >
-            ⚔ 强攻
+            🤝 外交
           </StrategyMapActionButton>
           <StrategyMapActionButton
-            :variant="siegeUnavailable ? 'muted' : 'primary'"
-            :tooltip="siegeTooltip"
+            v-if="canEspionage && !hideStrongholdEspionage"
+            variant="primary"
             :tooltip-side="tooltipSide"
-            @click="emit('siegeEncircle')"
+            tooltip="对该据点展开间谍搜索，揭示内政或军事情报（约 2 个月有效）"
+            @click="emit('beginEspionage')"
           >
-            ⭕ 包围
+            🕵 间谍
           </StrategyMapActionButton>
           <div class="divider" />
+          <button type="button" class="map-action map-action--default" @click.stop="emit('showIntel')">
+            📋 情报
+          </button>
+          <button type="button" class="map-action map-action--default" @click.stop="emit('cancel')">取消</button>
         </template>
-        <StrategyMapActionButton
-          v-if="canEspionage && !hideStrongholdEspionage"
-          variant="primary"
-          :tooltip-side="tooltipSide"
-          tooltip="对该据点展开间谍搜索，揭示内政或军事情报（约 2 个月有效）"
-          @click="emit('beginEspionage')"
-        >
-          🕵 间谍
-        </StrategyMapActionButton>
-        <div class="divider" />
-        <button type="button" class="map-action map-action--default" @click.stop="emit('showIntel')">
-          📋 情报
-        </button>
-        <button type="button" class="map-action map-action--default" @click.stop="emit('cancel')">取消</button>
+
+        <template v-else>
+          <button
+            type="button"
+            class="map-action map-action--default map-action--back"
+            @click.stop="foreignStrongholdMenuView = 'root'"
+          >
+            ← 返回
+          </button>
+          <StrategyMapActionButton
+            variant="primary"
+            :tooltip-side="tooltipSide"
+            tooltip="派遣使节提议同盟（自动填入本据点所属势力）"
+            @click="emit('openDiplomacy', 'Ally')"
+          >
+            🤝 同盟
+          </StrategyMapActionButton>
+          <StrategyMapActionButton
+            variant="primary"
+            :tooltip-side="tooltipSide"
+            tooltip="派遣使节宣战（自动填入本据点所属势力）"
+            @click="emit('openDiplomacy', 'War')"
+          >
+            ⚔ 宣战
+          </StrategyMapActionButton>
+          <StrategyMapActionButton
+            variant="primary"
+            :tooltip-side="tooltipSide"
+            tooltip="派遣使节议和（自动填入本据点所属势力）"
+            @click="emit('openDiplomacy', 'Peace')"
+          >
+            🕊 议和
+          </StrategyMapActionButton>
+          <div class="divider" />
+          <button type="button" class="map-action map-action--default" @click.stop="emit('cancel')">取消</button>
+        </template>
       </div>
     </template>
 
@@ -999,6 +1051,16 @@ function onCharacterEspionageClick() {
       <div class="title">选择分兵落点</div>
       <div class="subtitle hint">点击相邻且无军的空格</div>
       <div class="subtitle hint">右键取消并返回指令菜单</div>
+      <div class="actions actions--vertical">
+        <button type="button" class="map-action map-action--default" @click.stop="emit('cancel')">取消</button>
+      </div>
+    </template>
+
+    <template v-else-if="mode === 'diplomacyForceSelect'">
+      <div class="title">请选择外交势力</div>
+      <div class="subtitle hint">点击目标势力的据点</div>
+      <div class="subtitle hint">可否派遣仅看外交「状态」（同盟/战争/中立），与亲疏、信赖无关</div>
+      <div class="subtitle hint">右键取消并返回外交对话框</div>
       <div class="actions actions--vertical">
         <button type="button" class="map-action map-action--default" @click.stop="emit('cancel')">取消</button>
       </div>

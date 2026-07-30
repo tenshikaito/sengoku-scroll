@@ -1,9 +1,10 @@
+using SengokuScroll.Domain.Definitions;
+
 namespace SengokuScroll.Strategy.Constants;
 
 /// <summary>
-/// 策略模式兵种类型 Id 与显示名（M3-b 最小集）。
-/// TODO(M4+)：迁入剧本 JSON / <see cref="Domain.GameMasterData.UnitTypes"/>，供玩家自定义世界兵种表；
-/// 本类届时仅作内置 fallback。
+/// 策略模式兵种类型 Id 与显示名；优先读 <see cref="GameMasterData.UnitTypes"/>，
+/// 本类仅作内置 fallback。
 /// </summary>
 public static class StrategyTroopTypes
 {
@@ -13,9 +14,18 @@ public static class StrategyTroopTypes
     public const byte Matchlock = 4;
 
     public static string ResolveName(int typeId, string? typeName)
+        => ResolveName(typeId, typeName, unitTypes: null);
+
+    public static string ResolveName(
+        int typeId,
+        string? typeName,
+        IReadOnlyDictionary<int, UnitTypeDefinition>? unitTypes)
     {
         if (!string.IsNullOrWhiteSpace(typeName))
             return typeName.Trim();
+
+        if (unitTypes is not null && unitTypes.TryGetValue(typeId, out var definition))
+            return definition.Name;
 
         return typeId switch
         {

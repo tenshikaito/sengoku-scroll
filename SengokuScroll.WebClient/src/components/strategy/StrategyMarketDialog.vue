@@ -1,63 +1,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type {
-  StrategyMarketOpenOrder,
-  StrategyMarketSnapshot,
-  StrategyUnitState,
-  StrategyWorldState,
-} from "@/api/strategy";
+import type { StrategyMarketSnapshot, StrategyUnitState, StrategyWorldState } from "@/api/strategy";
+import { fetchMarketSnapshot } from "@/api/strategy";
+import StrategyMarketCommodityPane, {
+  type MarketTradeMode,
+} from "@/components/strategy/StrategyMarketCommodityPane.vue";
 import {
-  fetchMarketSnapshot,
-  strongholdLordCancelMarketOrder,
-  strongholdLordSmashBuyFood,
-  strongholdLordSmashBuyHorse,
-  strongholdLordSmashSellFood,
-  strongholdLordSmashSellHorse,
-  unitSmashBuyFood,
-  unitSmashBuyHorse,
-  unitSmashSellFood,
-  unitSmashSellHorse,
-} from "@/api/strategy";
-import {
-  formatMarketQuantityFromGo,
   resolveMarketCommodityMeta,
   resolveMarketCommodityMetas,
-  resolveMaxTradeUnits,
-  resolveTradeQuantityGo as resolveTradeQuantityGoForMeta,
   type MarketCommodityTab,
 } from "@/utils/strategyCommodityHelpers";
-import { formatMoney } from "@/utils/strategyDisplayUnits";
-import {
-  depthRowPriceClass,
-  formatMarketPrice,
-  resolveSessionPrice,
-} from "@/utils/strategyMarketChart";
-import {
-  logMarketBookSnapshot,
-  padAskRowsForDisplay,
-  padBidRowsForDisplay,
-  sliceAskRowsForDisplay,
-  sliceBidRowsForDisplay,
-  sumAskVolumeUpToPrice,
-  sumBidVolumeFromPrice,
-} from "@/utils/strategyMarketBookHelpers";
-import StrategyMarketEchartsPanel from "@/components/strategy/StrategyMarketEchartsPanel.vue";
-import {
-  buildTradeQuantityKokuMarks,
-  buildTradeQuantityKokuStops,
-} from "@/utils/strategyMarketTradeHelpers";
+import { logMarketBookSnapshot } from "@/utils/strategyMarketBookHelpers";
 
-export type MarketTradeMode = "view" | "lord" | "unit";
+export type { MarketTradeMode };
 
-const DEPTH_MAX = 10;
 const DEPTH_DEFAULT = 5;
-
-type TradeTab = "buy" | "sell";
-
-const TRADE_TABS: { key: TradeTab; label: string }[] = [
-  { key: "buy", label: "买入" },
-  { key: "sell", label: "卖出" },
-];
 
 const props = defineProps<{
   visible: boolean;
@@ -78,13 +35,9 @@ const emit = defineEmits<{
 }>();
 
 const loading = ref(false);
-const error = ref("");
+const loadError = ref("");
 const snapshot = ref<StrategyMarketSnapshot | null>(null);
 const commodityTab = ref<MarketCommodityTab>("Food");
-const tradeTab = ref<TradeTab>("buy");
-const side = computed(() => (tradeTab.value === "sell" ? "sell" : "buy"));
-const limitPrice = ref(100);
-const quantityUnits = ref(0);
 const dialogOpened = ref(false);
 const snapshotGeneration = ref(0);
 
@@ -94,13 +47,6 @@ const activeCommodityMeta = computed(() =>
 );
 
 const tradeMode = computed(() => props.tradeMode ?? "view");
-const tradeUnitId = computed(() => props.tradeUnit?.id ?? null);
-const canTrade = computed(() => {
-  if (tradeMode.value === "view" || snapshot.value?.isOpen !== true) return false;
-  if (tradeMode.value === "lord") return props.strongholdId != null;
-  return tradeUnitId.value != null;
-});
-const commodityTradeEnabled = computed(() => canTrade.value && activeCommodityMeta.value.tradeEnabled);
 
 const title = computed(() => {
   const place = props.strongholdName ?? snapshot.value?.strongholdName ?? "市场";
@@ -109,245 +55,24 @@ const title = computed(() => {
   return `${place} · 商队交易`;
 });
 
-const treasuryMoneyOverride = ref<number | null>(null);
-const treasuryStockOverride = ref<number | null>(null);
-
-function resolveStockFromProps(metaKey: MarketCommodityTab): number {
-  if (metaKey === "Horse") {
-    return tradeMode.value === "lord" ? (props.lordHorse ?? 0) : (props.tradeUnit?.horse ?? 0);
-  }
-  return tradeMode.value === "lord" ? (props.lordFood ?? 0) : (props.tradeUnit?.food ?? 0);
-}
-
-const treasuryMoney = computed(() => {
-  if (treasuryMoneyOverride.value != null) return treasuryMoneyOverride.value;
-  return tradeMode.value === "lord" ? (props.lordMoney ?? 0) : (props.tradeUnit?.money ?? 0);
-});
-const treasuryStock = computed(() => {
-  if (treasuryStockOverride.value != null) return treasuryStockOverride.value;
-  return resolveStockFromProps(commodityTab.value);
-});
-
-function resetTreasuryOverrides() {
-  treasuryMoneyOverride.value = null;
-  treasuryStockOverride.value = null;
-}
-
-function applyTreasuryFromState(state: StrategyWorldState) {
-  if (tradeMode.value === "lord" && props.strongholdId != null) {
-    const sh = state.strongholds.find((row) => row.id === props.strongholdId);
-    if (sh) {
-      treasuryMoneyOverride.value = sh.money;
-      treasuryStockOverride.value =
-        commodityTab.value === "Horse" ? (sh.horse ?? 0) : sh.food;
-    }
-    return;
-  }
-
-  const unitId = tradeUnitId.value;
-  if (unitId == null) return;
-  const unit = state.units.find((row) => row.id === unitId);
-  if (unit) {
-    treasuryMoneyOverride.value = unit.money;
-    treasuryStockOverride.value =
-      commodityTab.value === "Horse" ? (unit.horse ?? 0) : unit.food;
-  }
-}
-
-const treasuryLabel = computed(() =>
-  tradeMode.value === "lord" ? "官府库" : (props.tradeUnit?.name ?? "商队"),
-);
-
-const treasuryMoneyText = computed(() => formatMoney(treasuryMoney.value));
-const treasuryStockText = computed(() =>
-  formatMarketQuantityFromGo(treasuryStock.value, activeCommodityMeta.value),
-);
-
 const dailyBars = computed(() => snapshot.value?.dailyBars ?? []);
 
-const sessionPrice = computed(() => {
-  const fromSnapshot = snapshot.value?.sessionPriceMoneyPerGo ?? 0;
-  if (fromSnapshot > 0) return fromSnapshot;
-  return resolveSessionPrice(dailyBars.value, snapshot.value?.lastClosePriceMoneyPerGo ?? 0);
-});
-
-const depthExpanded = ref(false);
-const depthCount = computed(() => (depthExpanded.value ? DEPTH_MAX : DEPTH_DEFAULT));
-
-function toggleDepthExpanded() {
-  depthExpanded.value = !depthExpanded.value;
-}
-
-function askDepthRank(index: number): number {
-  return depthCount.value - index;
-}
-
-function bidDepthRank(index: number): number {
-  return index + 1;
-}
-
-function formatDepthVolume(quantityGo: number): string {
-  return formatMarketQuantityFromGo(quantityGo, activeCommodityMeta.value);
-}
-
-function applyQuantityFromBookGo(totalGo: number) {
-  const meta = activeCommodityMeta.value;
-  if (totalGo <= 0) {
-    quantityUnits.value = 0;
-    return;
-  }
-
-  const units = meta.usesKokuVolume
-    ? Math.max(1, Math.round(totalGo / meta.goPerDisplayUnit))
-    : Math.max(1, totalGo);
-  const max = maxTradeUnits.value;
-  quantityUnits.value = max > 0 ? Math.min(units, max) : 0;
-}
-
-function selectAskPrice(price: number) {
-  if (price <= 0) return;
-  limitPrice.value = price;
-  if (!canTrade.value || side.value !== "buy" || !snapshot.value) return;
-
-  const totalGo = sumAskVolumeUpToPrice(
-    snapshot.value.askLevels ?? [],
-    price,
-    sessionPrice.value,
-    snapshot.value.closeLevelQuantityGo ?? 0,
-  );
-  applyQuantityFromBookGo(totalGo);
-}
-
-function selectBidPrice(price: number) {
-  if (price <= 0) return;
-  limitPrice.value = price;
-  if (!canTrade.value || side.value !== "sell" || !snapshot.value) return;
-
-  const totalGo = sumBidVolumeFromPrice(
-    snapshot.value.bidLevels ?? [],
-    price,
-    sessionPrice.value,
-    snapshot.value.closeLevelQuantityGo ?? 0,
-  );
-  applyQuantityFromBookGo(totalGo);
-}
-
-const visibleAskRows = computed(() =>
-  padAskRowsForDisplay(
-    sliceAskRowsForDisplay(
-      snapshot.value?.askLevels ?? [],
-      depthCount.value,
-      sessionPrice.value,
-      snapshot.value?.closeLevelQuantityGo ?? 0,
-    ),
-    depthCount.value,
-  ),
+const chartActive = computed(
+  () => props.visible && dialogOpened.value && dailyBars.value.length > 0,
 );
-
-const visibleBidRows = computed(() =>
-  padBidRowsForDisplay(
-    sliceBidRowsForDisplay(
-      snapshot.value?.bidLevels ?? [],
-      depthCount.value,
-      sessionPrice.value,
-      snapshot.value?.closeLevelQuantityGo ?? 0,
-    ),
-    depthCount.value,
-  ),
-);
-
-const playerOpenOrders = computed(() => snapshot.value?.playerOpenOrders ?? []);
-
-function formatOrderTime(order: StrategyMarketOpenOrder): string {
-  if (order.createdYear <= 0) return "—";
-  return `${order.createdYear}/${order.createdMonth}/${order.createdDay}`;
-}
-
-function formatOrderSideLabel(sideValue: string): string {
-  return sideValue.toLowerCase() === "sell" ? "卖" : "买";
-}
-
-function formatOrderSideClass(sideValue: string): string {
-  return sideValue.toLowerCase() === "sell" ? "order-side--sell" : "order-side--buy";
-}
-
-function formatOrderQuantityNumber(quantityGo: number): string {
-  return formatMarketQuantityFromGo(quantityGo, activeCommodityMeta.value);
-}
-
-function formatFillStatusLabel(order: StrategyMarketOpenOrder): string {
-  if (order.fillStatus === "Filled") return "已成";
-  if (order.fillStatus === "Partial") return "部成";
-  return "未成";
-}
-
-function formatFillStatusClass(order: StrategyMarketOpenOrder): string {
-  if (order.fillStatus === "Filled") return "order-fill--filled";
-  if (order.fillStatus === "Partial") return "order-fill--partial";
-  return "order-fill--open";
-}
-
-function isOrderCancellable(order: StrategyMarketOpenOrder): boolean {
-  return order.quantityGo > 0;
-}
-
-const cancellingOrderId = ref<number | null>(null);
-
-const maxTradeUnits = computed(() =>
-  resolveMaxTradeUnits(
-    side.value,
-    activeCommodityMeta.value,
-    treasuryMoney.value,
-    treasuryStock.value,
-    limitPrice.value,
-  ),
-);
-
-const quantityStops = computed(() => buildTradeQuantityKokuStops(maxTradeUnits.value));
-
-const quantityUnitMarks = computed(() => buildTradeQuantityKokuMarks(quantityStops.value));
-
-const quantitySliderLabel = computed(() =>
-  quantityUnits.value <= 0
-    ? `0 = 尽可能多`
-    : `限价 ${quantityUnits.value} ${activeCommodityMeta.value.quantityStepLabel}`,
-);
-
-watch([side, maxTradeUnits, commodityTab], () => {
-  quantityUnits.value = 0;
-});
-
-watch(quantityUnits, (value) => {
-  const max = maxTradeUnits.value;
-  if (value > 0 && max > 0 && value > max) quantityUnits.value = max;
-});
-
-function formatFilledVolumeText(order: StrategyMarketOpenOrder): string {
-  const filled = formatOrderQuantityNumber(order.filledQuantityGo);
-  const total = formatOrderQuantityNumber(order.originalQuantityGo);
-  return `${filled}/${total}（${formatFillStatusLabel(order)}）`;
-}
 
 async function loadSnapshot() {
   if (!props.strongholdId) return;
   loading.value = true;
-  error.value = "";
+  loadError.value = "";
   try {
     snapshot.value = await fetchMarketSnapshot(props.strongholdId, commodityTab.value);
     snapshotGeneration.value += 1;
     if (snapshot.value) {
-      logMarketBookSnapshot("loadSnapshot", snapshot.value, depthCount.value);
-    }
-    if (snapshot.value.lastClosePriceMoneyPerGo > 0) {
-      limitPrice.value = resolveSessionPrice(
-        snapshot.value.dailyBars,
-        snapshot.value.lastClosePriceMoneyPerGo,
-      );
-    } else if (activeCommodityMeta.value.defaultPriceMoneyPerUnit > 0) {
-      limitPrice.value = activeCommodityMeta.value.defaultPriceMoneyPerUnit;
+      logMarketBookSnapshot("loadSnapshot", snapshot.value, DEPTH_DEFAULT);
     }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "加载市场失败";
+    loadError.value = e instanceof Error ? e.message : "加载市场失败";
     snapshot.value = null;
   } finally {
     loading.value = false;
@@ -355,152 +80,27 @@ async function loadSnapshot() {
 }
 
 watch(
-  () => [props.visible, props.strongholdId, commodityTab.value] as const,
+  () =>
+    [
+      props.visible,
+      props.strongholdId,
+      commodityTab.value,
+      props.worldState?.date.year,
+      props.worldState?.date.month,
+      props.worldState?.date.day,
+    ] as const,
   ([visible, id]) => {
     if (!visible || id == null) return;
-    resetTreasuryOverrides();
     void loadSnapshot();
   },
 );
 
-watch(
-  () =>
-    [
-      props.lordMoney,
-      props.lordFood,
-      props.lordHorse,
-      props.tradeUnit?.money,
-      props.tradeUnit?.food,
-      props.tradeUnit?.horse,
-      tradeMode.value,
-    ] as const,
-  () => {
-    resetTreasuryOverrides();
-  },
-);
-
-function resolveTradeQuantityGo(): number {
-  if (quantityUnits.value <= 0) return 0;
-  return resolveTradeQuantityGoForMeta(quantityUnits.value, activeCommodityMeta.value);
+function onTraded(state: StrategyWorldState) {
+  emit("traded", state);
 }
 
-function validateTradeRequest(quantityGo: number): string | null {
-  const meta = activeCommodityMeta.value;
-  if (limitPrice.value <= 0) return "请输入有效价格";
-
-  if (side.value === "sell") {
-    if (treasuryStock.value <= 0) {
-      return `${meta.name}不足（可能已有卖单锁定了库存）`;
-    }
-    const requestedGo = quantityGo > 0 ? quantityGo : treasuryStock.value;
-    if (requestedGo > treasuryStock.value) {
-      return `卖出数量超过可用${meta.volumeUnitLabel}`;
-    }
-    return null;
-  }
-
-  if (treasuryMoney.value <= 0) return "资金不足";
-  if (quantityGo <= 0) return null;
-
-  const cost = limitPrice.value * quantityGo;
-  if (cost > treasuryMoney.value) return "买入所需资金超过可用金钱";
-  return null;
-}
-
-async function submitTrade() {
-  if (!commodityTradeEnabled.value || props.strongholdId == null) return;
-  if (tradeMode.value === "unit" && !tradeUnitId.value) return;
-
-  const quantityGo = resolveTradeQuantityGo();
-  const validationError = validateTradeRequest(quantityGo);
-  if (validationError) {
-    error.value = validationError;
-    return;
-  }
-
-  loading.value = true;
-  error.value = "";
-  try {
-    let nextState: StrategyWorldState | null = null;
-    const isHorse = commodityTab.value === "Horse";
-    if (tradeMode.value === "lord") {
-      if (side.value === "buy") {
-        nextState = isHorse
-          ? await strongholdLordSmashBuyHorse(props.strongholdId, {
-              maxPriceMoneyPerGo: limitPrice.value,
-              quantityGo,
-            })
-          : await strongholdLordSmashBuyFood(props.strongholdId, {
-              maxPriceMoneyPerGo: limitPrice.value,
-              quantityGo,
-            });
-      } else {
-        nextState = isHorse
-          ? await strongholdLordSmashSellHorse(props.strongholdId, {
-              minPriceMoneyPerGo: limitPrice.value,
-              quantityGo,
-            })
-          : await strongholdLordSmashSellFood(props.strongholdId, {
-              minPriceMoneyPerGo: limitPrice.value,
-              quantityGo,
-            });
-      }
-    } else if (tradeUnitId.value) {
-      if (side.value === "buy") {
-        nextState = isHorse
-          ? await unitSmashBuyHorse(tradeUnitId.value, {
-              maxPriceMoneyPerGo: limitPrice.value,
-              quantityGo,
-            })
-          : await unitSmashBuyFood(tradeUnitId.value, {
-              maxPriceMoneyPerGo: limitPrice.value,
-              quantityGo,
-            });
-      } else {
-        nextState = isHorse
-          ? await unitSmashSellHorse(tradeUnitId.value, {
-              minPriceMoneyPerGo: limitPrice.value,
-              quantityGo,
-            })
-          : await unitSmashSellFood(tradeUnitId.value, {
-              minPriceMoneyPerGo: limitPrice.value,
-              quantityGo,
-            });
-      }
-    }
-    if (!nextState) return;
-
-    applyTreasuryFromState(nextState);
-    emit("traded", nextState);
-    await loadSnapshot();
-    quantityUnits.value = 0;
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : "成交失败";
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function cancelOrder(orderId: number) {
-  if (tradeMode.value !== "lord" || props.strongholdId == null) return;
-
-  loading.value = true;
-  error.value = "";
-  cancellingOrderId.value = orderId;
-  try {
-    const nextState = await strongholdLordCancelMarketOrder(props.strongholdId, {
-      orderId,
-      commodity: commodityTab.value,
-    });
-    applyTreasuryFromState(nextState);
-    emit("traded", nextState);
-    await loadSnapshot();
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : "撤单失败";
-  } finally {
-    cancellingOrderId.value = null;
-    loading.value = false;
-  }
+function onRefresh() {
+  void loadSnapshot();
 }
 
 function closeDialog() {
@@ -537,198 +137,25 @@ function closeDialog() {
       </button>
     </div>
 
-    <div v-loading="loading" class="market-layout">
-      <section class="market-left-pane">
-        <div class="market-chart-pane">
-          <StrategyMarketEchartsPanel
-            :key="commodityTab"
-            :daily-bars="dailyBars"
-            :display-meta="activeCommodityMeta"
-            :chart-key="commodityTab"
-            :refresh-token="snapshotGeneration"
-            :active="visible && dialogOpened && dailyBars.length > 0"
-          />
-        </div>
+    <StrategyMarketCommodityPane
+      :key="commodityTab"
+      :snapshot="snapshot"
+      :commodity-meta="activeCommodityMeta"
+      :commodity-key="commodityTab"
+      :trade-mode="tradeMode"
+      :stronghold-id="strongholdId"
+      :trade-unit="tradeUnit"
+      :lord-money="lordMoney"
+      :lord-food="lordFood"
+      :lord-horse="lordHorse"
+      :loading="loading"
+      :chart-active="chartActive"
+      :refresh-token="snapshotGeneration"
+      @traded="onTraded"
+      @refresh="onRefresh"
+    />
 
-        <div
-          v-if="canTrade && tradeMode === 'lord'"
-          class="market-orders-pane"
-        >
-          <div class="market-orders-pane__title">挂单列表</div>
-          <div v-if="playerOpenOrders.length === 0" class="trade-readonly-hint">
-            暂无未成交挂单。
-          </div>
-          <div v-else class="order-list">
-            <div class="order-list__head">
-              <span>挂单时间</span>
-              <span>方向</span>
-              <span>价格</span>
-              <span>挂单量（{{ activeCommodityMeta.volumeUnitLabel }}）</span>
-              <span>成交量（{{ activeCommodityMeta.volumeUnitLabel }}）</span>
-              <span />
-            </div>
-            <div v-for="order in playerOpenOrders" :key="order.id" class="order-row">
-              <span class="order-time">{{ formatOrderTime(order) }}</span>
-              <span class="order-side" :class="formatOrderSideClass(order.side)">
-                {{ formatOrderSideLabel(order.side) }}
-              </span>
-              <span class="order-price">{{ formatMarketPrice(order.priceMoneyPerGo) }}</span>
-              <span class="order-qty">{{ formatOrderQuantityNumber(order.quantityGo) }}</span>
-              <span class="order-fill" :class="formatFillStatusClass(order)">
-                {{ formatFilledVolumeText(order) }}
-              </span>
-              <el-button
-                v-if="isOrderCancellable(order)"
-                size="small"
-                type="danger"
-                plain
-                :loading="cancellingOrderId === order.id"
-                @click="cancelOrder(order.id)"
-              >
-                撤单
-              </el-button>
-              <span v-else />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="market-book-pane">
-        <div class="depth-book">
-          <div class="depth-header">
-            <span class="depth-rank" />
-            <span class="depth-price">价格/贯</span>
-            <span class="depth-qty">数量/{{ activeCommodityMeta.volumeUnitLabel }}</span>
-          </div>
-
-          <div
-            v-for="(level, idx) in visibleAskRows"
-            :key="`a-${idx}`"
-            class="depth-row"
-            :class="[
-              level.priceMoneyPerGo > 0 ? 'depth-row--pickable' : 'depth-row--empty',
-              level.priceMoneyPerGo > 0 ? depthRowPriceClass(level.priceMoneyPerGo, sessionPrice) : '',
-            ]"
-            @click="level.priceMoneyPerGo > 0 && selectAskPrice(level.priceMoneyPerGo)"
-          >
-            <span class="depth-rank">{{ askDepthRank(idx) }}</span>
-            <template v-if="level.priceMoneyPerGo > 0">
-              <span class="depth-price">{{ formatMarketPrice(level.priceMoneyPerGo) }}</span>
-              <span class="depth-qty">{{ formatDepthVolume(level.quantityGo) }}</span>
-            </template>
-            <template v-else>
-              <span class="depth-price depth-cell--empty">—</span>
-              <span class="depth-qty depth-cell--empty">—</span>
-            </template>
-          </div>
-
-          <div class="depth-depth-bar">
-            <div
-              class="depth-depth-toggle"
-              role="button"
-              tabindex="0"
-              :title="depthExpanded ? '点击收起为 5 档' : '点击展开为 10 档'"
-              @click.stop="toggleDepthExpanded"
-              @keydown.enter.prevent="toggleDepthExpanded"
-              @keydown.space.prevent="toggleDepthExpanded"
-            >
-              <span class="depth-depth-toggle__icon" :class="{ 'is-active': !depthExpanded }">▼</span>
-              <span class="depth-depth-toggle__icon" :class="{ 'is-active': depthExpanded }">▲</span>
-            </div>
-          </div>
-
-          <div
-            v-for="(level, idx) in visibleBidRows"
-            :key="`b-${idx}`"
-            class="depth-row"
-            :class="[
-              level.priceMoneyPerGo > 0 ? 'depth-row--pickable' : 'depth-row--empty',
-              level.priceMoneyPerGo > 0 ? depthRowPriceClass(level.priceMoneyPerGo, sessionPrice) : '',
-            ]"
-            @click="level.priceMoneyPerGo > 0 && selectBidPrice(level.priceMoneyPerGo)"
-          >
-            <span class="depth-rank">{{ bidDepthRank(idx) }}</span>
-            <template v-if="level.priceMoneyPerGo > 0">
-              <span class="depth-price">{{ formatMarketPrice(level.priceMoneyPerGo) }}</span>
-              <span class="depth-qty">{{ formatDepthVolume(level.quantityGo) }}</span>
-            </template>
-            <template v-else>
-              <span class="depth-price depth-cell--empty">—</span>
-              <span class="depth-qty depth-cell--empty">—</span>
-            </template>
-          </div>
-        </div>
-
-        <div v-if="tradeMode === 'view'" class="trade-readonly-hint">
-          个人仅可查看行情；大宗买卖须通过商队或势力交易任务。
-        </div>
-
-        <div v-else-if="!activeCommodityMeta.tradeEnabled" class="trade-readonly-hint">
-          「{{ activeCommodityMeta.name }}」交易尚未实装。
-        </div>
-
-        <div v-else-if="canTrade" class="trade-form">
-          <div class="trade-unit-hint">
-            {{ treasuryLabel }}：💰{{ treasuryMoneyText }} · {{ activeCommodityMeta.treasuryIcon }}{{ treasuryStockText }}{{ activeCommodityMeta.volumeUnitLabel }}
-          </div>
-
-          <div class="trade-tabs">
-            <button
-              v-for="tab in TRADE_TABS"
-              :key="tab.key"
-              type="button"
-              class="trade-tab"
-              :class="{ active: tradeTab === tab.key }"
-              @click="tradeTab = tab.key"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
-
-          <template v-if="tradeTab === 'buy' || tradeTab === 'sell'">
-            <div class="trade-fields">
-              <label class="trade-field">
-                <span class="trade-field__label">交易价格（{{ activeCommodityMeta.priceUnitLabel }}）</span>
-                <el-input-number
-                  v-model="limitPrice"
-                  class="trade-field__input trade-field__input--block"
-                  :min="1"
-                  :step="1"
-                  controls-position="right"
-                />
-              </label>
-              <label class="trade-field">
-                <span class="trade-field__label">数量（{{ activeCommodityMeta.quantityStepLabel }}）</span>
-                <el-input-number
-                  v-model="quantityUnits"
-                  class="trade-field__input trade-field__input--block"
-                  :min="0"
-                  :max="Math.max(0, maxTradeUnits)"
-                  :step="1"
-                  controls-position="right"
-                  :disabled="maxTradeUnits <= 0"
-                />
-                <div class="trade-field__hint">{{ quantitySliderLabel }}</div>
-                <el-slider
-                  v-model="quantityUnits"
-                  class="quantity-slider"
-                  :min="0"
-                  :max="Math.max(0, maxTradeUnits)"
-                  :step="1"
-                  :marks="quantityUnitMarks"
-                  :disabled="maxTradeUnits <= 0"
-                />
-              </label>
-            </div>
-            <el-button type="primary" :disabled="!commodityTradeEnabled" @click="submitTrade">
-              确认{{ side === "buy" ? "买入" : "卖出" }}
-            </el-button>
-          </template>
-        </div>
-      </section>
-    </div>
-
-    <p v-if="error" class="market-error">{{ error }}</p>
+    <p v-if="loadError" class="market-error">{{ loadError }}</p>
 
     <template #footer>
       <el-button @click="closeDialog">关闭</el-button>
@@ -769,321 +196,6 @@ function closeDialog() {
   margin-left: 4px;
   font-size: 11px;
   opacity: 0.7;
-}
-
-.market-layout {
-  display: grid;
-  grid-template-columns: 1fr 220px;
-  gap: 16px;
-  min-height: 480px;
-}
-
-.market-left-pane {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 480px;
-}
-
-.market-chart-pane {
-  flex: 1;
-  min-height: 280px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  padding: 8px;
-}
-
-.market-orders-pane {
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  padding: 10px 16px;
-  max-height: 220px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.market-orders-pane__title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.market-book-pane {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 10px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  padding: 10px;
-}
-
-.depth-book {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.depth-header,
-.depth-row {
-  display: grid;
-  grid-template-columns: 22px 1fr auto;
-  gap: 6px;
-  align-items: center;
-}
-
-.depth-header {
-  padding: 0 2px 4px;
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  margin-bottom: 2px;
-}
-
-.depth-row {
-  padding: 1px 2px;
-  min-height: 18px;
-}
-
-.depth-rank {
-  text-align: center;
-  font-size: 10px;
-  color: var(--el-text-color-secondary);
-  font-variant-numeric: tabular-nums;
-  user-select: none;
-}
-
-.depth-row--empty .depth-rank {
-  color: var(--el-text-color-placeholder);
-}
-
-.depth-row--pickable {
-  cursor: pointer;
-  border-radius: 3px;
-  padding: 1px 4px;
-}
-
-.depth-row--pickable:hover {
-  background: var(--el-fill-color-light);
-}
-
-.depth-row--empty {
-  color: var(--el-text-color-placeholder);
-  cursor: default;
-}
-
-.depth-cell--empty {
-  color: var(--el-text-color-placeholder);
-  letter-spacing: 0.08em;
-}
-
-.depth-row--above {
-  color: #16a34a;
-}
-
-.depth-row--below {
-  color: #dc2626;
-}
-
-.depth-row--close {
-  color: #6b7280;
-  font-weight: 600;
-}
-
-.depth-depth-bar {
-  margin: 0;
-}
-
-.depth-depth-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  height: 14px;
-  margin: 2px 0;
-  border-top: 1px solid var(--el-border-color);
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  cursor: pointer;
-  color: var(--el-text-color-secondary);
-  font-size: 10px;
-  line-height: 1;
-}
-
-.depth-depth-toggle:hover {
-  color: var(--el-color-primary);
-}
-
-.depth-depth-toggle__icon {
-  opacity: 0.35;
-  user-select: none;
-}
-
-.depth-depth-toggle__icon.is-active {
-  opacity: 1;
-  color: var(--el-color-primary);
-}
-
-.depth-price {
-  text-align: left;
-}
-
-.depth-qty {
-  text-align: right;
-}
-
-.trade-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.trade-field__label {
-  font-size: 12px;
-  color: var(--el-text-color-regular);
-}
-
-.trade-field__input--block {
-  width: 100%;
-}
-
-.trade-field__input--block :deep(.el-input-number) {
-  width: 100%;
-}
-
-.trade-field__hint {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.quantity-slider {
-  padding: 0 4px 28px 0;
-}
-
-.quantity-slider :deep(.el-slider__marks-text) {
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.trade-readonly-hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.5;
-}
-
-.trade-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-top: 1px solid var(--el-border-color-lighter);
-  padding-top: 8px;
-}
-
-.trade-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-}
-
-.trade-tab {
-  border: 1px solid var(--el-border-color);
-  background: var(--el-fill-color-blank);
-  border-radius: 8px;
-  padding: 8px 4px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-
-.trade-tab.active {
-  border-color: var(--el-color-primary);
-  color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-}
-
-.order-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  font-size: 11px;
-}
-
-.order-list__head,
-.order-row {
-  display: grid;
-  grid-template-columns:
-    minmax(76px, 1fr)
-    minmax(40px, 0.55fr)
-    minmax(48px, 0.65fr)
-    minmax(68px, 0.85fr)
-    minmax(148px, 1.35fr)
-    52px;
-  gap: 10px 14px;
-  align-items: center;
-  padding: 0 4px;
-}
-
-.order-list__head {
-  color: var(--el-text-color-secondary);
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  font-size: 11px;
-}
-
-.order-row {
-  padding: 5px 6px;
-  border-bottom: 1px dashed var(--el-border-color-extra-light);
-}
-
-.order-side--buy {
-  color: #dc2626;
-  font-weight: 600;
-}
-
-.order-side--sell {
-  color: #16a34a;
-  font-weight: 600;
-}
-
-.order-fill {
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.order-fill--open {
-  color: var(--el-text-color-regular);
-}
-
-.order-fill--partial {
-  color: var(--el-color-warning);
-}
-
-.order-fill--filled {
-  color: var(--el-color-success);
-}
-
-.order-price,
-.order-qty,
-.order-time {
-  font-variant-numeric: tabular-nums;
-}
-
-.trade-unit-hint {
-  font-size: 12px;
-}
-
-.trade-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .market-error {

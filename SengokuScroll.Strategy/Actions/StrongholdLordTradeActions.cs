@@ -64,12 +64,6 @@ public static class StrongholdLordTradeActions
 
         if (result.HasTradeEffect)
         {
-            MarketAiRefreshHelper.RefreshAfterTrade(
-                stronghold,
-                gameData,
-                MarketCommodityType.Food,
-                taxLedger);
-
             if (gameData.Forces.TryGetValue(stronghold.ForceId, out var force))
                 ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);
         }
@@ -110,12 +104,6 @@ public static class StrongholdLordTradeActions
 
         if (result.HasTradeEffect)
         {
-            MarketAiRefreshHelper.RefreshAfterTrade(
-                stronghold,
-                gameData,
-                MarketCommodityType.Food,
-                taxLedger);
-
             if (gameData.Forces.TryGetValue(stronghold.ForceId, out var force))
                 ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);
         }
@@ -194,8 +182,6 @@ public static class StrongholdLordTradeActions
 
         if (result.HasTradeEffect)
         {
-            MarketAiRefreshHelper.RefreshAfterTrade(stronghold, gameData, commodity, taxLedger);
-
             if (gameData.Forces.TryGetValue(stronghold.ForceId, out var force))
                 ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);
         }
@@ -236,8 +222,6 @@ public static class StrongholdLordTradeActions
 
         if (result.HasTradeEffect)
         {
-            MarketAiRefreshHelper.RefreshAfterTrade(stronghold, gameData, commodity, taxLedger);
-
             if (gameData.Forces.TryGetValue(stronghold.ForceId, out var force))
                 ForceEconomyActions.SyncForceTreasuryFromStrongholds(force, gameData);
         }

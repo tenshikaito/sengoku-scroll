@@ -100,6 +100,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<StrategyRecruitTaskSystem>();
         services.AddSingleton<IStrategyRecruitTaskSystem>(sp => sp.GetRequiredService<StrategyRecruitTaskSystem>());
 
+        services.AddSingleton<StrategyDiplomacyMissionSystem>();
+        services.AddSingleton<IStrategyDiplomacyMissionSystem>(
+            sp => sp.GetRequiredService<StrategyDiplomacyMissionSystem>());
+
         services.AddSingleton<StrategyStrongholdGovernanceSystem>();
         services.AddSingleton<IStrategyStrongholdGovernanceSystem>(
             sp => sp.GetRequiredService<StrategyStrongholdGovernanceSystem>());
@@ -140,6 +144,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IStrategyRecruitTaskSystem>(),
             sp.GetRequiredService<IStrategyCharacterAISystem>(),
             sp.GetRequiredService<IAISystem>(),
+            sp.GetRequiredService<IStrategyDiplomacyMissionSystem>(),
             sp.GetRequiredService<IUnitSystem>(),
             sp.GetRequiredService<IStrategyVisionSystem>(),
             sp.GetRequiredService<IStrategySiegeSystem>(),

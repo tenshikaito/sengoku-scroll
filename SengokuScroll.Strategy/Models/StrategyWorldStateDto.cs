@@ -1070,6 +1070,24 @@ public sealed record StrategyMapPointDto
     public required int Y { get; init; }
 }
 
+/// <summary>外交使节任务预览响应。</summary>
+public sealed record StrategyDiplomacyMissionPreviewDto
+{
+    public required int SuccessChancePercent { get; init; }
+
+    public required int TravelDays { get; init; }
+
+    public IReadOnlyList<StrategyDiplomacyMissionOfficerDto>? IdleOfficers { get; init; }
+}
+
+/// <summary>可派遣外交使节的空闲将领。</summary>
+public sealed record StrategyDiplomacyMissionOfficerDto
+{
+    public required int CharacterId { get; init; }
+
+    public required string Name { get; init; }
+}
+
 /// <summary>路径预览响应。</summary>
 public sealed record StrategyPathPreviewDto
 {

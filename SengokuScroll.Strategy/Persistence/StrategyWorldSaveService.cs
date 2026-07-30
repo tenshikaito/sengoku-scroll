@@ -180,6 +180,17 @@ public sealed class StrategySaveIntelTask
     public required string Remaining { get; init; }
 }
 
+public sealed class StrategySaveDiplomacyMission
+{
+    public required string Action { get; init; }
+
+    public int TargetForceId { get; init; }
+
+    public int RemainingDays { get; init; }
+
+    public int SuccessChancePercent { get; init; }
+}
+
 public sealed class StrategySaveCharacter
 {
     public required int Id { get; init; }
@@ -193,6 +204,10 @@ public sealed class StrategySaveCharacter
     public List<StrategySaveEntityEffect>? ActiveEffects { get; init; }
 
     public List<StrategySaveIntelTask>? IntelTasks { get; init; }
+
+    public StrategySaveDiplomacyMission? DiplomacyMission { get; init; }
+
+    public string? ForceStatus { get; init; }
 }
 
 public sealed class StrategySaveDiplomacy
@@ -415,6 +430,23 @@ public static class StrategyWorldSaveService
                         })
                         .ToList();
                 }
+
+                if (charSave.DiplomacyMission is { } missionSave)
+                {
+                    character.DiplomacyMission = new CharacterDiplomacyMission
+                    {
+                        Action = missionSave.Action,
+                        TargetForceId = missionSave.TargetForceId,
+                        RemainingDays = missionSave.RemainingDays,
+                        SuccessChancePercent = missionSave.SuccessChancePercent,
+                    };
+                }
+
+                if (charSave.ForceStatus is { } forceStatus
+                    && Enum.TryParse<Character.CharacterForceStatus>(forceStatus, ignoreCase: true, out var parsedStatus))
+                {
+                    character.ForceStatus = parsedStatus;
+                }
             }
         }
 
@@ -459,7 +491,9 @@ public static class StrategyWorldSaveService
             && character.ServiceDate.Year <= 0
             && character.Relationships.Count == 0
             && character.ActiveEffects.Count == 0
-            && character.IntelTasks.Count == 0)
+            && character.IntelTasks.Count == 0
+            && character.DiplomacyMission is null
+            && character.ForceStatus == Character.CharacterForceStatus.Idle)
         {
             return null;
         }
@@ -488,7 +522,19 @@ public static class StrategyWorldSaveService
                     Target = t.Target,
                     Status = t.Status,
                     Remaining = t.Remaining
-                })]
+                })],
+            DiplomacyMission = character.DiplomacyMission is null
+                ? null
+                : new StrategySaveDiplomacyMission
+                {
+                    Action = character.DiplomacyMission.Action,
+                    TargetForceId = character.DiplomacyMission.TargetForceId,
+                    RemainingDays = character.DiplomacyMission.RemainingDays,
+                    SuccessChancePercent = character.DiplomacyMission.SuccessChancePercent,
+                },
+            ForceStatus = character.ForceStatus == Character.CharacterForceStatus.Idle
+                ? null
+                : character.ForceStatus.ToString(),
         };
     }
 

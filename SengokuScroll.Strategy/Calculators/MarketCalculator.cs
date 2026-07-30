@@ -85,17 +85,21 @@ public static class MarketCalculator
         MarketCommodityType commodity,
         GameDate? gameDate)
     {
+        _ = gameDate; // 保留签名兼容；扣量与 MarkFilled 改由 ApplyMatchResult 在结算成功后执行
         var market = stronghold.Market;
         var trades = new List<TradeExecution>();
+        // 业务：撮合仅在副本上扣减数量；结算成功后才写回订单（避免结算失败吃掉挂单量）
         var buys = market.Orders
-            .Where(o => MarketRules.IsBuyOrder(o) && o.Commodity == commodity)
+            .Where(o => MarketRules.IsBuyOrder(o) && o.Commodity == commodity && o.QuantityGo > 0)
             .OrderByDescending(o => o.PriceMoneyPerGo)
             .ThenBy(o => o.Id)
+            .Select(o => new WorkingOrder(o, o.QuantityGo, o.CommittedMoneyGo, o.CommittedInventoryGo))
             .ToList();
         var sells = market.Orders
-            .Where(o => MarketRules.IsSellOrder(o) && o.Commodity == commodity)
+            .Where(o => MarketRules.IsSellOrder(o) && o.Commodity == commodity && o.QuantityGo > 0)
             .OrderBy(o => o.PriceMoneyPerGo)
             .ThenBy(o => o.Id)
+            .Select(o => new WorkingOrder(o, o.QuantityGo, o.CommittedMoneyGo, o.CommittedInventoryGo))
             .ToList();
 
         var open = 0;
@@ -109,33 +113,49 @@ public static class MarketCalculator
             var buy = buys[0];
             var sell = sells[0];
 
+            // 业务：禁止同一 Actor 买卖自成交（商户做市双侧挂单时常见）
+            if (buy.Order.ActorId == sell.Order.ActorId)
+            {
+                sells.RemoveAt(0);
+                continue;
+            }
+
             // 业务：最高买价 < 最低卖价时无法成交，停止撮合
-            if (buy.PriceMoneyPerGo < sell.PriceMoneyPerGo)
+            if (buy.RemainingGo <= 0 || sell.RemainingGo <= 0)
+            {
+                if (buy.RemainingGo <= 0)
+                    buys.RemoveAt(0);
+                if (sell.RemainingGo <= 0)
+                    sells.RemoveAt(0);
+                continue;
+            }
+
+            if (buy.Order.PriceMoneyPerGo < sell.Order.PriceMoneyPerGo)
                 break;
 
             // 业务：成交价取卖单挂价，数量取买卖双方较小挂单量
-            var price = sell.PriceMoneyPerGo;
-            var qty = Math.Min(buy.QuantityGo, sell.QuantityGo);
+            var price = sell.Order.PriceMoneyPerGo;
+            var qty = Math.Min(buy.RemainingGo, sell.RemainingGo);
             if (qty <= 0)
                 break;
 
             trades.Add(new TradeExecution(
-                buy.Id,
-                sell.Id,
+                buy.Order.Id,
+                sell.Order.Id,
                 price,
                 qty,
-                buy.ActorId,
-                sell.ActorId,
-                sell.TaxExempt,
-                sell.InventoryCommitted,
-                buy.MoneyCommitted,
+                buy.Order.ActorId,
+                sell.Order.ActorId,
+                sell.Order.TaxExempt,
+                sell.Order.InventoryCommitted,
+                buy.Order.MoneyCommitted,
                 commodity));
 
-            buy.QuantityGo -= qty;
-            sell.QuantityGo -= qty;
-            if (buy.MoneyCommitted)
+            buy.RemainingGo -= qty;
+            sell.RemainingGo -= qty;
+            if (buy.Order.MoneyCommitted)
                 buy.CommittedMoneyGo = Math.Max(0, buy.CommittedMoneyGo - price * qty);
-            if (sell.InventoryCommitted)
+            if (sell.Order.InventoryCommitted)
                 sell.CommittedInventoryGo = Math.Max(0, sell.CommittedInventoryGo - qty);
             volume += qty;
 
@@ -145,22 +165,14 @@ public static class MarketCalculator
             low = Math.Min(low, price);
             close = price;
 
-            if (buy.QuantityGo <= 0)
-            {
-                if (gameDate is not null)
-                    MarketActions.MarkOrderFullyFilled(buy, gameDate.Value);
+            if (buy.RemainingGo <= 0)
                 buys.RemoveAt(0);
-            }
 
-            if (sell.QuantityGo <= 0)
-            {
-                if (gameDate is not null)
-                    MarketActions.MarkOrderFullyFilled(sell, gameDate.Value);
+            if (sell.RemainingGo <= 0)
                 sells.RemoveAt(0);
-            }
         }
 
-        MarketActions.RemoveZeroQuantityOrders(stronghold, gameDate);
+        // 注意：不在此处改写订单或 RemoveZero；由 ApplyMatchResult 在结算成功后扣量
 
         if (trades.Count == 0)
         {
@@ -171,6 +183,18 @@ public static class MarketCalculator
         }
 
         return new MatchResult(trades, open, high, low == int.MaxValue ? close : low, close, volume);
+    }
+
+    private sealed class WorkingOrder(
+        MarketOrder order,
+        int remainingGo,
+        int committedMoneyGo,
+        int committedInventoryGo)
+    {
+        public MarketOrder Order { get; } = order;
+        public int RemainingGo { get; set; } = remainingGo;
+        public int CommittedMoneyGo { get; set; } = committedMoneyGo;
+        public int CommittedInventoryGo { get; set; } = committedInventoryGo;
     }
 
     /// <summary>市民缺粮时建议买单量（合）。</summary>
@@ -225,7 +249,7 @@ public static class MarketCalculator
             MarketConstants.GovernmentMinSellQuantityGo);
 
         return MarketMakerAiHelper.PreferNearReferenceBids(stronghold)
-            ? MarketMakerAiHelper.BidPrice(reference, 1)
+            ? MarketMakerAiHelper.BidPrice(reference, 1, crossAtReference: true)
             : MarketMakerAiHelper.BidPrice(reference, depth);
     }
 

@@ -1899,6 +1899,94 @@ public sealed class StrategySimulationHost : IDisposable
         }
     }
 
+    /// <summary>预览外交使节任务成功率与行程。</summary>
+    public GameResult<StrategyDiplomacyMissionPreviewDto> PreviewDiplomacyMission(
+        int characterId,
+        int targetForceId,
+        string action)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var gameData = simulation.World.GameData;
+            var playerForceId = meta.PlayerForceId;
+
+            if (!DiplomacyMissionRules.TryParseAction(action, out var normalizedAction))
+                return GameError.DiplomacyError.InvalidForce;
+
+            if (!DiplomacyMissionRules.CanAssignMissionTarget(
+                    gameData, meta, playerForceId, targetForceId, normalizedAction, out var assignError))
+            {
+                return assignError ?? GameError.DiplomacyError.InvalidForce;
+            }
+
+            var travelDays = DiplomacyMissionRules.EstimateTravelDays(
+                gameData,
+                meta,
+                playerForceId,
+                targetForceId);
+            var idleOfficers = DiplomacyMissionRules.ListAssignableEnvoys(gameData, meta, playerForceId)
+                .Select(c => new StrategyDiplomacyMissionOfficerDto
+                {
+                    CharacterId = c.Id,
+                    Name = c.Name,
+                })
+                .ToList();
+
+            var successChance = 0;
+            if (characterId > 0
+                && gameData.Characters.TryGetValue(characterId, out var envoy)
+                && envoy.ForceId == playerForceId)
+            {
+                successChance = DiplomacyMissionRules.EstimateSuccessChancePercent(
+                    envoy,
+                    gameData,
+                    playerForceId,
+                    targetForceId,
+                    action);
+            }
+
+            return new StrategyDiplomacyMissionPreviewDto
+            {
+                SuccessChancePercent = successChance,
+                TravelDays = travelDays,
+                IdleOfficers = idleOfficers,
+            };
+        }
+    }
+
+    /// <summary>派遣外交使节任务（同盟/宣战/议和）。</summary>
+    public GameResult<StrategyWorldStateDto> OrderDiplomacyMission(
+        int characterId,
+        int targetForceId,
+        string action)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var gameData = simulation.World.GameData;
+
+            if (!DiplomacyMissionActions.TryAssignMission(
+                    gameData,
+                    meta,
+                    characterId,
+                    targetForceId,
+                    action,
+                    out var error))
+            {
+                return error ?? GameError.DataNotFound;
+            }
+
+            return BuildStateResult();
+        }
+    }
+
     /// <summary>登记谍报成果（开发/任务用；约 2 个月后过期）。</summary>
     public GameResult<StrategyWorldStateDto> RecordEspionageIntel(
         string targetKind,

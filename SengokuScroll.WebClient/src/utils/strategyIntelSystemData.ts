@@ -424,6 +424,7 @@ export interface IntelStrongholdTechnologyRow {
 export interface IntelDiplomacyRow {
   forceId: number;
   forceName: string;
+  forceNameLinkId?: number;
   lordName: string;
   forceCategory: IntelForceCategory;
   /** 关系值 -100~100。 */
@@ -1511,6 +1512,7 @@ function buildDiplomacyRow(
   return {
     forceId: force.id,
     forceName: forceName(worldState, force.id),
+    forceNameLinkId: force.id,
     lordName: resolveForceLordName(worldState, force.id),
     lordNameLinkId: resolveForceLordCharacterId(worldState, force.id) ?? undefined,
     forceCategory: resolveDiplomacyForceCategory(worldState, force.id),
@@ -1535,6 +1537,7 @@ function buildInnerVassalDiplomacyRow(
     return {
       forceId: force.id,
       forceName: forceName(worldState, force.id),
+      forceNameLinkId: force.id,
       lordName: force.lordName?.trim() || resolveForceLordName(worldState, force.id),
       lordNameLinkId: resolveForceLordCharacterId(worldState, force.id) ?? undefined,
       forceCategory: "武家",
@@ -1551,6 +1554,7 @@ function buildInnerVassalDiplomacyRow(
   return {
     forceId: force.id,
     forceName: forceName(worldState, force.id),
+    forceNameLinkId: force.id,
     lordName: resolveForceLordName(worldState, force.id),
     lordNameLinkId: resolveForceLordCharacterId(worldState, force.id) ?? undefined,
     forceCategory: "武家",
@@ -2388,6 +2392,45 @@ export function diplomacyIntelRows(worldState: StrategyWorldState): IntelDiploma
   }
 
   return rows.sort((a, b) => a.forceName.localeCompare(b.forceName, "zh-Hans"));
+}
+
+/** 外交任务对话框 · 可选目标势力（武家、非本家内藩）。 */
+export function diplomacyMissionTargetRows(worldState: StrategyWorldState): IntelDiplomacyRow[] {
+  return diplomacyIntelRows(worldState).filter(
+    (row) => row.forceCategory === "武家" && row.politicalStatus !== "内藩",
+  );
+}
+
+export function resolvePlayerDiplomacyStatus(
+  worldState: StrategyWorldState,
+  targetForceId: number,
+): string {
+  const targetRoot = resolveRealmRootId(targetForceId, worldState.forces);
+  return lookupPlayerDiplomacy(worldState, targetRoot)?.relation ?? "Neutral";
+}
+
+export type DiplomacyMissionActionKind = "Ally" | "War" | "Peace";
+
+/**
+ * 校验外交任务目标是否合法；返回错误文案或 null。
+ * 可否下令仅看外交状态（Neutral / Allied / Enemy），与 relationship、trust 亲疏/信赖无关。
+ */
+export function validateDiplomacyMissionTarget(
+  worldState: StrategyWorldState,
+  action: DiplomacyMissionActionKind,
+  targetForceId: number,
+): string | null {
+  const status = resolvePlayerDiplomacyStatus(worldState, targetForceId);
+  if (action === "War" && status === "Enemy") {
+    return "已与该势力处于战争状态，无法再次宣战";
+  }
+  if (action === "Ally" && status === "Allied") {
+    return "已与该势力同盟，无法再次提议同盟";
+  }
+  if (action === "Peace" && status !== "Enemy") {
+    return "仅可与处于战争状态的势力议和";
+  }
+  return null;
 }
 
 export function findForceRow(

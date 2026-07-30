@@ -171,6 +171,37 @@ public sealed class StrategyScenarioDefinition
 
     /// <summary>剧本级规则选项（行政效率损耗等）。</summary>
     public StrategyScenarioGameOptions GameOptions { get; init; } = new();
+
+    /// <summary>本局兵种主数据；省略或空则加载后由默认种子填充。</summary>
+    public List<StrategyUnitTypeDefinition>? UnitTypes { get; init; }
+}
+
+/// <summary>剧本兵种类型（对应 Domain <see cref="Definitions.UnitTypeDefinition"/>）。</summary>
+public sealed class StrategyUnitTypeDefinition
+{
+    public required int Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public string? Description { get; init; }
+
+    public int Attack { get; init; }
+
+    public int Defense { get; init; }
+
+    public int AttackRange { get; init; }
+
+    public int Movement { get; init; }
+
+    public int SightRange { get; init; } = 2;
+
+    public int? CultureId { get; init; }
+
+    public int Cost { get; init; }
+
+    public int MaintenanceMoney { get; init; }
+
+    public int MaintenanceFood { get; init; }
 }
 
 /// <summary>剧本开局外交配置。</summary>

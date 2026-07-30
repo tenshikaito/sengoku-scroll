@@ -45,9 +45,7 @@ public static class MarketRules
     public static bool IsBuySide(string side)
         => string.Equals(side, BuySide, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>玩家/官府限价挂单（含锁定资源或挂单日）；AI 刷新时不得覆盖。</summary>
+    /// <summary>玩家/官府限价挂单（挂单日非 0）；AI 刷新时不得覆盖。</summary>
     public static bool IsPlayerRestingOrder(MarketOrder order)
-        => order.MoneyCommitted
-           || order.InventoryCommitted
-           || order.CreatedYear > 0;
+        => order.CreatedYear > 0;
 }

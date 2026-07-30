@@ -122,14 +122,11 @@ public class MarketSnapshotOrderTests
 
         for (var level = 1; level <= DepthCount; level++)
         {
-            MarketActions.AddLimitOrder(
+            MarketTestOrderSeedHelper.PlaceSell(
                 stronghold,
-                MarketRules.SellSide,
                 stronghold.CivilianActor.Id,
                 100 + level,
-                (200 + level) * LogisticsConstants.GoPerKoku,
-                MarketCommodityType.Food,
-                taxExempt: true);
+                (200 + level) * LogisticsConstants.GoPerKoku);
         }
 
         var sellQtyGo = 20_000 * LogisticsConstants.GoPerKoku;
@@ -182,14 +179,11 @@ public class MarketSnapshotOrderTests
 
         for (var level = 1; level <= DepthCount; level++)
         {
-            MarketActions.AddLimitOrder(
+            MarketTestOrderSeedHelper.PlaceSell(
                 stronghold,
-                MarketRules.SellSide,
                 stronghold.CivilianActor.Id,
                 100 + level,
-                (200 + level) * LogisticsConstants.GoPerKoku,
-                MarketCommodityType.Food,
-                taxExempt: true);
+                (200 + level) * LogisticsConstants.GoPerKoku);
         }
 
         var sellQtyGo = 20_000 * LogisticsConstants.GoPerKoku;
@@ -242,14 +236,11 @@ public class MarketSnapshotOrderTests
 
         for (var level = 1; level <= MarketBootstrapHelper.DemoDepthLevels; level++)
         {
-            MarketActions.AddLimitOrder(
+            MarketTestOrderSeedHelper.PlaceSell(
                 stronghold,
-                MarketRules.SellSide,
                 stronghold.CivilianActor.Id,
                 sessionPrice + level,
-                (200 + level) * LogisticsConstants.GoPerKoku,
-                MarketCommodityType.Food,
-                taxExempt: true);
+                (200 + level) * LogisticsConstants.GoPerKoku);
         }
 
         var sellQtyGo = 20_000 * LogisticsConstants.GoPerKoku;
@@ -303,24 +294,20 @@ public class MarketSnapshotOrderTests
         for (var level = 1; level <= depth; level++)
         {
             var askPrice = sessionPrice + level;
-            MarketActions.AddLimitOrder(
+            var askQty = (100 + level) * LogisticsConstants.GoPerKoku;
+            MarketTestOrderSeedHelper.PlaceSell(
                 stronghold,
-                MarketRules.SellSide,
                 stronghold.CivilianActor.Id,
                 askPrice,
-                (100 + level) * LogisticsConstants.GoPerKoku,
-                MarketCommodityType.Food,
-                taxExempt: true);
+                askQty);
 
             var bidPrice = sessionPrice - level;
-            MarketActions.AddLimitOrder(
+            var bidQty = (110 + level) * LogisticsConstants.GoPerKoku;
+            MarketTestOrderSeedHelper.PlaceBuy(
                 stronghold,
-                MarketRules.BuySide,
                 stronghold.CivilianActor.Id,
                 bidPrice,
-                (110 + level) * LogisticsConstants.GoPerKoku,
-                MarketCommodityType.Food,
-                taxExempt: true);
+                bidQty);
         }
     }
 

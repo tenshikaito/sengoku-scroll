@@ -14,4 +14,8 @@ public static class MarketInventoryHelper
 
     public static bool TryRemoveStock(StrongholdActor actor, MarketCommodityType commodity, int quantity)
         => CommodityInventoryHelper.TryRemoveStock(actor, commodity, quantity);
+
+    /// <summary>检查库存是否足够，不扣减。</summary>
+    public static bool TryPeekStock(StrongholdActor actor, MarketCommodityType commodity, int quantity)
+        => quantity > 0 && GetStock(actor, commodity) >= quantity;
 }

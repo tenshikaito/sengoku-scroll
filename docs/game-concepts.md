@@ -212,7 +212,7 @@
 | **UnitKind** | `Military` / `Convoy` / `Merchant` / `Migrant` …；指令集与是否可做市 **挂在 Unit 上**，不在 SubUnit 上。 | 🟡 | `UnitKind.cs` |
 | **子编制 SubUnit** | 兵种段（足轻一队/二队等 **独立队名**）；挂于 `Unit.SubUnitIds` 或 Home 据点 `ForceActor.SubUnitIds`（`UnitId=0`）。 | 🟡 | `SubUnit.cs` |
 | **TotalSoldiers** | Unit / Actor 上的 **总兵数**（SubUnit 合计；与 `SubUnit.Soldier` 语义对齐）。 | 🟡 | `Actor.cs` · `Unit.cs` |
-| **LeaderId** | 出征/组建时绑定的将领 Character；`0` 表示 **备队大将**（占位，见 §6.4）。 | 🟡 | `Unit.cs` |
+| **LeaderId** | 出征/组建时绑定的将领 Character；`0` = 备队大将占位，或 **移民队无总将**。商家贸易队须绑定店员/商家组织角色，**不得**回退武家代官。 | 🟡 | `Unit.cs` · `TradeConvoyUnitFactory.cs` |
 | **InStronghold** | `true`：Unit **在城内**，**不占** `GameMapData.Units` 格索引；视野仍按据点格计算。 | 🟡 | `Unit.cs` · `MapLocationActions.cs` |
 | **HomeStrongholdId** | 编制归属据点；**仅在此城** 可执行 **建制解散**（SubUnit 回列表、物资归城）。 | 🟡 | `Unit.cs` |
 | **LocationStrongholdId** | 当前驻留据点（协防友城时 ≠ Home）；非 Home **禁止** 手动解散。 | 🟡 | `Unit.cs` |
@@ -499,7 +499,7 @@
 |--------|------|------|------|
 | `Supply` | 军事补给 | 向野战单位送粮 | ✅ |
 | `Tribute` | 贡赋上缴 | 收粮日粮纳 | ✅ |
-| `Trade` | 跨据点贸易 | 商人/官府贸易队 | ✅ |
+| `Trade` | 跨据点贸易 | **仅商家组织**贸易队（武家不派 Trade） | ✅ |
 | `TaxMoney` | 钱税运输 | 每月 1 日钱纳 | ✅ |
 
 **关键文件**：`TransportPurpose.cs` · `StrategySupplySystem.cs`

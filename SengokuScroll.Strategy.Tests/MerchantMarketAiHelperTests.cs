@@ -1,6 +1,7 @@
 using SengokuScroll.Common.Types;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
+using SengokuScroll.Strategy.Actions;
 using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Rules;
@@ -11,7 +12,7 @@ namespace SengokuScroll.Strategy.Tests;
 public class MerchantMarketAiHelperTests
 {
     [Fact]
-    public void EvaluateAndPlaceOrders_PlacesVariableDepthAsks_WithNearHeavySizing()
+    public void EvaluateAndPlaceOrders_WithoutExternalBids_UndercutsBelowReference()
     {
         var stronghold = CreateStrongholdWithMerchant(merchantFood: 500_000, merchantMoney: 300_000);
         stronghold.Market.LastClosePriceMoneyPerGo = 90;
@@ -22,31 +23,62 @@ public class MerchantMarketAiHelperTests
             .Where(o => MarketRules.IsSellOrder(o) && o.Commodity == MarketCommodityType.Food)
             .OrderBy(o => o.PriceMoneyPerGo)
             .ToList();
+        var buys = stronghold.Market.Orders
+            .Where(o => MarketRules.IsBuyOrder(o) && o.ActorId == 901)
+            .ToList();
 
         Assert.InRange(sells.Count, MarketConstants.MarketMinDepthLevels, MarketConstants.MarketMaxDepthLevels);
-        Assert.Equal(91, sells[0].PriceMoneyPerGo);
-        Assert.True(sells[^1].PriceMoneyPerGo > sells[0].PriceMoneyPerGo);
-        Assert.True(sells[0].QuantityGo > sells[^1].QuantityGo);
+        // 业务：无外部买盘时低价抛售（至少低于中枢捡漏折扣），并撤销本店买盘防自成交
+        Assert.True(sells[0].PriceMoneyPerGo <= 85);
+        Assert.Empty(buys);
         Assert.All(sells, o => Assert.False(o.TaxExempt));
     }
 
     [Fact]
-    public void EvaluateAndPlaceOrders_PlacesVariableDepthBids_BelowReference()
+    public void EvaluateAndPlaceOrders_WithExternalBidBelowReference_UndercutsToBestBid()
     {
         var stronghold = CreateStrongholdWithMerchant(merchantFood: 500_000, merchantMoney: 300_000);
-        stronghold.Market.LastClosePriceMoneyPerGo = 90;
+        stronghold.Market.LastClosePriceMoneyPerGo = 100;
+        MarketActions.AddOrMergeBuyOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            92,
+            2_000,
+            MarketCommodityType.Food,
+            taxExempt: true);
 
         MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold);
 
-        var buys = stronghold.Market.Orders
-            .Where(o => MarketRules.IsBuyOrder(o) && o.Commodity == MarketCommodityType.Food)
-            .OrderByDescending(o => o.PriceMoneyPerGo)
+        var bestAsk = stronghold.Market.Orders
+            .Where(o => MarketRules.IsSellOrder(o) && o.ActorId == 901)
+            .Min(o => o.PriceMoneyPerGo);
+
+        Assert.Equal(92, bestAsk);
+    }
+
+    [Fact]
+    public void EvaluateAndPlaceOrders_WithExternalBidAtReference_PlacesAsksAtOrAboveMid()
+    {
+        var stronghold = CreateStrongholdWithMerchant(merchantFood: 500_000, merchantMoney: 300_000);
+        stronghold.Market.LastClosePriceMoneyPerGo = 90;
+        MarketActions.AddOrMergeBuyOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            90,
+            5_000,
+            MarketCommodityType.Food,
+            taxExempt: true);
+
+        MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold);
+
+        var sells = stronghold.Market.Orders
+            .Where(o => MarketRules.IsSellOrder(o) && o.ActorId == 901)
+            .OrderBy(o => o.PriceMoneyPerGo)
             .ToList();
 
-        Assert.InRange(buys.Count, MarketConstants.MarketMinDepthLevels, MarketConstants.MarketMaxDepthLevels);
-        Assert.True(buys[0].PriceMoneyPerGo <= 89);
-        Assert.True(buys[0].PriceMoneyPerGo > buys[^1].PriceMoneyPerGo);
-        Assert.True(buys[^1].QuantityGo >= buys[0].QuantityGo);
+        Assert.NotEmpty(sells);
+        Assert.Equal(90, sells[0].PriceMoneyPerGo);
+        Assert.True(sells[^1].PriceMoneyPerGo >= sells[0].PriceMoneyPerGo);
     }
 
     [Fact]
@@ -54,10 +86,17 @@ public class MerchantMarketAiHelperTests
     {
         var stronghold = CreateStrongholdWithMerchant(merchantFood: 500_000, merchantMoney: 300_000);
         stronghold.Market.LastClosePriceMoneyPerGo = 90;
+        MarketActions.AddOrMergeBuyOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            90,
+            5_000,
+            MarketCommodityType.Food,
+            taxExempt: true);
 
         MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold);
         var firstPass = stronghold.Market.Orders
-            .Single(o => o.PriceMoneyPerGo == 91 && MarketRules.IsSellOrder(o));
+            .Single(o => o.PriceMoneyPerGo == 90 && MarketRules.IsSellOrder(o) && o.ActorId == 901);
         var firstId = firstPass.Id;
         var firstQty = firstPass.QuantityGo;
 
@@ -65,7 +104,7 @@ public class MerchantMarketAiHelperTests
         MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold);
 
         var secondPass = stronghold.Market.Orders
-            .Single(o => o.PriceMoneyPerGo == 91 && MarketRules.IsSellOrder(o));
+            .Single(o => o.PriceMoneyPerGo == 90 && MarketRules.IsSellOrder(o) && o.ActorId == 901);
         Assert.Equal(firstId, secondPass.Id);
         Assert.True(secondPass.QuantityGo >= firstQty);
     }
@@ -87,6 +126,13 @@ public class MerchantMarketAiHelperTests
             Money = 300_000,
         });
         stronghold.Market.LastClosePriceMoneyPerGo = 100;
+        MarketActions.AddOrMergeBuyOrder(
+            stronghold,
+            stronghold.ForceActor.Id,
+            100,
+            8_000,
+            MarketCommodityType.Food,
+            taxExempt: true);
 
         MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold, MarketCommodityType.Food);
 
@@ -94,11 +140,8 @@ public class MerchantMarketAiHelperTests
         {
             var sellCount = stronghold.Market.Orders.Count(o =>
                 MarketRules.IsSellOrder(o) && o.ActorId == merchant.Id && o.Commodity == MarketCommodityType.Food);
-            var buyCount = stronghold.Market.Orders.Count(o =>
-                MarketRules.IsBuyOrder(o) && o.ActorId == merchant.Id && o.Commodity == MarketCommodityType.Food);
 
             Assert.InRange(sellCount, 1, MarketConstants.MarketMaxDepthLevels);
-            Assert.InRange(buyCount, 1, MarketConstants.MarketMaxDepthLevels);
         }
     }
 
@@ -134,6 +177,7 @@ public class MerchantMarketAiHelperTests
             Food = merchantFood,
             Money = merchantMoney,
         });
+        stronghold.ForceActor.Money = 50_000_000;
         return stronghold;
     }
 }

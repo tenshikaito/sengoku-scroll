@@ -15,8 +15,8 @@ public static class EconomyConstants
     /// <summary>征收效率下限（万分比）；3000 = 30%。</summary>
     public const int MinCollectionEfficiencyBp = 3000;
 
-    /// <summary>非史实据点收入惩罚（万分比）；7000 = 70%。</summary>
-    public const int FictionalIncomePenaltyBp = 7000;
+    /// <summary>非史实据点收入系数（万分比）；固定 8000 = 80%，不随难度变化。</summary>
+    public const int FictionalIncomePenaltyBp = 8000;
 
     /// <summary>每点商业值允许的开店数线性除数（MaxShops = CommerceValue / K）。</summary>
     public const int CommerceValuePerShopSlot = 1000;

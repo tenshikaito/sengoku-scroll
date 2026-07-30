@@ -40,9 +40,10 @@ public static class EconomyCalculator
         var authorityFactor = 5000 + stronghold.Authority * 50;
         var corruptionFactor = EconomyConstants.BasisPointsPer100Percent
             - corruption * EconomyConstants.BasisPointsPer100Percent / 150;
+        // 业务：史实据点全额；虚构据点按开局/剧本配置的收入系数打折
         var historicalFactor = stronghold.IsHistorical
             ? EconomyConstants.BasisPointsPer100Percent
-            : EconomyConstants.FictionalIncomePenaltyBp;
+            : ResolveFictionalIncomePenaltyBp(meta);
 
         var product = (long)authorityFactor * corruptionFactor * historicalFactor;
         var scaled = (int)(product / EconomyConstants.BasisPointsPer100Percent
@@ -52,6 +53,16 @@ public static class EconomyCalculator
             scaled,
             EconomyConstants.MinCollectionEfficiencyBp,
             EconomyConstants.BasisPointsPer100Percent);
+    }
+
+    /// <summary>解析虚构据点收入系数：剧本 gameOptions，否则固定 80%。</summary>
+    public static int ResolveFictionalIncomePenaltyBp(StrategyScenarioMeta? meta)
+    {
+        var fromScenario = meta?.GameOptions.FictionalIncomePenaltyBp ?? 0;
+        if (fromScenario > 0)
+            return Math.Clamp(fromScenario, 1, EconomyConstants.BasisPointsPer100Percent);
+
+        return EconomyConstants.FictionalIncomePenaltyBp;
     }
 
     /// <summary>市民农业日产粮（合/日）。</summary>

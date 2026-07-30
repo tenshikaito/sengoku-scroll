@@ -1,6 +1,7 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
+using SengokuScroll.Domain.Types;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
 using SengokuScroll.Strategy.Diagnostics;
@@ -47,7 +48,7 @@ public static class MarketLimitOrderExecutor
 
         public bool AllowRestingOrder { get; init; } = true;
 
-        public bool CommitMoneyOnRest { get; init; }
+        public bool CommitMoneyOnRest { get; init; } = true;
 
         public bool TaxExemptOnRest { get; init; }
     }
@@ -77,7 +78,7 @@ public static class MarketLimitOrderExecutor
 
         public bool AllowRestingOrder { get; init; } = true;
 
-        public bool CommitInventoryOnRest { get; init; }
+        public bool CommitInventoryOnRest { get; init; } = true;
 
         public bool TaxExemptOnRest { get; init; }
     }
@@ -107,25 +108,27 @@ public static class MarketLimitOrderExecutor
 
             if (!MarketActions.TryGetActorPublic(stronghold, sell.ActorId, out var seller))
             {
-                sell.QuantityGo = 0;
-                MarketActions.MarkOrderFullyFilled(sell, request.GameData.GameDate);
+                ClearRestingSellOrder(stronghold, sell, request.GameData.GameDate);
                 continue;
             }
 
+            var fillableQty = MarketOrderCommitHelper.ResolveSellFillQuantity(sell);
             var affordableQty = request.GetBuyerMoney() / sell.PriceMoneyPerGo;
-            var qty = Math.Min(Math.Min(remaining, sell.QuantityGo), affordableQty);
+            var qty = Math.Min(Math.Min(Math.Min(remaining, sell.QuantityGo), fillableQty), affordableQty);
             if (qty <= 0)
             {
-                sell.QuantityGo = 0;
-                MarketActions.MarkOrderFullyFilled(sell, request.GameData.GameDate);
+                ClearRestingSellOrder(stronghold, sell, request.GameData.GameDate);
                 continue;
             }
 
             var totalMoney = sell.PriceMoneyPerGo * qty;
-            if (!MarketInventoryHelper.TryRemoveStock(seller, request.Commodity, qty))
+            if (sell.InventoryCommitted)
             {
-                sell.QuantityGo = 0;
-                MarketActions.MarkOrderFullyFilled(sell, request.GameData.GameDate);
+                MarketOrderCommitHelper.ApplySellFill(sell, qty);
+            }
+            else if (!MarketInventoryHelper.TryRemoveStock(seller, request.Commodity, qty))
+            {
+                ClearRestingSellOrder(stronghold, sell, request.GameData.GameDate);
                 continue;
             }
 
@@ -147,9 +150,7 @@ public static class MarketLimitOrderExecutor
 
             totalFilled += qty;
             remaining -= qty;
-            // 砸单扫卖盘：该价位一旦被触及，整档清空（含卖家库存不足的剩余量）。
-            sell.QuantityGo = 0;
-            MarketActions.MarkOrderFullyFilled(sell, request.GameData.GameDate);
+            ClearRestingSellOrder(stronghold, sell, request.GameData.GameDate);
             MarketActions.ApplyPlayerTradeToSession(
                 stronghold,
                 request.GameData.GameDate,
@@ -210,35 +211,36 @@ public static class MarketLimitOrderExecutor
 
             if (!MarketActions.TryGetActorPublic(stronghold, buy.ActorId, out var buyer))
             {
-                buy.QuantityGo = 0;
-                MarketActions.MarkOrderFullyFilled(buy, request.GameData.GameDate);
+                ClearRestingBuyOrder(stronghold, buy, request.GameData.GameDate);
                 continue;
             }
 
-            var affordableQty = buyer.Money / buy.PriceMoneyPerGo;
-            var qty = Math.Min(Math.Min(remaining, buy.QuantityGo), affordableQty);
+            var tradePrice = buy.PriceMoneyPerGo;
+            var fillableQty = MarketOrderCommitHelper.ResolveBuyFillQuantity(stronghold, buy, tradePrice);
+            var qty = Math.Min(Math.Min(remaining, buy.QuantityGo), fillableQty);
             if (qty <= 0)
             {
-                buy.QuantityGo = 0;
-                MarketActions.MarkOrderFullyFilled(buy, request.GameData.GameDate);
+                ClearRestingBuyOrder(stronghold, buy, request.GameData.GameDate);
                 continue;
             }
 
-            var totalMoney = buy.PriceMoneyPerGo * qty;
+            var totalMoney = tradePrice * qty;
             request.DeductSellerStock(qty);
-            buyer.Money -= totalMoney;
+            if (buy.MoneyCommitted)
+                MarketOrderCommitHelper.ApplyBuyFill(buy, tradePrice, qty);
+            else
+                buyer.Money -= totalMoney;
+
             MarketInventoryHelper.AddStock(buyer, request.Commodity, qty);
             request.AddSellerMoney(totalMoney);
 
             totalFilled += qty;
             remaining -= qty;
-            // 砸单扫买盘：该价位一旦被触及，整档清空（含买家资金不足的剩余量）。
-            buy.QuantityGo = 0;
-            MarketActions.MarkOrderFullyFilled(buy, request.GameData.GameDate);
+            ClearRestingBuyOrder(stronghold, buy, request.GameData.GameDate);
             MarketActions.ApplyPlayerTradeToSession(
                 stronghold,
                 request.GameData.GameDate,
-                buy.PriceMoneyPerGo,
+                tradePrice,
                 qty,
                 request.Commodity);
         }
@@ -265,5 +267,23 @@ public static class MarketLimitOrderExecutor
         }
 
         return new LimitOrderExecutionResult(totalFilled, resting);
+    }
+
+    private static void ClearRestingBuyOrder(Stronghold stronghold, MarketOrder buy, GameDate gameDate)
+    {
+        if (buy.QuantityGo > 0)
+            MarketOrderCommitHelper.RefundCommitment(stronghold, buy);
+
+        buy.QuantityGo = 0;
+        MarketActions.MarkOrderFullyFilled(buy, gameDate);
+    }
+
+    private static void ClearRestingSellOrder(Stronghold stronghold, MarketOrder sell, GameDate gameDate)
+    {
+        if (sell.QuantityGo > 0)
+            MarketOrderCommitHelper.RefundCommitment(stronghold, sell);
+
+        sell.QuantityGo = 0;
+        MarketActions.MarkOrderFullyFilled(sell, gameDate);
     }
 }

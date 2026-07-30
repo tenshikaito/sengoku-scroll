@@ -1,55 +1,32 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
-using SengokuScroll.Strategy.Actions;
-using SengokuScroll.Strategy.Calculators;
-using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
-using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Helpers;
 
-/// <summary>玩家/即时成交后刷新指定商品的 AI 挂单并撮合（避免砸单后盘口真空）。</summary>
+/// <summary>
+/// 市场 AI 仅在日推进时刷新（<see cref="Systems.StrategyMarketSystem"/>）。
+/// 玩家/商队即时成交只更新簿面与当日 K 线，不触发 AI 补单或二次撮合，避免同日多次「AI 行动」与多根 K 线。
+/// </summary>
 public static class MarketAiRefreshHelper
 {
+    /// <summary>已废弃：AI 补单与撮合改由每日 <see cref="Systems.StrategyMarketSystem"/> 统一执行。</summary>
+    [Obsolete("AI order refresh and matching run only on daily StrategyMarketSystem tick.")]
     public static void RefreshAfterTrade(
         Stronghold stronghold,
         GameData gameData,
         MarketCommodityType commodity,
-        MerchantTaxLedger taxLedger)
+        MerchantTaxLedger taxLedger,
+        StrategyScenarioMeta? scenarioMeta = null,
+        GameWorld? world = null)
     {
-        if (!MarketRules.CanTrade(stronghold, gameData))
-            return;
-
-        MarketActions.RemoveDeprecatedCommodityOrders(stronghold);
-        EvaluateAiOrders(stronghold, commodity);
-
-        var fallback = stronghold.Market.ResolveLastClose(commodity);
-        if (fallback <= 0)
-            fallback = CommodityInventoryHelper.ResolveDefaultPrice(null, commodity);
-
-        var result = MarketCalculator.MatchOrdersForCommodity(
-            stronghold,
-            fallback,
-            commodity,
-            gameData.GameDate);
-        MarketActions.ApplyMatchResult(stronghold, result, taxLedger);
-    }
-
-    private static void EvaluateAiOrders(Stronghold stronghold, MarketCommodityType commodity)
-    {
-        switch (commodity)
-        {
-            case MarketCommodityType.Food:
-                CivilianMarketAiHelper.EvaluateAndPlaceBuyOrders(stronghold);
-                GovernmentMarketAiHelper.EvaluateAndPlaceBuyOrders(stronghold);
-                GovernmentMarketAiHelper.EvaluateAndPlaceSellOrders(stronghold);
-                MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold, MarketCommodityType.Food);
-                break;
-            case MarketCommodityType.Horse:
-                HorseMarketAiHelper.EvaluateAndPlaceOrders(stronghold);
-                MerchantMarketAiHelper.EvaluateAndPlaceOrders(stronghold, MarketCommodityType.Horse);
-                break;
-        }
+        _ = stronghold;
+        _ = gameData;
+        _ = commodity;
+        _ = taxLedger;
+        _ = scenarioMeta;
+        _ = world;
     }
 }
