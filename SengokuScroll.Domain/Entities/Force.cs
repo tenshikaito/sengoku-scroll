@@ -82,10 +82,10 @@ public class Force : StrongholdActor
     public string? Introduction { get; set; }
 
     /// <summary>势力总兵力缓存（地图部队 + 封地驻军）。</summary>
-    public int TotalSoldiers { get; set; }
+    public new int TotalSoldiers { get; set; }
 
     /// <summary>势力驻军（封地 SubUnit 常备；缓存）。</summary>
-    public int GarrisonSoldiers { get; set; }
+    public new int GarrisonSoldiers { get; set; }
 
     /// <summary>势力农兵池（封地未编组足轻；占位，规则待定）。</summary>
     public int MilitiaSoldiers { get; set; }

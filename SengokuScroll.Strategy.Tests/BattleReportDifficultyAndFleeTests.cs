@@ -20,8 +20,8 @@ public class BattleReportDifficultyAndFleeTests
     [Fact]
     public void DifficultyRules_Normal_DisallowsImmediateBattleReport()
     {
-        Assert.False(StrategyDifficultyRules.AllowImmediateBattleReport(StrategyDifficulty.Normal));
-        Assert.True(StrategyDifficultyRules.AllowImmediateBattleReport(StrategyDifficulty.Easy));
+        Assert.False(GameStartOptions.ForDifficulty(StrategyDifficulty.Normal).InstantEventMessages);
+        Assert.True(GameStartOptions.ForDifficulty(StrategyDifficulty.Easy).InstantEventMessages);
     }
 
     [Fact]

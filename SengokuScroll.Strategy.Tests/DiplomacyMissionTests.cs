@@ -203,4 +203,58 @@ public class DiplomacyMissionTests
             out error));
         Assert.Equal(GameError.DiplomacyError.AllyForce, error);
     }
+
+    [Fact]
+    public void Peace_EndsActiveWarAndStartsSymmetricTruce()
+    {
+        var loaded = StrategyScenarioLoader.LoadFromFile(Path.Combine(
+            AppContext.BaseDirectory,
+            "Maps",
+            "mini_kanto.json"));
+        using var ctx = StrategyTestWorldFactory.CreateFromWorld(loaded.World, loaded.Meta);
+        var gameData = ctx.World.GameData;
+        const int forceA = 1;
+        const int forceB = 2;
+
+        Assert.True(ForceDiplomacyActions.TrySetRelation(
+            gameData, forceA, forceB, DiplomacyRelation.Enemy, out _));
+        var war = Assert.Single(gameData.Wars.Values, x => !x.IsEnded);
+
+        Assert.True(ForceDiplomacyActions.TrySetRelation(
+            gameData, forceA, forceB, DiplomacyRelation.Neutral, out _));
+
+        Assert.True(war.IsEnded);
+        Assert.Equal(gameData.GameDate, war.EndDate);
+        var forward = Assert.Single(gameData.Forces[forceA].Diplomacies, x => x.TargetForceId == forceB);
+        var reverse = Assert.Single(gameData.Forces[forceB].Diplomacies, x => x.TargetForceId == forceA);
+        Assert.True(forward.IsTruce);
+        Assert.True(reverse.IsTruce);
+        Assert.Equal(ForceDiplomacyActions.DefaultTruceDays, forward.TrucePeriod);
+
+        ctx.TimeController.AdvanceDay(ctx.World, ctx.Engine);
+        Assert.Equal(ForceDiplomacyActions.DefaultTruceDays - 1, forward.TrucePeriod);
+    }
+
+    [Fact]
+    public void DiplomacyAi_WeakSideSelectsStrongerWarOpponentForPeace()
+    {
+        var loaded = StrategyScenarioLoader.LoadFromFile(Path.Combine(
+            AppContext.BaseDirectory,
+            "Maps",
+            "mini_kanto.json"));
+        var gameData = loaded.World.GameData;
+        const int weakForceId = 1;
+        const int strongForceId = 2;
+
+        Assert.True(ForceDiplomacyActions.TrySetRelation(
+            gameData, weakForceId, strongForceId, DiplomacyRelation.Enemy, out _));
+        foreach (var unit in gameData.Units.Values.Where(x => x.ForceId == weakForceId))
+            unit.Soldier = 1;
+        foreach (var stronghold in gameData.Strongholds.Values.Where(x => x.ForceId == weakForceId))
+            stronghold.ForceActor.Soldier = 0;
+        foreach (var unit in gameData.Units.Values.Where(x => x.ForceId == strongForceId))
+            unit.Soldier = 10_000;
+
+        Assert.Equal(strongForceId, StrategyDiplomacyAiRules.SelectPeaceTarget(weakForceId, gameData));
+    }
 }

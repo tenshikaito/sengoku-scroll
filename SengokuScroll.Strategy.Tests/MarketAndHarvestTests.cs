@@ -35,10 +35,11 @@ public class MarketAndHarvestTests
             taxExempt: true);
 
         var order = Assert.Single(
-            stronghold.Market.Orders.Where(o =>
+            stronghold.Market.Orders,
+            o =>
                 MarketRules.IsBuyOrder(o)
                 && o.ActorId == stronghold.ForceActor.Id
-                && o.PriceMoneyPerGo == 94));
+                && o.PriceMoneyPerGo == 94);
         Assert.Equal(800, order.QuantityGo);
     }
 
@@ -64,10 +65,11 @@ public class MarketAndHarvestTests
             taxExempt: true);
 
         var order = Assert.Single(
-            stronghold.Market.Orders.Where(o =>
+            stronghold.Market.Orders,
+            o =>
                 MarketRules.IsSellOrder(o)
                 && o.ActorId == stronghold.ForceActor.Id
-                && o.PriceMoneyPerGo == 94));
+                && o.PriceMoneyPerGo == 94);
         Assert.Equal(700, order.QuantityGo);
     }
 

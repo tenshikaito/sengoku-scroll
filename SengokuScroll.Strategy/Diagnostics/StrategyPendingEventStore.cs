@@ -12,4 +12,14 @@ public sealed class StrategyPendingEventStore
 
     public StrategyEventDto? Take(int messengerId)
         => byMessengerId.Remove(messengerId, out var evt) ? evt : null;
+
+    public IReadOnlyDictionary<int, StrategyEventDto> Snapshot()
+        => new Dictionary<int, StrategyEventDto>(byMessengerId);
+
+    public void Restore(IReadOnlyDictionary<int, StrategyEventDto> restored)
+    {
+        byMessengerId.Clear();
+        foreach (var (messengerId, evt) in restored)
+            byMessengerId[messengerId] = evt;
+    }
 }

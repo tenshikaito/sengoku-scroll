@@ -12,6 +12,7 @@ using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Policies.UnitAi;
+using SengokuScroll.Strategy.Vision;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Rules;
@@ -99,7 +100,9 @@ public static class StrategyUnitAIRules
         GameData gameData,
         int playerForceId,
         GameMapMasterData? mapMaster = null,
-        StrategyScenarioMeta? meta = null)
+        StrategyScenarioMeta? meta = null,
+        IReadOnlyList<Unit>? observedHostileUnits = null,
+        IReadOnlyList<Stronghold>? observedHostileStrongholds = null)
     {
         var thought = new StrategyAiThought();
         var from = unit.Directive.ToString();
@@ -108,7 +111,7 @@ public static class StrategyUnitAIRules
             : unit.ForceId != playerForceId;
         thought.Add("当前方针={0} 士气={1} 兵力={2} 状态={3} AI控制={4}", from, unit.Morale, unit.Soldier, unit.Status, aiControlled);
 
-        var hostileUnits = ResolveHostileUnits(unit, gameData);
+        var hostileUnits = observedHostileUnits ?? ResolveHostileUnits(unit, gameData);
         var engagementEnemy = FindEngagementRangeEnemy(unit, hostileUnits);
         thought.Add("敌对部队={0} 接敌范围内敌军={1}",
             hostileUnits.Count,
@@ -177,7 +180,8 @@ public static class StrategyUnitAIRules
         if (unit.Directive == UnitDirective.Move
             && aiControlled
             && unit.Morale >= LowMoraleRetreatThreshold
-            && (hostileUnits.Count > 0 || ResolveHostileStrongholds(unit, gameData).Count > 0))
+            && (hostileUnits.Count > 0
+                || (observedHostileStrongholds ?? ResolveHostileStrongholds(unit, gameData)).Count > 0))
         {
             thought.Add("AI 控制势力默认 Move→Occupy（有敌对目标）");
             unit.Directive = UnitDirective.Occupy;
@@ -300,6 +304,29 @@ public static class StrategyUnitAIRules
                         && TryResolveDiplomaticForce(s.ForceId, gameData, out var ownerForce)
                         && DiplomacyRules.IsEnemy(myForce, ownerForce).IsSuccess)];
     }
+
+    /// <summary>只返回该势力当前视野内的敌军，避免军事 AI 读取全地图单位。</summary>
+    public static IReadOnlyList<Unit> ResolveObservedHostileUnits(
+        Unit unit,
+        GameData gameData,
+        StrategyVisibilityLedger visibility)
+        => [.. ResolveHostileUnits(unit, gameData)
+            .Where(enemy => visibility.IsVisible(
+                unit.ForceId,
+                enemy.Location.X,
+                enemy.Location.Y))];
+
+    /// <summary>只返回已发现的敌城；已探索据点可作为战略目标，但不会泄露城内数值。</summary>
+    public static IReadOnlyList<Stronghold> ResolveObservedHostileStrongholds(
+        Unit unit,
+        GameData gameData,
+        StrategyVisibilityLedger visibility)
+        => [.. ResolveHostileStrongholds(unit, gameData)
+            .Where(stronghold => visibility.IsKnownStronghold(unit.ForceId, stronghold.Id)
+                || visibility.IsVisible(
+                    unit.ForceId,
+                    stronghold.Location.X,
+                    stronghold.Location.Y))];
 
     /// <summary>内藩/外藩单位按宗主外交关系判定敌友。</summary>
     private static bool TryResolveDiplomaticForce(int forceId, GameData gameData, out Force force)

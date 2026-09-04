@@ -35,6 +35,7 @@ public class GameTests(ITestOutputHelper output) : GameTestsBase(output)
 
                 game.Resume();
                 game.Resume();
+                game.Resume();
 
                 Assert.Equal(new Point3(1, 1), playerCharacter.Location);
             }

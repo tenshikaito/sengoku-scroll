@@ -7,6 +7,9 @@ public sealed class LoadScenarioRequest
 {
     public required string ScenarioId { get; init; }
 
+    /// <summary>全势力交由 AI 控制；用于观战、长局验证与平衡测试。</summary>
+    public bool AllForcesAiControlled { get; init; }
+
     /// <summary>Easy | Normal | Hard | Custom；省略则沿用剧本 JSON。</summary>
     public string? Difficulty { get; init; }
 
@@ -80,39 +83,39 @@ public sealed class StrategySaveExportResponse
     public required string Json { get; init; }
 }
 
-    /// <summary>从 JSON 恢复存档请求。</summary>
-    public sealed class StrategyRestoreSaveRequest
-    {
-        public required string Json { get; init; }
-    }
+/// <summary>从 JSON 恢复存档请求。</summary>
+public sealed class StrategyRestoreSaveRequest
+{
+    public required string Json { get; init; }
+}
 
-    /// <summary>存档位列表响应。</summary>
-    public sealed class StrategySaveSlotListResponse
-    {
-        public required IReadOnlyList<StrategySaveSlotSummaryDto> Slots { get; init; }
-    }
+/// <summary>存档位列表响应。</summary>
+public sealed class StrategySaveSlotListResponse
+{
+    public required IReadOnlyList<StrategySaveSlotSummaryDto> Slots { get; init; }
+}
 
-    /// <summary>单个存档位摘要。</summary>
-    public sealed class StrategySaveSlotSummaryDto
-    {
-        public required int Slot { get; init; }
+/// <summary>单个存档位摘要。</summary>
+public sealed class StrategySaveSlotSummaryDto
+{
+    public required int Slot { get; init; }
 
-        public required bool Occupied { get; init; }
+    public required bool Occupied { get; init; }
 
-        public string? SavedAtUtc { get; init; }
+    public string? SavedAtUtc { get; init; }
 
-        public string? ScenarioId { get; init; }
+    public string? ScenarioId { get; init; }
 
-        public string? LordName { get; init; }
+    public string? LordName { get; init; }
 
-        public string? DateLabel { get; init; }
-    }
+    public string? DateLabel { get; init; }
+}
 
-    /// <summary>写入存档位响应。</summary>
-    public sealed class StrategySaveSlotWriteResponse
-    {
-        public required StrategySaveSlotSummaryDto Slot { get; init; }
-    }
+/// <summary>写入存档位响应。</summary>
+public sealed class StrategySaveSlotWriteResponse
+{
+    public required StrategySaveSlotSummaryDto Slot { get; init; }
+}
 
 /// <summary>攻城指令请求。</summary>
 public sealed class SiegeOrderRequest
@@ -339,4 +342,32 @@ public sealed class DiplomacyMissionOrderRequest
 
     /** Ally | War | Peace */
     public required string Action { get; init; }
+}
+
+/// <summary>人物互动请求；Interaction 为 Talk 或 Gift。</summary>
+public sealed class CharacterInteractionRequest
+{
+    public required int TargetCharacterId { get; init; }
+
+    public required string Interaction { get; init; }
+}
+
+/// <summary>批量推进请求；试玩/观战模式用于减少 HTTP 与序列化开销。</summary>
+public sealed class AdvanceDaysRequest
+{
+    public int Days { get; init; } = 1;
+}
+
+/// <summary>多条款和谈预览/下达。</summary>
+public sealed class PeaceSettlementRequest
+{
+    public required int CharacterId { get; init; }
+
+    public required int TargetForceId { get; init; }
+
+    public IReadOnlyList<int> CededStrongholdIds { get; init; } = [];
+
+    public int ReparationsMoney { get; init; }
+
+    public bool DemandOuterVassalage { get; init; }
 }

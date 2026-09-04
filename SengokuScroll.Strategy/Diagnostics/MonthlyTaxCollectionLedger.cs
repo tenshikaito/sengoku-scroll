@@ -8,6 +8,8 @@ public sealed class MonthlyTaxCollectionLedger
 {
     private readonly Dictionary<int, int> moneyTributeObligationByStronghold = [];
 
+    public sealed record Obligation(int StrongholdId, int Money);
+
     /// <summary>记录本据点上月征收的钱税合计，并换算钱纳义务。</summary>
     public void RecordMonthlyMoneyTaxes(
         int strongholdId,
@@ -35,5 +37,15 @@ public sealed class MonthlyTaxCollectionLedger
             return 0;
 
         return obligation;
+    }
+
+    public IReadOnlyList<Obligation> Snapshot()
+        => [.. moneyTributeObligationByStronghold.Select(x => new Obligation(x.Key, x.Value))];
+
+    public void Restore(IEnumerable<Obligation> restored)
+    {
+        moneyTributeObligationByStronghold.Clear();
+        foreach (var entry in restored.Where(x => x.Money > 0))
+            moneyTributeObligationByStronghold[entry.StrongholdId] = entry.Money;
     }
 }

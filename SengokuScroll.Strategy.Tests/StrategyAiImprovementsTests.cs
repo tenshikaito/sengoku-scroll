@@ -195,8 +195,10 @@ public class StrategyAiImprovementsTests
         using var ctx = StrategyTestWorldFactory.CreateFromWorld(world);
         var worldContext = ctx.Services.GetRequiredService<IGameWorldContext>();
 
+#pragma warning disable CS0618 // 回归测试锁定旧入口不会解散城内常备军。
         Assert.False(GarrisonBehaviorRules.TryDissolveGarrisonWhenSafe(
             worldContext, stronghold, ctx.World.GameData));
+#pragma warning restore CS0618
         Assert.NotNull(StrongholdGarrisonRules.FindGarrisonUnit(stronghold, ctx.World.GameData));
     }
 

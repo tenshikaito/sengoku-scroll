@@ -241,7 +241,7 @@ M0 计划确认（✅）→ M1 领域与引擎（下一步）→ M2 策略单机
 | **P0** | **虚拟据点收入减益** | ✅ `gameOptions.fictionalIncomePenaltyBp` + 难度覆盖 |
 | **P1** | 更多剧本/区域网格/地标数据 | 编辑器或 JSON 批量维护 `regionGrid`、`landmarks` |
 | **P1** | 兵种 `UnitTypes` 配置化 | ✅ 剧本 `unitTypes[]` → `GameMasterData.UnitTypes`；缺省走内置 seed |
-| **P2** | 外交/谍报/战争分数 | 外交使节任务 UI/API ✅；战争分数等仍待 |
+| **P2** | 外交/谍报/战争分数 | 外交使节 UI/API、弱势 AI 求和、战争结束/停战 ✅；完整战争分数与条款仍待 |
 | **P2** | 大地图渲染管线 | RM VX 式 2×3 autotile 地形 chunk 烘焙；道路枚举 overlay；主数据与 `worldState` 分离 |
 | **P2** | 路径战争迷雾 / 难度三档 | 见 §6.6（尚未与 Fog/`GameStartOptions` 统一） |
 
@@ -499,7 +499,7 @@ WorldState.MasterData.Commodities 下发；stronghold.horse / unit.horse 展示
 | InstantEventMessages 双通道 | ✅ | UI 摘要 + 信使照常 |
 | 路径可见性三档 | 📋 | 仍用 M2 `routeVisibilityPolicy`；待与 Fog 统一 |
 | 天气 sight/movement debuff | 📋 | 规则表预留 |
-| AI 同级 Intel 快照 | 📋 | 待 AI 接入同一 ledger |
+| AI 同级 Intel 快照 | 🟡 | 贸易 AI 已接入 60 日行情台账；军事 AI 的非全知决策仍待统一 |
 
 ---
 

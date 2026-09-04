@@ -131,14 +131,16 @@ public static class StrategyLordHelper
 
         if (meta.ForceLordResidenceStrongholdIds.TryGetValue(forceId, out var residenceId)
             && residenceId > 0
-            && gameData.Strongholds.ContainsKey(residenceId))
+            && gameData.Strongholds.TryGetValue(residenceId, out var residence)
+            && residence.ForceId == forceId)
         {
             return residenceId;
         }
 
         if (forceId == meta.PlayerForceId
             && meta.LordStrongholdId is int playerResidence
-            && gameData.Strongholds.ContainsKey(playerResidence))
+            && gameData.Strongholds.TryGetValue(playerResidence, out var playerStronghold)
+            && playerStronghold.ForceId == forceId)
         {
             return playerResidence;
         }

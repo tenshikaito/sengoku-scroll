@@ -40,9 +40,9 @@ public static class PaperDollCharacterHelper
 
     public static string GeneratePaperDollName(int characterId, string seedLabel)
     {
-        var seed = HashCode.Combine(characterId, seedLabel);
-        var family = FamilyNames[Math.Abs(seed) % FamilyNames.Length];
-        var given = GivenNames[Math.Abs(seed / FamilyNames.Length) % GivenNames.Length];
+        var seed = DeterministicHash.Combine(seedLabel, characterId);
+        var family = FamilyNames[seed % FamilyNames.Length];
+        var given = GivenNames[seed / FamilyNames.Length % GivenNames.Length];
         return $"{family}{given}";
     }
 }

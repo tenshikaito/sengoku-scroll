@@ -10,7 +10,7 @@ public interface IAISystem : IGameSystem
 /// <summary>
 /// Domain 层 AI 占位。大战略军事 AI 在 <see cref="SengokuScroll.Strategy.Systems.StrategyAISystem"/>（方针、接敌、寻路）。
 /// </summary>
-public class AISystem(IGameContext context) : IAISystem
+public class AISystem : IAISystem
 {
     /// <summary>Domain 占位 Order；策略实装为 <see cref="SengokuScroll.Strategy.Systems.StrategyAISystem"/> Order=18。</summary>
     public int Order { get; } = 40;

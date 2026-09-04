@@ -39,6 +39,7 @@ const form = reactive<GameStartSettings>({
   difficulty: "Normal",
   customStartOptions: cloneDifficultyStartOptions(GAME_START_PRESETS.Normal),
   intelDebugMode: DEFAULT_INTEL_DEBUG_MODE,
+  allForcesAiControlled: false,
 });
 
 const applyingPreset = ref(false);
@@ -81,7 +82,12 @@ watch(
   { deep: true },
 );
 
-const uiRules = computed(() => resolveGameStartOptionUiRules(form.customStartOptions));
+const uiRules = computed(() =>
+  resolveGameStartOptionUiRules({
+    ...form.customStartOptions,
+    intelDebugMode: form.intelDebugMode,
+  }),
+);
 
 const presetSummary = computed(() => {
   if (form.difficulty === "Custom") return null;
@@ -133,6 +139,7 @@ function onConfirm() {
     difficulty,
     customStartOptions: options,
     intelDebugMode: form.intelDebugMode,
+    allForcesAiControlled: form.allForcesAiControlled,
   });
 }
 
@@ -165,6 +172,20 @@ function onClose() {
           </el-radio-group>
           <p v-if="presetSummary" class="field-hint">{{ presetSummary }}</p>
           <p v-else class="field-hint">当前选项与预设不完全一致。</p>
+        </div>
+      </el-form-item>
+
+      <el-form-item label="游玩方式" class="compact-item">
+        <div class="control-stack">
+          <div class="sub-option">
+            <div class="sub-option-row">
+              <span class="sub-option-label">全势力 AI 观战</span>
+              <el-switch v-model="form.allForcesAiControlled" />
+            </div>
+          </div>
+          <p class="field-hint">
+            开启后本家也由 AI 接管，适合观看战局、长局压测与检验数值平衡。
+          </p>
         </div>
       </el-form-item>
 

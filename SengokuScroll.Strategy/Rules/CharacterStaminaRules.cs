@@ -1,6 +1,7 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Types;
+using SengokuScroll.Strategy.Helpers;
 using static SengokuScroll.Domain.Entities.Character;
 
 namespace SengokuScroll.Strategy.Rules;
@@ -32,7 +33,7 @@ public static class CharacterStaminaRules
 
         character.Hp -= CommandFatigueCost;
         ApplyHpFloorAndDeath(character, gameData);
-        TryContractIllness(character);
+        TryContractIllness(character, gameData);
     }
 
     /// <summary>休息恢复体力；生病且高龄时恢复更慢。</summary>
@@ -70,14 +71,21 @@ public static class CharacterStaminaRules
         character.Hp = Math.Max(1, character.Hp);
     }
 
-    private static void TryContractIllness(Character character)
+    private static void TryContractIllness(Character character, GameData gameData)
     {
         if (character.IsSick || character.Hp >= SickHpThreshold)
             return;
 
         var deficit = SickHpThreshold - character.Hp;
         var chance = Math.Clamp(deficit * 2, 5, 95);
-        if (Random.Shared.Next(100) < chance)
+        var roll = DeterministicHash.Combine(
+            gameData.SimulationSeed,
+            character.Id,
+            gameData.GameDate.Year,
+            gameData.GameDate.Month,
+            gameData.GameDate.Day,
+            character.Hp) % 100;
+        if (roll < chance)
             character.IsSick = true;
     }
 }

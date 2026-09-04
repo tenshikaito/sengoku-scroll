@@ -33,7 +33,8 @@ public class MigrantConvoyMovementTests
         ctx.TimeController.AdvanceDay(ctx.World, ctx.Engine);
 
         var remaining = Assert.Single(
-            gameData.Units.Values.Where(TransportUnitRules.IsTransportUnit));
+            gameData.Units.Values,
+            TransportUnitRules.IsTransportUnit);
         Assert.Equal(UnitStatus.Moving, remaining.Status);
     }
 }

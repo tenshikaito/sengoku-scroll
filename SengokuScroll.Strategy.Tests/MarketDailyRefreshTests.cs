@@ -138,14 +138,16 @@ public class MarketDailyRefreshTests
 
         var snapshotBefore = host.GetMarketSnapshot(strongholdId).Value!;
         var playerOrderBefore = Assert.Single(
-            snapshotBefore.PlayerOpenOrders.Where(o => o.PriceMoneyPerGo == limitPrice));
+            snapshotBefore.PlayerOpenOrders,
+            o => o.PriceMoneyPerGo == limitPrice);
         Assert.Equal(sellQtyGo, playerOrderBefore.QuantityGo);
 
         Assert.True(host.AdvanceDay().IsSuccess);
 
         var snapshotAfter = host.GetMarketSnapshot(strongholdId).Value!;
         var playerOrderAfter = Assert.Single(
-            snapshotAfter.PlayerOpenOrders.Where(o => o.PriceMoneyPerGo == limitPrice));
+            snapshotAfter.PlayerOpenOrders,
+            o => o.PriceMoneyPerGo == limitPrice);
         Assert.Equal(sellQtyGo, playerOrderAfter.QuantityGo);
     }
 
@@ -215,11 +217,12 @@ public class MarketDailyRefreshTests
         Assert.Equal(playerQty, result.RestingQuantityGo);
 
         var merged = Assert.Single(
-            stronghold.Market.Orders.Where(o =>
+            stronghold.Market.Orders,
+            o =>
                 MarketRules.IsSellOrder(o)
                 && o.ActorId == stronghold.ForceActor.Id
                 && o.PriceMoneyPerGo == askPrice
-                && o.QuantityGo > 0));
+                && o.QuantityGo > 0);
         Assert.Equal(aiQty + playerQty, merged.QuantityGo);
 
         using var ctx = StrategyTestWorldFactory.CreateFromWorld(world);

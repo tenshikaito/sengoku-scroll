@@ -84,10 +84,36 @@ public class StrategyMarketSystem(
             MarketActions.RemoveDeprecatedCommodityOrders(stronghold);
             MarketActions.SetDailyBarDate(stronghold, date);
 
+            RecordLocalPriceIntel(stronghold, date);
             MaybeRecordPriceIntel(stronghold, date, previousClose, result.SessionClose);
         }
 
         UnitTradeActions.ProcessAutoTradePolicies(gameData, taxLedger);
+    }
+
+    private void RecordLocalPriceIntel(Stronghold stronghold, GameDate date)
+    {
+        var price = stronghold.Market.ResolveLastClose(MarketCommodityType.Food);
+        if (price <= 0)
+            return;
+
+        var observers = stronghold.MerchantActors
+            .Select(merchant => merchant.ForceId)
+            .Append(stronghold.ForceId)
+            .Where(forceId => forceId > 0)
+            .Distinct();
+
+        foreach (var observerForceId in observers)
+        {
+            intelligenceLedger.Record(new StrategyIntelligenceLedger.MarketPriceObservation(
+                observerForceId,
+                stronghold.Id,
+                price,
+                date,
+                date,
+                "LocalMarket",
+                EconomyConstants.BasisPointsPer100Percent));
+        }
     }
 
     private void MaybeRecordPriceIntel(

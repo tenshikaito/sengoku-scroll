@@ -244,6 +244,7 @@ export const loadScenario = (loadRequest: StrategyLoadRequest | string) => {
           scenarioId: loadRequest.scenarioId,
           difficulty: loadRequest.difficulty,
           customStartOptions: loadRequest.customStartOptions,
+          allForcesAiControlled: loadRequest.allForcesAiControlled,
         };
 
   return request(
@@ -791,6 +792,77 @@ export const orderDiplomacyMission = (payload: {
     }
   );
 
+export interface StrategyPeaceTermsPayload {
+  characterId: number;
+  targetForceId: number;
+  cededStrongholdIds: number[];
+  reparationsMoney: number;
+  demandOuterVassalage: boolean;
+}
+
+export interface StrategyPeaceSettlementPreview {
+  warId: number;
+  proposerWarScore: number;
+  requiredWarScore: number;
+  acceptanceChancePercent: number;
+  canForceAcceptance: boolean;
+  isWhitePeace: boolean;
+  termCosts: { kind: string; label: string; warScoreCost: number }[];
+}
+
+/** 预览多条款和谈。 */
+export const previewPeaceSettlement = (payload: StrategyPeaceTermsPayload) =>
+  request(
+    "POST",
+    "/diplomacy/peace/preview",
+    () =>
+      fetchLive<Record<string, unknown>>("POST", "/diplomacy/peace/preview", payload).then((raw) => {
+        const pick = (camel: string, pascal: string) => raw[camel] ?? raw[pascal];
+        const costsRaw = pick("termCosts", "TermCosts");
+        return {
+          warId: Number(pick("warId", "WarId") ?? 0),
+          proposerWarScore: Number(pick("proposerWarScore", "ProposerWarScore") ?? 0),
+          requiredWarScore: Number(pick("requiredWarScore", "RequiredWarScore") ?? 0),
+          acceptanceChancePercent: Number(
+            pick("acceptanceChancePercent", "AcceptanceChancePercent") ?? 0,
+          ),
+          canForceAcceptance: Boolean(pick("canForceAcceptance", "CanForceAcceptance")),
+          isWhitePeace: Boolean(pick("isWhitePeace", "IsWhitePeace")),
+          termCosts: Array.isArray(costsRaw)
+            ? costsRaw.map((entry) => {
+                const row = entry as Record<string, unknown>;
+                return {
+                  kind: String(row.kind ?? row.Kind ?? ""),
+                  label: String(row.label ?? row.Label ?? ""),
+                  warScoreCost: Number(row.warScoreCost ?? row.WarScoreCost ?? 0),
+                };
+              })
+            : [],
+        } satisfies StrategyPeaceSettlementPreview;
+      }),
+    () => ({
+      warId: 1,
+      proposerWarScore: 0,
+      requiredWarScore: 0,
+      acceptanceChancePercent: 50,
+      canForceAcceptance: false,
+      isWhitePeace: true,
+      termCosts: [],
+    }),
+  );
+
+/** 派遣携带和谈条款的使节。 */
+export const orderPeaceSettlement = (payload: StrategyPeaceTermsPayload) =>
+  request(
+    "POST",
+    "/diplomacy/peace",
+    () =>
+      fetchLive<unknown>("POST", "/diplomacy/peace", payload).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持多条款和谈");
+    },
+  );
+
 export const setStrongholdTaxRates = (
   strongholdId: number,
   payload: {
@@ -1023,6 +1095,24 @@ export const enterStrongholdAsCharacter = (characterId: number, strongholdId: nu
     },
   );
 
+export const interactWithCharacter = (
+  characterId: number,
+  targetCharacterId: number,
+  interaction: "Talk" | "Gift",
+) =>
+  request(
+    "POST",
+    `/characters/${characterId}/interact`,
+    () =>
+      fetchLive<unknown>("POST", `/characters/${characterId}/interact`, {
+        targetCharacterId,
+        interaction,
+      }).then(normalizeStrategyWorldState),
+    () => {
+      throw new Error("Mock 模式不支持人物互动");
+    },
+  );
+
 export const previewCharacterPath = (
   characterId: number,
   x: number,
@@ -1140,6 +1230,7 @@ export const advanceDay = () =>
           events: Array.isArray(eventsRaw)
             ? eventsRaw.map((e) => normalizeStrategyEvent(e))
             : [],
+          daysAdvanced: Number(payload.daysAdvanced ?? payload.DaysAdvanced ?? 1),
         };
       }),
     () => {
@@ -1148,8 +1239,34 @@ export const advanceDay = () =>
         state: normalizeStrategyWorldState(raw.state),
         resolvedBattles: raw.resolvedBattles,
         events: raw.events,
+        daysAdvanced: 1,
       };
     }
+  );
+
+export const advanceDays = (days: number) =>
+  request(
+    "POST",
+    "/advance-days",
+    () =>
+      fetchLive<unknown>("POST", "/advance-days", { days }).then((raw) => {
+        const payload = raw as Record<string, unknown>;
+        const battlesRaw = payload.resolvedBattles ?? payload.ResolvedBattles;
+        const eventsRaw = payload.events ?? payload.Events;
+        return {
+          state: normalizeStrategyWorldState(payload.state ?? payload.State),
+          resolvedBattles: Array.isArray(battlesRaw)
+            ? battlesRaw.map((battle) => normalizeBattleResult(battle))
+            : [],
+          events: Array.isArray(eventsRaw)
+            ? eventsRaw.map((event) => normalizeStrategyEvent(event))
+            : [],
+          daysAdvanced: Number(payload.daysAdvanced ?? payload.DaysAdvanced ?? days),
+        };
+      }),
+    () => {
+      throw new Error("Mock 模式不支持批量推进");
+    },
   );
 
 export interface StrategyMovementTraceEntry {

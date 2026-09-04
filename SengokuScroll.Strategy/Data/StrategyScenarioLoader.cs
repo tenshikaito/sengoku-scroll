@@ -124,8 +124,7 @@ public static class StrategyScenarioLoader
             return document.Scenario.SimulationSeed;
 
         var start = document.Scenario.StartDate;
-        var hash = HashCode.Combine(document.Id, start.Year, start.Month, start.Day);
-        return hash == int.MinValue ? 1 : Math.Abs(hash);
+        return DeterministicHash.Combine(document.Id, start.Year, start.Month, start.Day);
     }
 
     private static Dictionary<int, RegionHarvestProfile> BuildRegionHarvestProfiles(StrategyMapDefinition map)

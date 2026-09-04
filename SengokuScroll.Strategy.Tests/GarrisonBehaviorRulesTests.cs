@@ -46,8 +46,10 @@ public class GarrisonBehaviorRulesTests
 
         Assert.True(GarrisonBehaviorRules.HasFieldBattleProximityThreat(stronghold, ctx.World.GameData));
         Assert.True(GarrisonBehaviorRules.ShouldHoldInCityAwaitingRelief(stronghold, ctx.World.GameData, meta));
+#pragma warning disable CS0618 // 回归测试锁定旧入口不会再物化守军。
         Assert.False(GarrisonBehaviorRules.TryPrepareGarrisonOnThreat(
             worldContext, stronghold, ctx.World.GameData, meta));
+#pragma warning restore CS0618
         Assert.Null(StrongholdGarrisonRules.FindGarrisonUnit(stronghold, ctx.World.GameData));
         Assert.Equal(1200, stronghold.ForceActor.Soldier);
         Assert.True(GarrisonBehaviorRules.IsStrongholdUnderAttack(stronghold, ctx.World.GameData));

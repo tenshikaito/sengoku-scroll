@@ -27,7 +27,8 @@ public class SupplyConvoyDispatchHelper(
     StrategyScenarioMeta scenarioMeta,
     StrategyDayOutcomeBuffer dayOutcomeBuffer,
     StrategyTributeLedger tributeLedger,
-    MonthlyTaxCollectionLedger monthlyTaxCollectionLedger)
+    MonthlyTaxCollectionLedger monthlyTaxCollectionLedger,
+    StrategyIntelligenceLedger intelligenceLedger)
 {
     private IGameWorldContext WorldContext => context.GameWorldContext;
 
@@ -226,7 +227,12 @@ public class SupplyConvoyDispatchHelper(
             {
                 foreach (var merchant in origin.MerchantActors)
                 {
-                    if (!TradeMarketAiHelper.ShouldDispatchTrade(origin, destination, merchant, gameData))
+                    if (!TradeMarketAiHelper.ShouldDispatchTrade(
+                            origin,
+                            destination,
+                            merchant,
+                            gameData,
+                            intelligenceLedger))
                         continue;
 
                     var cargo = TradeMarketAiHelper.CalculateTradeCargoGo(merchant, destination);
@@ -268,56 +274,13 @@ public class SupplyConvoyDispatchHelper(
         if (GarrisonBehaviorRules.IsStrongholdBlockaded(origin, gameData))
             return false;
 
-        if (TradeConvoyMigrationRules.PreferUnitTradeConvoys)
-        {
-            return TradeConvoyUnitFactory.TryCreateMerchantTradeUnit(
-                WorldContext.GameWorld,
-                origin,
-                destination,
-                merchant,
-                foodCargo,
-                pathfindingService) is not null;
-        }
-
-        return TryCreateLegacyTradeConvoy(origin, destination, merchant, gameData, foodCargo);
-    }
-
-    private bool TryCreateLegacyTradeConvoy(
-        Stronghold origin,
-        Stronghold destination,
-        StrongholdActor merchant,
-        GameData gameData,
-        int foodCargo)
-    {
-        if (merchant.Food < foodCargo)
-            return false;
-
-        var path = pathfindingService.CalculatePath(
-            new MapPathAgent(origin.Location, TradeMarketAiHelper.ResolvePathForceId(origin, gameData)),
-            destination.Location);
-
-        if (path is null || path.Count <= 1)
-            return false;
-
-        merchant.Food -= foodCargo;
-
-        ConvoyUnitFactory.CreateTransportUnit(
+        return TradeConvoyUnitFactory.TryCreateMerchantTradeUnit(
             WorldContext.GameWorld,
-            $"{merchant.Name}贸易→{destination.Name}",
-            merchant.ForceId,
-            ResolveMerchantTradeLeaderId(merchant, origin, gameData),
-            origin.Location,
-            origin.Id,
-            targetUnitId: 0,
-            targetStrongholdId: destination.Id,
+            origin,
+            destination,
+            merchant,
             foodCargo,
-            moneyCargo: 0,
-            cargoPopulation: 0,
-            TransportPurpose.Trade,
-            RouteCalculator.ToDailyRouteQueuePoint2(path),
-            kindOverride: UnitKind.Merchant);
-
-        return true;
+            pathfindingService) is not null;
     }
 
     private bool TryCreateTributeConvoy(
@@ -558,25 +521,4 @@ public class SupplyConvoyDispatchHelper(
             .FirstOrDefault(c => c.ForceId == origin.ForceId && c.StrongholdId == origin.Id)?.Id ?? 0;
     }
 
-    /// <summary>商家贸易队总将：仅店员/商家组织角色；不回退武家代官。</summary>
-    private static int ResolveMerchantTradeLeaderId(
-        StrongholdActor merchant,
-        Stronghold origin,
-        GameData gameData)
-    {
-        foreach (var characterId in merchant.CharacterIds)
-        {
-            if (characterId <= 0)
-                continue;
-            if (!gameData.Characters.TryGetValue(characterId, out var staff) || staff.IsDead)
-                continue;
-            return staff.Id;
-        }
-
-        return gameData.Characters.Values
-            .FirstOrDefault(c =>
-                c.ForceId == merchant.ForceId
-                && c.StrongholdId == origin.Id
-                && !c.IsDead)?.Id ?? 0;
-    }
 }

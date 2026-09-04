@@ -54,7 +54,7 @@ function requiredString(value: unknown, fallback: string): string {
 function normalizeEntityEffects(raw: unknown): StrategyEntityEffectState[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((item) => {
+    .map((item): StrategyEntityEffectState | null => {
       const row = (item ?? {}) as Record<string, unknown>;
       const name = optionalString(pick(row, "name", "Name"));
       if (!name) return null;
@@ -72,7 +72,7 @@ function normalizeEntityEffects(raw: unknown): StrategyEntityEffectState[] {
 function normalizeEntityTechnologies(raw: unknown): StrategyEntityTechnologyState[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((item) => {
+    .map((item): StrategyEntityTechnologyState | null => {
       const row = (item ?? {}) as Record<string, unknown>;
       const name = optionalString(pick(row, "name", "Name"));
       const id = safeInt(pick(row, "id", "Id"));
@@ -91,7 +91,7 @@ function normalizeEntityTechnologies(raw: unknown): StrategyEntityTechnologyStat
         })(),
       };
     })
-    .filter((item): item is StrategyEntityTechnologyState => item != null);
+    .filter((item): item is StrategyEntityTechnologyState => item !== null);
 }
 
 function normalizeMapPoint(raw: unknown): MapPoint {
@@ -870,10 +870,12 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
   const mapCharactersRaw = pick(o, "mapCharacters", "MapCharacters");
   const espionageIntelRaw = pick(o, "espionageIntel", "EspionageIntel");
   const diplomaciesRaw = pick(o, "diplomacies", "Diplomacies");
+  const warsRaw = pick(o, "wars", "Wars");
   const battlefieldsRaw = pick(o, "battlefields", "Battlefields");
   const masterDataRaw = pick(o, "masterData", "MasterData");
   const visibilityRaw = pick(o, "visibility", "Visibility");
   const startOptionsRaw = pick(o, "startOptions", "StartOptions");
+  const campaignStatusRaw = pick(o, "campaignStatus", "CampaignStatus");
 
   const playerForceId = safeInt(pick(o, "playerForceId", "PlayerForceId"), 1);
   const scenarioId = requiredString(pick(o, "scenarioId", "ScenarioId"), "mini_kanto");
@@ -892,6 +894,39 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
   return {
     scenarioId,
     playerForceId,
+    allForcesAiControlled: Boolean(
+      pick(o, "allForcesAiControlled", "AllForcesAiControlled")
+    ),
+    campaignStatus:
+      campaignStatusRaw && typeof campaignStatusRaw === "object"
+        ? (() => {
+            const campaign = campaignStatusRaw as Record<string, unknown>;
+            const leadingForceIdRaw = pick(campaign, "leadingForceId", "LeadingForceId");
+            return {
+              state: requiredString(pick(campaign, "state", "State"), "Ongoing"),
+              objective: requiredString(
+                pick(campaign, "objective", "Objective"),
+                "统一地图上的全部据点"
+              ),
+              playerStrongholdCount: safeInt(
+                pick(campaign, "playerStrongholdCount", "PlayerStrongholdCount"),
+                0
+              ),
+              rivalStrongholdCount: safeInt(
+                pick(campaign, "rivalStrongholdCount", "RivalStrongholdCount"),
+                0
+              ),
+              totalStrongholdCount: safeInt(
+                pick(campaign, "totalStrongholdCount", "TotalStrongholdCount"),
+                0
+              ),
+              leadingForceId:
+                leadingForceIdRaw == null ? null : safeInt(leadingForceIdRaw, 0) || null,
+              leadingForceName:
+                optionalString(pick(campaign, "leadingForceName", "LeadingForceName")) ?? null,
+            };
+          })()
+        : undefined,
     difficulty,
     simulationSeed,
     lord,
@@ -986,6 +1021,44 @@ export function normalizeStrategyWorldState(raw: unknown): StrategyWorldState {
             ourViewEffects: normalizeEntityEffects(pick(row, "ourViewEffects", "OurViewEffects")),
             theirViewEffects: normalizeEntityEffects(pick(row, "theirViewEffects", "TheirViewEffects")),
             isInnerVassal: pick(row, "isInnerVassal", "IsInnerVassal") === true,
+          };
+        })
+      : [],
+    wars: Array.isArray(warsRaw)
+      ? warsRaw.map((w) => {
+          const row = w as Record<string, unknown>;
+          const eventsRaw = pick(row, "recentScoreEvents", "RecentScoreEvents");
+          const intList = (value: unknown): number[] =>
+            Array.isArray(value) ? value.map((id) => safeInt(id)).filter((id) => id > 0) : [];
+          return {
+            id: safeInt(pick(row, "id", "Id")),
+            aggressorForceId: safeInt(pick(row, "aggressorForceId", "AggressorForceId")),
+            defenderForceId: safeInt(pick(row, "defenderForceId", "DefenderForceId")),
+            aggressorForceIds: intList(pick(row, "aggressorForceIds", "AggressorForceIds")),
+            defenderForceIds: intList(pick(row, "defenderForceIds", "DefenderForceIds")),
+            playerWarScore: safeInt(pick(row, "playerWarScore", "PlayerWarScore")),
+            startYear: safeInt(pick(row, "startYear", "StartYear")),
+            startMonth: safeInt(pick(row, "startMonth", "StartMonth")),
+            startDay: safeInt(pick(row, "startDay", "StartDay")),
+            recentScoreEvents: Array.isArray(eventsRaw)
+              ? eventsRaw.map((e) => {
+                  const event = e as Record<string, unknown>;
+                  return {
+                    year: safeInt(pick(event, "year", "Year")),
+                    month: safeInt(pick(event, "month", "Month")),
+                    day: safeInt(pick(event, "day", "Day")),
+                    delta: safeInt(pick(event, "delta", "Delta")),
+                    reason: requiredString(pick(event, "reason", "Reason"), "Unknown"),
+                    actingForceId: safeInt(pick(event, "actingForceId", "ActingForceId")),
+                    targetForceId: safeInt(pick(event, "targetForceId", "TargetForceId")),
+                    sourceEntityId: (() => {
+                      const value = pick(event, "sourceEntityId", "SourceEntityId");
+                      return value == null ? null : safeInt(value);
+                    })(),
+                    description: optionalString(pick(event, "description", "Description")),
+                  };
+                })
+              : [],
           };
         })
       : [],

@@ -129,6 +129,12 @@ public sealed class StrongholdCaptureHelper(
             dayOutcomeBuffer,
             gameData.GameDate);
 
+        StrategyWarScoreRules.RecordStrongholdOccupation(
+            gameData,
+            stronghold,
+            captor.ForceId,
+            previousForceId);
+
         captor.Directive = UnitDirective.Occupy;
         captor.Stance = UnitStance.Hold;
         captor.ActionTarget.UnitId = 0;

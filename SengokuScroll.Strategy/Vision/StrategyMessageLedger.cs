@@ -8,5 +8,15 @@ public sealed class StrategyMessageLedger
     public bool TryAccept(string messageKey)
         => seenKeys.Add(messageKey);
 
+    public IReadOnlyList<string> Snapshot()
+        => [.. seenKeys.Order(StringComparer.Ordinal)];
+
+    public void Restore(IEnumerable<string> restored)
+    {
+        seenKeys.Clear();
+        foreach (var key in restored)
+            seenKeys.Add(key);
+    }
+
     public void Clear() => seenKeys.Clear();
 }

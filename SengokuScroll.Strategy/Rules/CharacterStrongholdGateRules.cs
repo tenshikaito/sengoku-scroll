@@ -1,6 +1,6 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
-using SengokuScroll.Strategy.Rules;
+using SengokuScroll.Strategy.Helpers;
 using static SengokuScroll.Domain.Entities.Character;
 
 namespace SengokuScroll.Strategy.Rules;
@@ -30,7 +30,7 @@ public static class CharacterStrongholdGateRules
         if (character.IsDead || character.ForceStatus == CharacterForceStatus.Prisoner)
             return null;
 
-        var roll = Math.Abs(HashCode.Combine(seed, character.Id, stronghold.Id, 7919)) % 100;
+        var roll = DeterministicHash.Combine(seed, character.Id, stronghold.Id, 7919) % 100;
         if (roll < 12)
         {
             character.ForceStatus = CharacterForceStatus.Prisoner;

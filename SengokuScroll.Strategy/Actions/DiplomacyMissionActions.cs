@@ -2,6 +2,7 @@ using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
+using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Character;
 
@@ -17,9 +18,62 @@ public static class DiplomacyMissionActions
         int targetForceId,
         string action,
         out GameError? error)
+        => TryAssignMission(
+            gameData,
+            meta,
+            characterId,
+            targetForceId,
+            action,
+            peaceTerms: null,
+            out error);
+
+    public static bool TryAssignMission(
+        GameData gameData,
+        StrategyScenarioMeta meta,
+        int characterId,
+        int targetForceId,
+        string action,
+        PeaceSettlementTerms? peaceTerms,
+        out GameError? error)
+        => TryAssignMissionForForce(
+            gameData,
+            meta,
+            meta.PlayerForceId,
+            characterId,
+            targetForceId,
+            action,
+            peaceTerms,
+            out error);
+
+    public static bool TryAssignMissionForForce(
+        GameData gameData,
+        StrategyScenarioMeta meta,
+        int actingForceId,
+        int characterId,
+        int targetForceId,
+        string action,
+        out GameError? error)
+        => TryAssignMissionForForce(
+            gameData,
+            meta,
+            actingForceId,
+            characterId,
+            targetForceId,
+            action,
+            peaceTerms: null,
+            out error);
+
+    public static bool TryAssignMissionForForce(
+        GameData gameData,
+        StrategyScenarioMeta meta,
+        int actingForceId,
+        int characterId,
+        int targetForceId,
+        string action,
+        PeaceSettlementTerms? peaceTerms,
+        out GameError? error)
     {
         error = null;
-        var playerForceId = meta.PlayerForceId;
 
         if (!DiplomacyMissionRules.TryParseAction(action, out var normalizedAction))
         {
@@ -27,23 +81,42 @@ public static class DiplomacyMissionActions
             return false;
         }
 
-        if (!DiplomacyMissionRules.CanAssignMissionTarget(gameData, meta, playerForceId, targetForceId, normalizedAction, out error))
+        if (!DiplomacyMissionRules.CanAssignMissionTarget(gameData, meta, actingForceId, targetForceId, normalizedAction, out error))
             return false;
 
-        if (!TryResolveAssignableEnvoy(gameData, meta, playerForceId, characterId, out var character, out error))
+        if (!TryResolveAssignableEnvoy(gameData, meta, actingForceId, characterId, out var character, out error))
             return false;
 
         var travelDays = DiplomacyMissionRules.EstimateTravelDays(
             gameData,
             meta,
-            playerForceId,
+            actingForceId,
             targetForceId);
         var successChance = DiplomacyMissionRules.EstimateSuccessChancePercent(
             character,
             gameData,
-            playerForceId,
+            actingForceId,
             targetForceId,
             normalizedAction);
+
+        StrategyPeaceSettlementPreviewDto? peacePreview = null;
+        if (normalizedAction == "Peace")
+        {
+            peaceTerms ??= new PeaceSettlementTerms();
+            if (!PeaceSettlementRules.TryBuildPreview(
+                    gameData,
+                    actingForceId,
+                    targetForceId,
+                    peaceTerms,
+                    successChance,
+                    out peacePreview,
+                    out error))
+            {
+                return false;
+            }
+
+            successChance = peacePreview.AcceptanceChancePercent;
+        }
 
         character.DiplomacyMission = new CharacterDiplomacyMission
         {
@@ -51,6 +124,7 @@ public static class DiplomacyMissionActions
             TargetForceId = targetForceId,
             RemainingDays = travelDays,
             SuccessChancePercent = successChance,
+            PeaceTerms = normalizedAction == "Peace" ? peaceTerms : null,
         };
         character.ForceStatus = CharacterForceStatus.Task;
         character.ActionPlan = CharacterActionPlan.Task;
@@ -61,7 +135,11 @@ public static class DiplomacyMissionActions
         return true;
     }
 
-    public static void ProcessDailyMission(Character character, GameData gameData, StrategyScenarioMeta meta)
+    public static void ProcessDailyMission(
+        Character character,
+        GameData gameData,
+        GameMasterData gameMasterData,
+        StrategyScenarioMeta meta)
     {
         var mission = character.DiplomacyMission;
         if (mission is null)
@@ -74,13 +152,23 @@ public static class DiplomacyMissionActions
             return;
 
         var playerForceId = character.ForceId;
-        if (DiplomacyMissionRules.RollMissionSuccess(mission, gameData, character.Id)
-            && ForceDiplomacyActions.TrySetRelation(
+        var succeeded = DiplomacyMissionRules.RollMissionSuccess(mission, gameData, character.Id);
+        if (succeeded && mission.Action == "Peace")
+        {
+            PeaceSettlementActions.TryExecute(
                 gameData,
+                gameMasterData,
                 playerForceId,
                 mission.TargetForceId,
-                DiplomacyMissionRules.ResolveTargetRelation(mission.Action),
-                out _))
+                mission.PeaceTerms ?? new PeaceSettlementTerms(),
+                out _);
+        }
+        else if (succeeded && ForceDiplomacyActions.TrySetRelation(
+                     gameData,
+                     playerForceId,
+                     mission.TargetForceId,
+                     DiplomacyMissionRules.ResolveTargetRelation(mission.Action),
+                     out _))
         {
             // 业务：成功则写入目标关系
         }

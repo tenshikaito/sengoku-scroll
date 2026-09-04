@@ -5,6 +5,8 @@ public sealed class MerchantTaxLedger
 {
     private readonly Dictionary<(int StrongholdId, int MerchantActorId), int> accrued = [];
 
+    public sealed record Accrual(int StrongholdId, int MerchantActorId, int Money);
+
     public void Accrue(int strongholdId, int merchantActorId, int tradeTaxMoney)
     {
         if (tradeTaxMoney <= 0)
@@ -31,4 +33,14 @@ public sealed class MerchantTaxLedger
 
     public int GetAccrued(int strongholdId, int merchantActorId)
         => accrued.GetValueOrDefault((strongholdId, merchantActorId));
+
+    public IReadOnlyList<Accrual> Snapshot()
+        => [.. accrued.Select(x => new Accrual(x.Key.StrongholdId, x.Key.MerchantActorId, x.Value))];
+
+    public void Restore(IEnumerable<Accrual> restored)
+    {
+        accrued.Clear();
+        foreach (var entry in restored.Where(x => x.Money > 0))
+            accrued[(entry.StrongholdId, entry.MerchantActorId)] = entry.Money;
+    }
 }

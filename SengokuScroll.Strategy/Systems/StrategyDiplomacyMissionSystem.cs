@@ -24,12 +24,27 @@ public class StrategyDiplomacyMissionSystem(
     {
         var gameData = context.GameWorldContext.GameWorld.GameData;
 
+        foreach (var diplomacy in gameData.Forces.Values.SelectMany(x => x.Diplomacies))
+        {
+            if (!diplomacy.IsTruce)
+                continue;
+
+            if (diplomacy.TrucePeriod > 0)
+                diplomacy.TrucePeriod--;
+            if (diplomacy.TrucePeriod == 0)
+                diplomacy.IsTruce = false;
+        }
+
         foreach (var character in context.GameWorldContext.EachCharacter())
         {
             if (character.IsDead || character.DiplomacyMission is null)
                 continue;
 
-            DiplomacyMissionActions.ProcessDailyMission(character, gameData, scenarioMeta);
+            DiplomacyMissionActions.ProcessDailyMission(
+                character,
+                gameData,
+                context.GameWorldContext.GameWorld.GameMasterData,
+                scenarioMeta);
         }
     }
 }

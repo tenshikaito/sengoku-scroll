@@ -14,7 +14,11 @@ public sealed class StrategyTributeLedger
         int Food,
         int Money);
 
-    private sealed record YearlyArrivalRecord(int Year, TributeArrivalRecord Record);
+    public sealed record YearlyArrivalRecord(int Year, TributeArrivalRecord Record);
+
+    public sealed record State(
+        IReadOnlyList<TributeArrivalRecord> MonthlyArrivals,
+        IReadOnlyList<YearlyArrivalRecord> YearlyArrivals);
 
     public sealed record TributeSettlementSummary(
         int ReportingYear,
@@ -57,6 +61,17 @@ public sealed class StrategyTributeLedger
         yearlyArrivals.RemoveAll(a => a.Year == reportingYear);
 
         return BuildSummary(reportingYear, 0, lines);
+    }
+
+    public State Snapshot()
+        => new(monthlyArrivals.ToList(), yearlyArrivals.ToList());
+
+    public void Restore(State restored)
+    {
+        monthlyArrivals.Clear();
+        monthlyArrivals.AddRange(restored.MonthlyArrivals);
+        yearlyArrivals.Clear();
+        yearlyArrivals.AddRange(restored.YearlyArrivals);
     }
 
     private static TributeSettlementSummary BuildSummary(

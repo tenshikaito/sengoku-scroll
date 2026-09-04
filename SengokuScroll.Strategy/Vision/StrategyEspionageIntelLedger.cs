@@ -34,6 +34,7 @@ public sealed class StrategyEspionageIntelLedger
     private const int ExpiryMonths = 2;
 
     public sealed record Record(
+        int ObserverForceId,
         EspionageIntelTargetKind TargetKind,
         int TargetId,
         EspionageIntelScope Scope,
@@ -41,7 +42,7 @@ public sealed class StrategyEspionageIntelLedger
         GameDate AcquiredDate,
         GameDate ExpiresDate);
 
-    private readonly Dictionary<(EspionageIntelTargetKind Kind, int Id), Record> byTarget = [];
+    private readonly Dictionary<(int ObserverForceId, EspionageIntelTargetKind Kind, int Id), Record> byTarget = [];
 
     /// <summary>登记或覆盖对某目标的谍报成果（同目标再次谍报以最新为准）。</summary>
     public void RecordMission(
@@ -56,7 +57,8 @@ public sealed class StrategyEspionageIntelLedger
             return;
 
         var expires = AddMonths(acquiredDate, ExpiryMonths);
-        byTarget[(targetKind, targetId)] = new Record(
+        byTarget[(observerForceId, targetKind, targetId)] = new Record(
+            observerForceId,
             targetKind,
             targetId,
             scope,
@@ -65,16 +67,35 @@ public sealed class StrategyEspionageIntelLedger
             expires);
     }
 
-    public Record? TryGet(EspionageIntelTargetKind targetKind, int targetId)
+    public Record? TryGet(int observerForceId, EspionageIntelTargetKind targetKind, int targetId)
     {
-        if (!byTarget.TryGetValue((targetKind, targetId), out var record))
+        if (!byTarget.TryGetValue((observerForceId, targetKind, targetId), out var record))
             return null;
 
         return record;
     }
 
     public IReadOnlyList<Record> Snapshot()
-        => [.. byTarget.Values.OrderBy(r => r.TargetKind).ThenBy(r => r.TargetId)];
+        => [.. byTarget.Values
+            .OrderBy(r => r.ObserverForceId)
+            .ThenBy(r => r.TargetKind)
+            .ThenBy(r => r.TargetId)];
+
+    public void Restore(IEnumerable<Record> restored, int legacyObserverForceId = 0)
+    {
+        byTarget.Clear();
+        foreach (var record in restored)
+        {
+            var observerForceId = record.ObserverForceId > 0
+                ? record.ObserverForceId
+                : legacyObserverForceId;
+            if (observerForceId <= 0)
+                continue;
+
+            var normalized = record with { ObserverForceId = observerForceId };
+            byTarget[(observerForceId, record.TargetKind, record.TargetId)] = normalized;
+        }
+    }
 
     /// <summary>日推进时剔除过期条目，前端 DTO masking 随之恢复为「未知」。</summary>
     public void PruneExpired(GameDate currentDate)

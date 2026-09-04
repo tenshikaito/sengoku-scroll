@@ -45,7 +45,7 @@ public class UnitMoveThroughStrongholdTests
         ctx.TimeController.AdvanceDay(ctx.World, ctx.Engine);
 
         Assert.Equal(new Point3(2, 0), unit.Location);
-        Assert.Equal(UnitStatus.Moving, unit.Status);
+        Assert.Equal(UnitStatus.Waiting, unit.Status);
     }
 
     [Fact]

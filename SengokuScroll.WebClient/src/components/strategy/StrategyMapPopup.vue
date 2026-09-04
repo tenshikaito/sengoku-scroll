@@ -512,7 +512,7 @@ function onCharacterEspionageClick() {
           v-if="canUnitMove"
           variant="primary"
           :tooltip-side="tooltipSide"
-          tooltip="同格友军合并或分割编制（尚未实装）"
+          tooltip="合并同格友军，或分割当前部队的编制"
           @click="emit('beginMerge')"
         >
           🏴 军团

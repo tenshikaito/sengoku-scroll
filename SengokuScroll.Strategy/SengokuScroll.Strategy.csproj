@@ -25,4 +25,8 @@
     <None Include="Maps\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SengokuScroll.Strategy.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -26,6 +26,14 @@ public class CharacterSystem(
     {
         // 阶段1：推进移动中角色（溃逃将领、信使等）沿路径前进
         foreach (var o in context.GameWorldContext.EachCharacter())
+        {
             moveAction.Update(o);
+
+            // RPG 的事件循环同样按“日”推进；移动结算后恢复 AP，供下一日继续行动。
+            // 战略模式使用独立的 StrategyTimeSystem，不会执行本通用系统。
+            o.Ap = Math.Min(
+                context.GameRuleConfig.MilitaryMaxMovement,
+                o.Ap + context.GameRuleConfig.NextTurnApRecovery);
+        }
     }
 }

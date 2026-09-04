@@ -62,7 +62,7 @@ public static class EspionageIntelRules
         if (!RequiresEspionageMask(unit.ForceId, playerForceId, gameData, options))
             return unit;
 
-        var record = ledger?.TryGet(EspionageIntelTargetKind.Unit, unit.Id);
+        var record = ledger?.TryGet(playerForceId, EspionageIntelTargetKind.Unit, unit.Id);
         if (record is null)
         {
             // 业务：无谍报记录时军事/内政数值均隐藏
@@ -129,7 +129,7 @@ public static class EspionageIntelRules
         if (!RequiresEspionageMask(dto.ForceId, playerForceId, gameData, options))
             return dto;
 
-        var record = ledger?.TryGet(EspionageIntelTargetKind.Stronghold, dto.Id);
+        var record = ledger?.TryGet(playerForceId, EspionageIntelTargetKind.Stronghold, dto.Id);
         if (record is null)
             return MaskStrongholdUnknown(dto);
 

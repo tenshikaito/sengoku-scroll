@@ -25,7 +25,8 @@ public class StrategyUnitSystem(
     public void Update()
     {
         // 阶段1：推进所有移动中单位沿路径消耗 AP 前进
-        foreach (var unit in context.GameWorldContext.EachUnit().Where(u => u.Status == UnitStatus.Moving))
+        foreach (var unit in context.GameWorldContext.EachUnit().Where(u =>
+                     u.Status == UnitStatus.Moving && u.IsReadyToMove))
             moveAction.Update(unit);
     }
 }

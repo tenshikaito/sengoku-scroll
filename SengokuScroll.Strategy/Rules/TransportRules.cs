@@ -5,7 +5,7 @@ using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Rules;
 using SengokuScroll.Domain.Types;
 using SengokuScroll.Strategy.Constants;
-using SengokuScroll.Strategy.Rules;
+using SengokuScroll.Strategy.Helpers;
 
 namespace SengokuScroll.Strategy.Rules;
 
@@ -132,7 +132,7 @@ public static class TransportRules
     }
 
     private static int DeterministicRoll(int convoyId, GameDate date)
-        => Math.Abs(HashCode.Combine(convoyId, date.Year, date.Month, date.Day)) % 100;
+        => DeterministicHash.Combine(convoyId, date.Year, date.Month, date.Day) % 100;
 
     private static bool IsAdjacent(Point3 a, Point3 b)
         => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y) == 1;

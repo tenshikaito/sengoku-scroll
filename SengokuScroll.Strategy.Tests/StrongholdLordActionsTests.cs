@@ -130,6 +130,9 @@ public class StrongholdLordActionsTests
             removedLordCharacterId: nobunaga.Id);
 
         Assert.Equal(ForceSuccessionRules.LordRemovalReason.KilledWithSuccession, reason);
+        Assert.Equal(shibata.Id, gameData.Forces[meta.PlayerForceId].LordCharacterId);
+        Assert.True(registry.TryGetLordCharacterId(meta.PlayerForceId, out var registeredLordId));
+        Assert.Equal(shibata.Id, registeredLordId);
         Assert.Equal(0, okazaki.LordId);
         Assert.Equal(0, kiyosu.LeaderId);
     }

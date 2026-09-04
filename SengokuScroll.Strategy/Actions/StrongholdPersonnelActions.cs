@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SengokuScroll.Common.Types;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
@@ -135,7 +136,7 @@ public static class StrongholdPersonnelActions
         int characterId,
         GameData gameData,
         StrategyScenarioMeta meta,
-        out Character? character,
+        [NotNullWhen(true)] out Character? character,
         out GameError? error)
     {
         character = null;

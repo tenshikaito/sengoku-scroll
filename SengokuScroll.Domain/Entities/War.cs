@@ -23,6 +23,14 @@ public class War
 
     public GameDate StartDate { get; set; }
 
+    /// <summary>
+    /// 当前战争分数（-100～100），正数有利于宣战方，负数有利于守方。
+    /// </summary>
+    public int AggressorWarScore { get; set; }
+
+    /// <summary>战争分数变更历史，按发生顺序保存。</summary>
+    public List<WarScoreEvent> WarScoreEvents { get; set; } = [];
+
     public bool IsEnded { get; set; }
 
     public GameDate? EndDate { get; set; }

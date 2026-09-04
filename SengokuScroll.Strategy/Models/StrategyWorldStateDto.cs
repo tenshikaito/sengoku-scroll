@@ -55,8 +55,17 @@ public sealed record StrategyWorldStateDto
     /// <summary>玩家势力视角外交（目标势力 + 关系）。</summary>
     public required IReadOnlyList<StrategyDiplomacyStateDto> Diplomacies { get; init; }
 
+    /// <summary>玩家参战中的战争、分数与近期战果。</summary>
+    public required IReadOnlyList<StrategyWarStateDto> Wars { get; init; }
+
     /// <summary>玩家势力 Id。</summary>
     public required int PlayerForceId { get; init; }
+
+    /// <summary>是否为全势力 AI 观战局。</summary>
+    public required bool AllForcesAiControlled { get; init; }
+
+    /// <summary>单机战役目标、进度与胜败状态。</summary>
+    public required StrategyCampaignStatusDto CampaignStatus { get; init; }
 
     /// <summary>本局难度（Easy/Normal/...）。</summary>
     public required string Difficulty { get; init; }
@@ -545,6 +554,72 @@ public sealed record StrategyDiplomacyStateDto
 
     /// <summary>是否为内藩（展示用；关系值仍可读 Diplomacy）。</summary>
     public bool IsInnerVassal { get; init; }
+}
+
+/// <summary>供试玩版稳定展示的最小战役目标。</summary>
+public sealed record StrategyCampaignStatusDto
+{
+    /// <summary>Ongoing | Victory | Defeat | Spectating。</summary>
+    public required string State { get; init; }
+
+    public required string Objective { get; init; }
+
+    public required int PlayerStrongholdCount { get; init; }
+
+    public required int RivalStrongholdCount { get; init; }
+
+    public required int TotalStrongholdCount { get; init; }
+
+    public int? LeadingForceId { get; init; }
+
+    public string? LeadingForceName { get; init; }
+}
+
+/// <summary>玩家视角战争摘要。</summary>
+public sealed record StrategyWarStateDto
+{
+    public required int Id { get; init; }
+
+    public required int AggressorForceId { get; init; }
+
+    public required int DefenderForceId { get; init; }
+
+    public required IReadOnlyList<int> AggressorForceIds { get; init; }
+
+    public required IReadOnlyList<int> DefenderForceIds { get; init; }
+
+    /// <summary>玩家视角 -100～100。</summary>
+    public required int PlayerWarScore { get; init; }
+
+    public required int StartYear { get; init; }
+
+    public required int StartMonth { get; init; }
+
+    public required int StartDay { get; init; }
+
+    public required IReadOnlyList<StrategyWarScoreEventDto> RecentScoreEvents { get; init; }
+}
+
+public sealed record StrategyWarScoreEventDto
+{
+    public required int Year { get; init; }
+
+    public required int Month { get; init; }
+
+    public required int Day { get; init; }
+
+    /// <summary>玩家视角的分数变化。</summary>
+    public required int Delta { get; init; }
+
+    public required string Reason { get; init; }
+
+    public required int ActingForceId { get; init; }
+
+    public required int TargetForceId { get; init; }
+
+    public int? SourceEntityId { get; init; }
+
+    public string? Description { get; init; }
 }
 
 /// <summary>据点摘要。</summary>
@@ -1231,6 +1306,9 @@ public sealed record StrategyAdvanceDayResponseDto
     /// <summary>本日推进期间信使抵达等事件，供左上角消息栏展示。</summary>
     public required IReadOnlyList<StrategyEventDto> Events { get; init; }
 
+    /// <summary>本次请求实际推进的天数。</summary>
+    public int DaysAdvanced { get; init; } = 1;
+
     /// <summary>日推进 debug 日志写入路径（启用写文件时）。</summary>
     public string? DayDebugLogPath { get; init; }
 
@@ -1467,8 +1545,12 @@ public static class StrategyWorldStateMapper
         var date = world.GameData.GameDate;
         var options = meta.StartOptions;
         var startProfile = Policies.GameStart.GameStartOptionsProfile.Create(options, meta.Difficulty);
-        var visibilityState = visibilityLedger?.GetOrCreate(meta.PlayerForceId);
-        var intelBehavior = startProfile.Intel;
+        var visibilityState = meta.AllForcesAiControlled
+            ? null
+            : visibilityLedger?.GetOrCreate(meta.PlayerForceId);
+        var intelBehavior = meta.AllForcesAiControlled
+            ? Policies.GameStart.IntelModeBehaviorFactory.Create(StrategyIntelMode.Full)
+            : startProfile.Intel;
         var visibleCells = visibilityState?.VisibleCells ?? [];
         var lordLocation = StrategyLordHelper.ResolveLocation(world.GameData, meta);
         var lordResidenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
@@ -1488,6 +1570,8 @@ public static class StrategyWorldStateMapper
         {
             ScenarioId = scenarioId,
             PlayerForceId = meta.PlayerForceId,
+            AllForcesAiControlled = meta.AllForcesAiControlled,
+            CampaignStatus = BuildCampaignStatus(world.GameData, meta),
             Difficulty = meta.Difficulty.ToString(),
             SimulationSeed = world.GameData.SimulationSeed,
             Lord = new StrategyLordStateDto
@@ -1513,19 +1597,8 @@ public static class StrategyWorldStateMapper
                 Month = date.Month,
                 Day = date.Day
             },
-            Forces = [.. BuildForceStateDtos(world, meta)],
-            Strongholds = visibilityState is null
-                ? [.. world.GameData.Strongholds.Values
-                    .Select(s => MapStronghold(s, meta, world))
-                    .OrderBy(s => s.Id)]
-                : [.. world.GameData.Strongholds.Values
-                    .Select(s => MapStronghold(s, meta, world))
-                    .Select(dto => StrategyFogDtoRules.ApplyStrongholdFog(
-                        dto, meta, world.GameData, visibilityState, tileMap.Width))
-                    .Where(dto => dto is not null)
-                    .Cast<StrategyStrongholdStateDto>()
-                    .Select(dto => ApplyStrongholdEspionageMask(dto, meta, world.GameData, espionageLedger))
-                    .OrderBy(s => s.Id)],
+            Forces = BuildForceStateDtos(world, meta),
+            Strongholds = MapStrongholds(world, meta, visibilityState, espionageLedger),
             Units = MapFoggedUnits(world, meta, visibilityState, intelBehavior, visibleCells, espionageLedger),
             OwnUnitRoster = MapOwnUnitRoster(world, meta, visibilityState),
             Battlefields = [.. world.GameData.Battlefields.Values
@@ -1547,25 +1620,61 @@ public static class StrategyWorldStateMapper
                     || StrategyFogDtoRules.IsMessageCarrierMapVisible(m, meta, visibilityState))
                 .Select(m => MapMessageCarrier(m, world.GameData))
                 .OrderBy(m => m.Id)],
-            Characters = [.. world.GameData.Characters.Values
-                .Select(c => MapCharacter(
-                    c,
-                    world.GameData,
-                    world.GameMasterData,
-                    meta,
-                    world.GameData.Characters,
-                    world.GameData.Strongholds))
-                .OrderBy(c => c.Id)],
+            Characters = MapCharacters(world, meta),
             MapCharacters = MapMapCharacters(world, meta, visibilityState),
-            EspionageIntel = MapEspionageIntel(espionageLedger),
+            EspionageIntel = MapEspionageIntel(espionageLedger, meta.PlayerForceId),
             Diplomacies = MapPlayerDiplomacies(meta.PlayerForceId, world.GameData),
+            Wars = MapPlayerWars(meta.PlayerForceId, world.GameData),
             MasterData = MapMasterData(world.GameMasterData, world.GameMapMasterData),
-            Visibility = visibilityLedger?.BuildDto(world, meta),
+            Visibility = meta.AllForcesAiControlled
+                ? null
+                : visibilityLedger?.BuildDto(world, meta),
             StartOptions = StrategyFogDtoRules.ToOptionsDto(options)
         };
     }
 
-    private static IEnumerable<StrategyForceStateDto> BuildForceStateDtos(
+    private static StrategyCampaignStatusDto BuildCampaignStatus(
+        GameData gameData,
+        StrategyScenarioMeta meta)
+    {
+        var realmCounts = gameData.Strongholds.Values
+            .GroupBy(s => TributeRoutingHelper.ResolveRealmRootForceId(s.ForceId, gameData))
+            .Select(group => new { ForceId = group.Key, Count = group.Count() })
+            .OrderByDescending(entry => entry.Count)
+            .ThenBy(entry => entry.ForceId)
+            .ToList();
+
+        var total = realmCounts.Sum(entry => entry.Count);
+        var playerRealmRoot = TributeRoutingHelper.ResolveRealmRootForceId(meta.PlayerForceId, gameData);
+        var playerCount = playerRealmRoot == meta.PlayerForceId
+            ? realmCounts.FirstOrDefault(entry => entry.ForceId == meta.PlayerForceId)?.Count ?? 0
+            : 0;
+        var leading = realmCounts.FirstOrDefault();
+        gameData.Forces.TryGetValue(leading?.ForceId ?? 0, out var leadingForce);
+
+        var state = meta.AllForcesAiControlled
+            ? "Spectating"
+            : playerCount <= 0
+                ? "Defeat"
+                : playerCount >= total && total > 0
+                    ? "Victory"
+                    : "Ongoing";
+
+        return new StrategyCampaignStatusDto
+        {
+            State = state,
+            Objective = meta.AllForcesAiControlled
+                ? "观战至一方统一全部据点"
+                : "统一地图上的全部据点；失去全部领地则战败",
+            PlayerStrongholdCount = playerCount,
+            RivalStrongholdCount = Math.Max(0, total - playerCount),
+            TotalStrongholdCount = total,
+            LeadingForceId = leading?.ForceId,
+            LeadingForceName = leadingForce?.Name
+        };
+    }
+
+    private static IReadOnlyList<StrategyForceStateDto> BuildForceStateDtos(
         GameWorld world,
         StrategyScenarioMeta meta)
     {
@@ -1575,8 +1684,10 @@ public static class StrategyWorldStateMapper
                 OrganizationForceHelper.AccumulateShopTreasury(world.GameData, force);
         }
 
-        return world.GameData.Forces.Values
-            .Select(f =>
+        var forces = world.GameData.Forces.Values.OrderBy(force => force.Id).ToArray();
+        return StrategyParallelWork.MapOrdered(
+            forces,
+            f =>
             {
                 var isOrganization = OrganizationForceHelper.IsOrganizationForce(f);
                 var realmRootId = isOrganization
@@ -1630,8 +1741,63 @@ public static class StrategyWorldStateMapper
                     Introduction = string.IsNullOrWhiteSpace(f.Introduction) ? null : f.Introduction.Trim(),
                     ActiveEffects = MapEntityEffects(f.ActiveEffects),
                 };
-            })
-            .OrderBy(f => f.Id);
+            },
+            minimumParallelCount: 8);
+    }
+
+    private static IReadOnlyList<StrategyStrongholdStateDto> MapStrongholds(
+        GameWorld world,
+        StrategyScenarioMeta meta,
+        ForceVisibilityState? visibilityState,
+        StrategyEspionageIntelLedger? espionageLedger)
+    {
+        // MapStronghold 旧行为会为旧存档补农业状态；先串行归一化，随后投影即可只读并行。
+        foreach (var stronghold in world.GameData.Strongholds.Values)
+            stronghold.Agriculture ??= new StrongholdAgricultureState();
+
+        var strongholds = world.GameData.Strongholds.Values
+            .OrderBy(stronghold => stronghold.Id)
+            .ToArray();
+        var mapped = StrategyParallelWork.MapOrdered<Stronghold, StrategyStrongholdStateDto?>(
+            strongholds,
+            stronghold =>
+            {
+                var dto = MapStronghold(stronghold, meta, world);
+                if (visibilityState is null)
+                    return dto;
+
+                dto = StrategyFogDtoRules.ApplyStrongholdFog(
+                    dto,
+                    meta,
+                    world.GameData,
+                    visibilityState,
+                    world.GameMapMasterData.TileMap.Width);
+                return dto is null
+                    ? null
+                    : ApplyStrongholdEspionageMask(dto, meta, world.GameData, espionageLedger);
+            },
+            minimumParallelCount: 16);
+
+        return [.. mapped.Where(dto => dto is not null).Cast<StrategyStrongholdStateDto>()];
+    }
+
+    private static IReadOnlyList<StrategyCharacterSummaryDto> MapCharacters(
+        GameWorld world,
+        StrategyScenarioMeta meta)
+    {
+        var characters = world.GameData.Characters.Values
+            .OrderBy(character => character.Id)
+            .ToArray();
+        return StrategyParallelWork.MapOrdered(
+            characters,
+            character => MapCharacter(
+                character,
+                world.GameData,
+                world.GameMasterData,
+                meta,
+                world.GameData.Characters,
+                world.GameData.Strongholds),
+            minimumParallelCount: 32);
     }
 
     public static StrategyMapMasterDto ToMapMasterDto(GameWorld world, string scenarioId)
@@ -1921,10 +2087,13 @@ public static class StrategyWorldStateMapper
                 meta.StartOptions);
 
     private static IReadOnlyList<StrategyEspionageIntelEntryDto> MapEspionageIntel(
-        StrategyEspionageIntelLedger? espionageLedger)
+        StrategyEspionageIntelLedger? espionageLedger,
+        int observerForceId)
         => espionageLedger is null
             ? []
-            : [.. espionageLedger.Snapshot().Select(r => new StrategyEspionageIntelEntryDto
+            : [.. espionageLedger.Snapshot()
+                .Where(r => r.ObserverForceId == observerForceId)
+                .Select(r => new StrategyEspionageIntelEntryDto
             {
                 TargetKind = r.TargetKind.ToString(),
                 TargetId = r.TargetId,
@@ -1945,9 +2114,13 @@ public static class StrategyWorldStateMapper
             meta.PlayerForceId,
             meta,
             world.GameData);
-        return [.. world.GameData.Characters.Values
+        var characters = world.GameData.Characters.Values
             .Where(c => !c.IsDead && c.LocationType == Character.CharacterLocationType.Map)
-            .Select(c =>
+            .OrderBy(c => c.Id)
+            .ToArray();
+        var mapped = StrategyParallelWork.MapOrdered(
+            characters,
+            c =>
             {
                 var mapVisible = visibilityState is null
                     || options.FogMode == StrategyFogMode.None
@@ -1974,9 +2147,9 @@ public static class StrategyWorldStateMapper
                     Route = isPlayerLord ? BuildCharacterRoute(c) : [],
                     Ap = isPlayerLord ? c.Ap : 0
                 };
-            })
-            .Where(c => c.MapVisible)
-            .OrderBy(c => c.Id)];
+            },
+            minimumParallelCount: 32);
+        return [.. mapped.Where(c => c.MapVisible)];
     }
 
     private static List<StrategyMapPointDto> BuildCharacterRoute(Character c)
@@ -2165,6 +2338,38 @@ public static class StrategyWorldStateMapper
 
         return [.. rows.OrderBy(d => d.TargetForceId)];
     }
+
+    private static IReadOnlyList<StrategyWarStateDto> MapPlayerWars(int playerForceId, GameData gameData)
+        => [.. gameData.Wars.Values
+            .Where(w => !w.IsEnded && WarRules.IsParticipant(w, playerForceId))
+            .OrderBy(w => w.Id)
+            .Select(w => new StrategyWarStateDto
+            {
+                Id = w.Id,
+                AggressorForceId = w.AggressorForceId,
+                DefenderForceId = w.DefenderForceId,
+                AggressorForceIds = [.. w.AggressorForceIds],
+                DefenderForceIds = [.. w.DefenderForceIds],
+                PlayerWarScore = WarRules.GetWarScoreForForce(w, playerForceId),
+                StartYear = w.StartDate.Year,
+                StartMonth = w.StartDate.Month,
+                StartDay = w.StartDate.Day,
+                RecentScoreEvents = [.. w.WarScoreEvents
+                    .TakeLast(10)
+                    .Reverse()
+                    .Select(e => new StrategyWarScoreEventDto
+                    {
+                        Year = e.Date.Year,
+                        Month = e.Date.Month,
+                        Day = e.Date.Day,
+                        Delta = WarRules.IsOnAggressorSide(w, playerForceId) ? e.Delta : -e.Delta,
+                        Reason = e.Reason,
+                        ActingForceId = e.ActingForceId,
+                        TargetForceId = e.TargetForceId,
+                        SourceEntityId = e.SourceEntityId,
+                        Description = e.Description,
+                    })],
+            })];
 
     private static StrategyMessageCarrierStateDto MapMessageCarrier(MessageCarrier m, GameData gameData)
     {
@@ -2358,37 +2563,42 @@ public static class StrategyWorldStateMapper
     {
         if (visibilityState is null)
         {
-            return [.. world.GameData.Units.Values
+            var visibleUnits = world.GameData.Units.Values
                 .Where(u => u.IsMilitary && u.Soldier > 0)
-                .Select(u => MapUnit(u, meta, world.GameData))
-                .OrderBy(u => u.Id)];
+                .OrderBy(u => u.Id)
+                .ToArray();
+            return StrategyParallelWork.MapOrdered(
+                visibleUnits,
+                unit => MapUnit(unit, meta, world.GameData),
+                minimumParallelCount: 32);
         }
 
-        var mapUnits = new List<StrategyUnitStateDto>();
-        foreach (var unit in world.GameData.Units.Values.OrderBy(u => u.Id))
-        {
-            if (TransportUnitRules.IsTransportUnit(unit))
-                continue;
+        var units = world.GameData.Units.Values
+            .Where(unit => !TransportUnitRules.IsTransportUnit(unit))
+            .OrderBy(unit => unit.Id)
+            .ToArray();
+        var mapped = StrategyParallelWork.MapOrdered<Unit, StrategyUnitStateDto?>(
+            units,
+            unit =>
+            {
+                var placement = StrategyFogDtoRules.ClassifyUnit(
+                    unit, meta, world.GameData, visibilityState);
+                if (placement != StrategyFogDtoRules.UnitFogPlacement.Map)
+                    return null;
 
-            var placement = StrategyFogDtoRules.ClassifyUnit(
-                unit, meta, world.GameData, visibilityState);
-            if (placement != StrategyFogDtoRules.UnitFogPlacement.Map)
-                continue;
+                var dto = MapUnit(unit, meta, world.GameData) with { MapVisible = true };
+                return intelBehavior.ApplyUnitDtoMask(
+                    dto,
+                    world,
+                    meta,
+                    meta.PlayerForceId,
+                    visibleCells,
+                    espionageLedger,
+                    meta.StartOptions);
+            },
+            minimumParallelCount: 32);
 
-            var dto = MapUnit(unit, meta, world.GameData) with { MapVisible = true };
-            dto = intelBehavior.ApplyUnitDtoMask(
-                dto,
-                world,
-                meta,
-                meta.PlayerForceId,
-                visibleCells,
-                espionageLedger,
-                meta.StartOptions);
-
-            mapUnits.Add(dto);
-        }
-
-        return mapUnits;
+        return [.. mapped.Where(dto => dto is not null).Cast<StrategyUnitStateDto>()];
     }
 
     private static IReadOnlyList<StrategyUnitRosterEntryDto> MapOwnUnitRoster(
@@ -2399,21 +2609,20 @@ public static class StrategyWorldStateMapper
         if (visibilityState is null)
             return [];
 
-        var roster = new List<StrategyUnitRosterEntryDto>();
-        foreach (var unit in world.GameData.Units.Values.OrderBy(u => u.Id))
-        {
-            if (TransportUnitRules.IsTransportUnit(unit))
-                continue;
+        var units = world.GameData.Units.Values
+            .Where(unit => !TransportUnitRules.IsTransportUnit(unit))
+            .OrderBy(unit => unit.Id)
+            .ToArray();
+        var mapped = StrategyParallelWork.MapOrdered<Unit, StrategyUnitRosterEntryDto?>(
+            units,
+            unit => StrategyFogDtoRules.ClassifyUnit(
+                    unit, meta, world.GameData, visibilityState)
+                == StrategyFogDtoRules.UnitFogPlacement.Roster
+                    ? ToRosterEntry(unit, meta, world.GameData)
+                    : null,
+            minimumParallelCount: 32);
 
-            var placement = StrategyFogDtoRules.ClassifyUnit(
-                unit, meta, world.GameData, visibilityState);
-            if (placement != StrategyFogDtoRules.UnitFogPlacement.Roster)
-                continue;
-
-            roster.Add(ToRosterEntry(unit, meta, world.GameData));
-        }
-
-        return roster;
+        return [.. mapped.Where(dto => dto is not null).Cast<StrategyUnitRosterEntryDto>()];
     }
 
     private static StrategyUnitRosterEntryDto ToRosterEntry(
@@ -2589,8 +2798,10 @@ public static class StrategyWorldStateMapper
     private static IReadOnlyList<int> MapTerrainIds(TileMap tileMap)
     {
         var ids = new int[tileMap.Length];
-        for (var i = 0; i < tileMap.Length; i++)
-            ids[i] = tileMap[i].Terrain;
+        StrategyParallelWork.ForEachIndex(
+            tileMap.Length,
+            index => ids[index] = tileMap[index].Terrain,
+            minimumParallelCount: 4096);
 
         return ids;
     }
@@ -2598,8 +2809,10 @@ public static class StrategyWorldStateMapper
     private static IReadOnlyList<int> MapRegionIds(TileMap tileMap)
     {
         var ids = new int[tileMap.Length];
-        for (var i = 0; i < tileMap.Length; i++)
-            ids[i] = tileMap[i].Region;
+        StrategyParallelWork.ForEachIndex(
+            tileMap.Length,
+            index => ids[index] = tileMap[index].Region,
+            minimumParallelCount: 4096);
 
         return ids;
     }

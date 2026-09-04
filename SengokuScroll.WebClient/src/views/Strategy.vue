@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   advanceDay,
+  advanceDays,
   listStrategySaveSlots,
   saveStrategyToSlot,
   loadStrategyFromSlot,
@@ -21,6 +22,8 @@ import {
   recordEspionageIntel,
   previewDiplomacyMission,
   orderDiplomacyMission,
+  previewPeaceSettlement,
+  orderPeaceSettlement,
   setStrongholdTaxRates,
   setStrongholdGovernancePriority,
   recruitAtStronghold,
@@ -34,6 +37,7 @@ import {
   leaveStrongholdAsCharacter,
   moveCharacter,
   enterStrongholdAsCharacter,
+  interactWithCharacter,
   previewCharacterPath,
   previewBattle,
   previewUnitPath,
@@ -51,6 +55,7 @@ import {
   type StrategyWorldState,
   type StrategyMapMasterState,
   type MapPoint,
+  type StrategyPeaceTermsPayload,
 } from "@/api/strategy";
 import StrategyMapCanvas from "@/components/strategy/StrategyMapCanvas.vue";
 import StrategyMapCellEntityPicker from "@/components/strategy/StrategyMapCellEntityPicker.vue";
@@ -110,6 +115,7 @@ import StrategySaveSlotDialog from "@/components/strategy/StrategySaveSlotDialog
 import StrategyForceCommandPopup from "@/components/strategy/StrategyForceCommandPopup.vue";
 import StrategyCellIntelHover from "@/components/strategy/StrategyCellIntelHover.vue";
 import StrategyMapViewControls from "@/components/strategy/StrategyMapViewControls.vue";
+import StrategyTutorialDialog from "@/components/strategy/StrategyTutorialDialog.vue";
 import type { MapViewportWorldRect } from "@/components/strategy/strategyMinimapTypes";
 import type { MapRouteOverlay, MapMoveRelayMarker } from "@/components/strategy/mapRouteStyles";
 import { getForceColorCss } from "@/components/strategy/forceColors";
@@ -238,6 +244,8 @@ const initialLoadError = ref("");
 const loading = ref(false);
 const error = ref("");
 const info = ref("");
+const tutorialVisible = ref(false);
+const TUTORIAL_STORAGE_KEY = "sengoku.strategy.tutorial.completed.v1";
 const selectedUnitId = ref<number | null>(null);
 const selectedCharacterId = ref<number | null>(null);
 const selectedStrongholdId = ref<number | null>(null);
@@ -272,6 +280,13 @@ const diplomacySuccessChance = ref<number | null>(null);
 const diplomacyTravelDays = ref<number | null>(null);
 const diplomacyPreviewLoading = ref(false);
 const diplomacyForcePickActive = ref(false);
+const diplomacyPeaceRequiredWarScore = ref<number | null>(null);
+const diplomacyPeaceCanForceAcceptance = ref(false);
+const diplomacyPeaceTerms = ref<Omit<StrategyPeaceTermsPayload, "characterId" | "targetForceId">>({
+  cededStrongholdIds: [],
+  reparationsMoney: 0,
+  demandOuterVassalage: false,
+});
 
 const onDiplomacyForceStrongholdPickedRef = ref<(strongholdId: number) => boolean>(
   () => false
@@ -401,6 +416,47 @@ const dateText = computed(() => {
   const day = String(d.day).padStart(2, " ");
   return ` ${d.year}年${month}月${day}日`;
 });
+
+const campaignStatusText = computed(() => {
+  const campaign = state.value?.campaignStatus;
+  if (!campaign) return "";
+  if (state.value?.allForcesAiControlled) {
+    const leader = campaign.leadingForceName ? ` · 领先：${campaign.leadingForceName}` : "";
+    return `观战 ${campaign.totalStrongholdCount} 城${leader}`;
+  }
+  if (campaign.state === "Victory") return "统一完成";
+  if (campaign.state === "Defeat") return "本家覆灭";
+  return `统一进度 ${campaign.playerStrongholdCount}/${campaign.totalStrongholdCount}`;
+});
+
+const campaignStatusType = computed<"success" | "danger" | "warning" | "info">(() => {
+  const campaign = state.value?.campaignStatus;
+  if (campaign?.state === "Victory") return "success";
+  if (campaign?.state === "Defeat") return "danger";
+  if (state.value?.allForcesAiControlled) return "warning";
+  return "info";
+});
+
+function maybeShowTutorial() {
+  try {
+    tutorialVisible.value = localStorage.getItem(TUTORIAL_STORAGE_KEY) !== "1";
+  } catch {
+    tutorialVisible.value = true;
+  }
+}
+
+function completeTutorial() {
+  try {
+    localStorage.setItem(TUTORIAL_STORAGE_KEY, "1");
+  } catch {
+    // 隐私模式下仍允许完成本次引导。
+  }
+}
+
+function openTutorial() {
+  gamePaused.value = true;
+  tutorialVisible.value = true;
+}
 
 const selectedOperableUnit = computed(() => {
   if (!state.value || selectedUnitId.value == null) return null;
@@ -873,7 +929,7 @@ const mapColorMode = ref<StrategyMapColorMode>("Realm");
 const gamePaused = ref(true);
 
 /** 1 / 2 / 4 倍速：进行模式下每推进 1 日的间隔 = 基准毫秒 ÷ 倍速。 */
-const gameSpeed = ref<1 | 2 | 4>(1);
+const gameSpeed = ref<1 | 2 | 4 | 8>(1);
 
 /** 1 倍速下每游戏日的基础间隔（毫秒）；2 倍速 ≈ 1 秒/日，4 倍速 ≈ 0.5 秒/日。 */
 const AUTO_DAY_BASE_MS = 2000;
@@ -917,7 +973,10 @@ async function runAutoAdvanceTick(generation: number) {
     return;
   }
 
-  await onAdvanceDay();
+  if (state.value?.allForcesAiControlled && gameSpeed.value === 8)
+    await onAdvanceDays(7);
+  else
+    await onAdvanceDay();
 
   if (generation !== autoAdvanceGeneration || gamePaused.value) return;
   scheduleAutoAdvance(autoAdvanceDelayMs());
@@ -1877,6 +1936,13 @@ function openDiplomacyDialog(
   diplomacyTargetForceId.value = initialTargetForceId;
   diplomacySuccessChance.value = null;
   diplomacyTravelDays.value = null;
+  diplomacyPeaceRequiredWarScore.value = null;
+  diplomacyPeaceCanForceAcceptance.value = false;
+  diplomacyPeaceTerms.value = {
+    cededStrongholdIds: [],
+    reparationsMoney: 0,
+    demandOuterVassalage: false,
+  };
   diplomacyForcePickActive.value = false;
   closeForceCommandMenu();
   handlePopupCancel();
@@ -1895,15 +1961,35 @@ async function refreshDiplomacyPreview() {
 
   diplomacyPreviewLoading.value = true;
   try {
-    const preview = await previewDiplomacyMission({
+    const missionPreviewPromise = previewDiplomacyMission({
       characterId,
       targetForceId,
       action: diplomacyAction.value,
     });
-    diplomacySuccessChance.value = preview.successChancePercent;
-    diplomacyTravelDays.value = preview.travelDays;
+    if (diplomacyAction.value === "Peace") {
+      const [missionPreview, peacePreview] = await Promise.all([
+        missionPreviewPromise,
+        previewPeaceSettlement({
+          characterId,
+          targetForceId,
+          ...diplomacyPeaceTerms.value,
+        }),
+      ]);
+      diplomacySuccessChance.value = peacePreview.acceptanceChancePercent;
+      diplomacyTravelDays.value = missionPreview.travelDays;
+      diplomacyPeaceRequiredWarScore.value = peacePreview.requiredWarScore;
+      diplomacyPeaceCanForceAcceptance.value = peacePreview.canForceAcceptance;
+    } else {
+      const preview = await missionPreviewPromise;
+      diplomacySuccessChance.value = preview.successChancePercent;
+      diplomacyTravelDays.value = preview.travelDays;
+      diplomacyPeaceRequiredWarScore.value = null;
+      diplomacyPeaceCanForceAcceptance.value = false;
+    }
   } catch (err) {
     diplomacySuccessChance.value = null;
+    diplomacyPeaceRequiredWarScore.value = null;
+    diplomacyPeaceCanForceAcceptance.value = false;
     ElMessage.warning(err instanceof Error ? err.message : "无法预览外交成功率");
   } finally {
     diplomacyPreviewLoading.value = false;
@@ -1916,18 +2002,34 @@ async function handleDiplomacyConfirm() {
   if (!characterId || !targetForceId) return;
 
   try {
-    const next = await orderDiplomacyMission({
-      characterId,
-      targetForceId,
-      action: diplomacyAction.value,
-    });
+    const next = diplomacyAction.value === "Peace"
+      ? await orderPeaceSettlement({
+          characterId,
+          targetForceId,
+          ...diplomacyPeaceTerms.value,
+        })
+      : await orderDiplomacyMission({
+          characterId,
+          targetForceId,
+          action: diplomacyAction.value,
+        });
     state.value = next;
     diplomacyDialogVisible.value = false;
     info.value = `已派遣使节执行${
       diplomacyAction.value === "Ally" ? "同盟" : diplomacyAction.value === "War" ? "宣战" : "议和"
     }任务`;
   } catch (err) {
-    void notifyActionBlocked("外交任务失败", err instanceof Error ? err.message : "未知错误");
+    const raw = err instanceof Error ? err.message : "未知错误";
+    const peaceErrors: Record<string, string> = {
+      InvalidPeaceStronghold: "所选据点已不属于对方，请重新选择条款",
+      PeaceMustLeaveStronghold: "不能在和谈中割走对方全部据点",
+      InsufficientPeaceReparations: "对方府库不足以支付这笔赔款",
+      InvalidPeaceVassalage: "当前双方身份不满足外藩臣服条件",
+      PeaceTermsExceedMaximumWarScore: "条款总成本超过 100 战争分数，请减少要求",
+      NotEnemyForce: "双方已不处于战争状态",
+    };
+    const friendly = Object.entries(peaceErrors).find(([code]) => raw.includes(code))?.[1] ?? raw;
+    void notifyActionBlocked("外交任务失败", friendly);
   }
 }
 
@@ -3081,6 +3183,7 @@ function syncLastGameStartSettingsFromWorldState(world: StrategyWorldState) {
     difficulty: resolveDifficultyFromOptions(customStartOptions),
     customStartOptions,
     intelDebugMode: intelDebugMode ?? true,
+    allForcesAiControlled: world.allForcesAiControlled ?? false,
   };
 }
 
@@ -3117,8 +3220,10 @@ async function startGameWithSettings(settings: GameStartSettings) {
       scenarioId: settings.scenarioId,
       difficulty: settings.difficulty,
       customStartOptions: buildLoadStartOptions(settings),
+      allForcesAiControlled: settings.allForcesAiControlled,
     });
     resetMapSessionUi();
+    maybeShowTutorial();
     applyApiSourceInfoMessage();
     initialLoading.value = false;
     await refreshMovementTrace();
@@ -3145,6 +3250,7 @@ async function resumeExistingGame() {
     state.value = next;
     syncLastGameStartSettingsFromWorldState(next);
     resetMapSessionUi();
+    maybeShowTutorial();
     applyApiSourceInfoMessage();
     initialLoading.value = false;
     await refreshMovementTrace();
@@ -3389,6 +3495,46 @@ async function onLoadFromSlot(slot: number) {
   }
 }
 
+async function onAdvanceDays(days: number) {
+  if (loading.value) return;
+  loading.value = true;
+  error.value = "";
+  try {
+    const response = await advanceDays(days);
+    state.value = response.state;
+    appendEvents(response.events ?? []);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "批量推进日期失败";
+    if (!gamePaused.value) gamePaused.value = true;
+  } finally {
+    loading.value = false;
+    await refreshMovementTrace();
+  }
+}
+
+async function handleCharacterInteraction(
+  targetCharacterId: number,
+  interaction: "Talk" | "Gift",
+) {
+  if (!state.value) return;
+  const lordId = resolvePlayerLordCharacterId(state.value);
+  if (lordId == null) {
+    error.value = "未找到玩家当主，无法互动";
+    return;
+  }
+
+  loading.value = true;
+  error.value = "";
+  try {
+    state.value = await interactWithCharacter(lordId, targetCharacterId, interaction);
+    info.value = interaction === "Gift" ? "赠礼完成，双方关系已更新" : "交谈完成，双方关系已更新";
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "人物互动失败";
+  } finally {
+    loading.value = false;
+  }
+}
+
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
@@ -3623,7 +3769,23 @@ watch(
                     <el-radio-button :label="1" title="1 倍速">▶</el-radio-button>
                     <el-radio-button :label="2" title="2 倍速">▶▶</el-radio-button>
                     <el-radio-button :label="4" title="4 倍速">▶▶▶</el-radio-button>
+                    <el-radio-button
+                      v-if="state.allForcesAiControlled"
+                      :label="8"
+                      title="观战快进：每批推进 7 日"
+                    >
+                      观战×8
+                    </el-radio-button>
                   </el-radio-group>
+                  <el-tag
+                    v-if="campaignStatusText"
+                    :type="campaignStatusType"
+                    size="small"
+                    effect="dark"
+                    :title="state.campaignStatus?.objective"
+                  >
+                    {{ campaignStatusText }}
+                  </el-tag>
                 </div>
                 <div class="map-message-zone">
                   <StrategyMessageFeedToolbar
@@ -3699,6 +3861,7 @@ watch(
               </div>
             </div>
             <div class="map-top-actions map-float-panel">
+              <el-button size="small" @click="openTutorial">帮助</el-button>
               <el-button size="small" @click="openIntelSystemDialog">情报</el-button>
               <el-button size="small" @click="systemMenuVisible = true">系统</el-button>
             </div>
@@ -3970,9 +4133,12 @@ watch(
       :success-chance-percent="diplomacySuccessChance"
       :travel-days="diplomacyTravelDays"
       :preview-loading="diplomacyPreviewLoading"
+      :peace-required-war-score="diplomacyPeaceRequiredWarScore"
+      :peace-can-force-acceptance="diplomacyPeaceCanForceAcceptance"
       @update:visible="diplomacyDialogVisible = $event"
       @update:character-id="diplomacyCharacterId = $event"
       @update:target-force-id="diplomacyTargetForceId = $event"
+      @update:peace-terms="diplomacyPeaceTerms = $event"
       @request-preview="refreshDiplomacyPreview"
       @pick-force-from-map="beginDiplomacyForcePick"
       @confirm="handleDiplomacyConfirm"
@@ -4068,6 +4234,7 @@ watch(
       :focus-mode="intelSystemFocusMode"
       :focus-title="intelSystemFocusTitle"
       @update:visible="intelSystemVisible = $event"
+      @interact="handleCharacterInteraction"
     />
     <StrategySystemMenuDialog
       :visible="systemMenuVisible"
@@ -4082,6 +4249,12 @@ watch(
       @update:visible="saveSlotDialogVisible = $event"
       @save="onSaveToSlot"
       @load="onLoadFromSlot"
+    />
+    <StrategyTutorialDialog
+      :visible="tutorialVisible"
+      :spectator="state?.allForcesAiControlled"
+      @update:visible="tutorialVisible = $event"
+      @finish="completeTutorial"
     />
 
     <div

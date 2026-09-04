@@ -19,4 +19,14 @@ public sealed class StrategyForceLordRegistry
 
     public void SetLordCharacterId(int forceId, int characterId)
         => lordCharacterByForce[forceId] = characterId;
+
+    public IReadOnlyDictionary<int, int> Snapshot()
+        => new Dictionary<int, int>(lordCharacterByForce);
+
+    public void Restore(IReadOnlyDictionary<int, int> restored)
+    {
+        lordCharacterByForce.Clear();
+        foreach (var (forceId, characterId) in restored)
+            lordCharacterByForce[forceId] = characterId;
+    }
 }

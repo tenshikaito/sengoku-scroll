@@ -1,11 +1,15 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using SengokuScroll.Common.Types;
 using SengokuScroll.Domain;
+using SengokuScroll.Domain.Actions;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Types;
 using static SengokuScroll.Domain.Entities.Unit;
 
 using SengokuScroll.Strategy.Models;
+using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Vision;
 
@@ -14,9 +18,19 @@ namespace SengokuScroll.Strategy.Persistence;
 /// <summary>单机 JSON 存档文档（M3-d 最小可恢复字段）。</summary>
 public sealed class StrategySaveDocument
 {
+    /// <summary>存档格式版本；V2 起包含完整运行时 GameData 快照。</summary>
+    public int FormatVersion { get; init; } = 2;
+
     public required string ScenarioId { get; init; }
 
     public required int PlayerForceId { get; init; }
+
+    /// <summary>保存本局难度与开局规则；旧存档缺省时沿用剧本默认。</summary>
+    public string? Difficulty { get; init; }
+
+    public GameStartOptionsDto? StartOptions { get; init; }
+
+    public bool? AllForcesAiControlled { get; init; }
 
     /// <summary>本局固定随机种子；缺省兼容旧存档（Apply 时不覆盖）。</summary>
     public int? SimulationSeed { get; init; }
@@ -34,6 +48,15 @@ public sealed class StrategySaveDocument
 
     /// <summary>角色情报运行时字段（忠诚/关系/任务/增减益等）。</summary>
     public List<StrategySaveCharacter>? Characters { get; init; }
+
+    /// <summary>
+    /// 完整运行时状态。使用 JSON 元素隔离捕获时对象，避免保存后世界继续推进而污染存档。
+    /// 旧 V1 存档缺少本字段时仍由下方兼容 DTO 恢复。
+    /// </summary>
+    public JsonElement? RuntimeState { get; init; }
+
+    /// <summary>情报、税费、贡纳与在途报告等非 GameData 单局服务状态。</summary>
+    public JsonElement? RuntimeServices { get; set; }
 }
 
 public sealed class StrategySaveDate
@@ -189,11 +212,25 @@ public sealed class StrategySaveDiplomacyMission
     public int RemainingDays { get; init; }
 
     public int SuccessChancePercent { get; init; }
+
+    public List<int>? CededStrongholdIds { get; init; }
+
+    public int ReparationsMoney { get; init; }
+
+    public bool DemandOuterVassalage { get; init; }
 }
 
 public sealed class StrategySaveCharacter
 {
     public required int Id { get; init; }
+
+    public int? Money { get; init; }
+
+    public int? Ap { get; init; }
+
+    public int? Hp { get; init; }
+
+    public int? Emotion { get; init; }
 
     public byte Loyalty { get; init; }
 
@@ -220,12 +257,27 @@ public sealed class StrategySaveDiplomacy
 /// <summary>从运行中世界捕获/恢复存档。</summary>
 public static class StrategyWorldSaveService
 {
+    private static readonly JsonSerializerOptions RuntimeStateJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters =
+        {
+            new GameDateJsonConverter(),
+            new Point2JsonConverter(),
+            new Point3JsonConverter()
+        }
+    };
+
+    internal static JsonSerializerOptions RuntimeStateSerializationOptions
+        => RuntimeStateJsonOptions;
+
     /// <summary>捕获势力金粮、据点归属/领主/驻军与单位位置/路线等可变状态。</summary>
     public static StrategySaveDocument Capture(
         GameWorld world,
         string scenarioId,
         int playerForceId,
-        StrategyVisibilityLedger visibilityLedger)
+        StrategyVisibilityLedger visibilityLedger,
+        StrategyScenarioMeta? scenarioMeta = null)
     {
         var data = world.GameData;
         var date = data.GameDate;
@@ -235,7 +287,13 @@ public static class StrategyWorldSaveService
         {
             ScenarioId = scenarioId,
             PlayerForceId = playerForceId,
+            Difficulty = scenarioMeta?.Difficulty.ToString(),
+            StartOptions = scenarioMeta is null
+                ? null
+                : GameStartOptionsMapper.ToDto(scenarioMeta.StartOptions),
+            AllForcesAiControlled = scenarioMeta?.AllForcesAiControlled,
             SimulationSeed = data.SimulationSeed,
+            RuntimeState = JsonSerializer.SerializeToElement(data, RuntimeStateJsonOptions),
             Visibility = visibilityLedger.Capture(playerForceId, tileMap.Width, tileMap.Height),
             Date = new StrategySaveDate
             {
@@ -329,6 +387,13 @@ public static class StrategyWorldSaveService
     /// <summary>将存档覆盖到已加载剧本世界（先 LoadScenario 再 Apply）。</summary>
     public static void Apply(StrategySaveDocument save, GameWorld world)
     {
+        if (save.FormatVersion >= 2
+            && save.RuntimeState is { ValueKind: JsonValueKind.Object } runtimeState
+            && TryRestoreRuntimeState(runtimeState, world))
+        {
+            return;
+        }
+
         var data = world.GameData;
 
         data.GameDate = new Domain.Types.GameDate(save.Date.Year, save.Date.Month, save.Date.Day);
@@ -411,6 +476,14 @@ public static class StrategyWorldSaveService
                     continue;
 
                 character.Loyalty = charSave.Loyalty;
+                if (charSave.Money is int money)
+                    character.Money = money;
+                if (charSave.Ap is int ap)
+                    character.Ap = ap;
+                if (charSave.Hp is int hp)
+                    character.Hp = hp;
+                if (charSave.Emotion is int emotion)
+                    character.Emotion = emotion;
                 if (charSave.ServiceDate is { } serviceDate)
                     character.ServiceDate = ToGameDate(serviceDate);
                 if (charSave.Relationships is { Count: > 0 })
@@ -439,6 +512,14 @@ public static class StrategyWorldSaveService
                         TargetForceId = missionSave.TargetForceId,
                         RemainingDays = missionSave.RemainingDays,
                         SuccessChancePercent = missionSave.SuccessChancePercent,
+                        PeaceTerms = missionSave.Action == "Peace"
+                            ? new PeaceSettlementTerms
+                            {
+                                CededStrongholdIds = missionSave.CededStrongholdIds ?? [],
+                                ReparationsMoney = missionSave.ReparationsMoney,
+                                DemandOuterVassalage = missionSave.DemandOuterVassalage,
+                            }
+                            : null,
                     };
                 }
 
@@ -472,6 +553,143 @@ public static class StrategyWorldSaveService
             foreach (var point in unitSave.Route.Skip(1))
                 unit.ActionTarget.RoutePoints.Enqueue(new Point2(point.X, point.Y));
         }
+
+        // 存档坐标覆盖实体后，必须同步重建地图格索引；否则显示位置与战斗/占格查询会分裂。
+        world.GameMapData.Units.Clear();
+        foreach (var unit in data.Units.Values.Where(unit => !unit.InStronghold))
+            MapLocationActions.RegisterUnit(world, unit);
+    }
+
+    private static bool TryRestoreRuntimeState(JsonElement runtimeState, GameWorld world)
+    {
+        GameData? restored;
+        try
+        {
+            restored = runtimeState.Deserialize<GameData>(RuntimeStateJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+
+        if (restored is null
+            || restored.Forces is null
+            || restored.Strongholds is null
+            || restored.Units is null
+            || restored.SubUnits is null
+            || restored.Characters is null
+            || restored.SupplyConvoys is null
+            || restored.MessageCarriers is null
+            || restored.Wars is null
+            || restored.Battlefields is null)
+            return false;
+
+        var data = world.GameData;
+        data.GameDate = restored.GameDate;
+        data.SimulationSeed = restored.SimulationSeed;
+        data.NextBattlefieldId = restored.NextBattlefieldId;
+
+        ReplaceDictionary(data.Forces, restored.Forces);
+        ReplaceDictionary(data.Strongholds, restored.Strongholds);
+        ReplaceDictionary(data.Units, restored.Units);
+        ReplaceDictionary(data.SubUnits, restored.SubUnits);
+        ReplaceDictionary(data.Characters, restored.Characters);
+        ReplaceDictionary(data.SupplyConvoys, restored.SupplyConvoys);
+        ReplaceDictionary(data.MessageCarriers, restored.MessageCarriers);
+        ReplaceDictionary(data.Wars, restored.Wars);
+        ReplaceDictionary(data.Battlefields, restored.Battlefields);
+
+        RebuildMapIndexes(world);
+        return true;
+    }
+
+    private static void ReplaceDictionary<TKey, TValue>(
+        Dictionary<TKey, TValue> target,
+        IReadOnlyDictionary<TKey, TValue> source)
+        where TKey : notnull
+    {
+        target.Clear();
+        foreach (var (key, value) in source)
+            target[key] = value;
+    }
+
+    private static void RebuildMapIndexes(GameWorld world)
+    {
+        world.GameMapData.Units.Clear();
+        foreach (var unit in world.GameData.Units.Values.Where(unit => !unit.InStronghold))
+            MapLocationActions.RegisterUnit(world, unit);
+
+        world.GameMapData.Characters.Clear();
+        foreach (var character in world.GameData.Characters.Values)
+            MapLocationActions.RegisterCharacter(world, character);
+
+        world.GameMapData.Strongholds.Clear();
+        foreach (var stronghold in world.GameData.Strongholds.Values)
+            MapLocationActions.RegisterStronghold(world, stronghold);
+    }
+
+    private sealed class GameDateJsonConverter : JsonConverter<GameDate>
+    {
+        public override GameDate Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            => GameDate.FromTotalPhases(reader.GetInt32());
+
+        public override void Write(Utf8JsonWriter writer, GameDate value, JsonSerializerOptions options)
+            => writer.WriteNumberValue(value.TotalPhases);
+    }
+
+    private sealed class Point2JsonConverter : JsonConverter<Point2>
+    {
+        public override Point2 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+            return new Point2(ReadCoordinate(root, "x"), ReadCoordinate(root, "y"));
+        }
+
+        public override void Write(Utf8JsonWriter writer, Point2 value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("x", value.X);
+            writer.WriteNumber("y", value.Y);
+            writer.WriteEndObject();
+        }
+    }
+
+    private sealed class Point3JsonConverter : JsonConverter<Point3>
+    {
+        public override Point3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+            return new Point3(
+                ReadCoordinate(root, "x"),
+                ReadCoordinate(root, "y"),
+                ReadCoordinate(root, "z"));
+        }
+
+        public override void Write(Utf8JsonWriter writer, Point3 value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("x", value.X);
+            writer.WriteNumber("y", value.Y);
+            writer.WriteNumber("z", value.Z);
+            writer.WriteEndObject();
+        }
+    }
+
+    private static int ReadCoordinate(JsonElement element, string name)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return property.Value.GetInt32();
+        }
+
+        return 0;
     }
 
     private static void ResetGarrisonComposition(Stronghold stronghold, GameData gameData)
@@ -501,6 +719,10 @@ public static class StrategyWorldSaveService
         return new StrategySaveCharacter
         {
             Id = character.Id,
+            Money = character.Money,
+            Ap = character.Ap,
+            Hp = character.Hp,
+            Emotion = character.Emotion,
             Loyalty = character.Loyalty,
             ServiceDate = character.ServiceDate.Year > 0 ? ToSaveDate(character.ServiceDate) : null,
             Relationships = character.Relationships.Count == 0
@@ -531,6 +753,9 @@ public static class StrategyWorldSaveService
                     TargetForceId = character.DiplomacyMission.TargetForceId,
                     RemainingDays = character.DiplomacyMission.RemainingDays,
                     SuccessChancePercent = character.DiplomacyMission.SuccessChancePercent,
+                    CededStrongholdIds = character.DiplomacyMission.PeaceTerms?.CededStrongholdIds,
+                    ReparationsMoney = character.DiplomacyMission.PeaceTerms?.ReparationsMoney ?? 0,
+                    DemandOuterVassalage = character.DiplomacyMission.PeaceTerms?.DemandOuterVassalage ?? false,
                 },
             ForceStatus = character.ForceStatus == Character.CharacterForceStatus.Idle
                 ? null

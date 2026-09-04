@@ -40,6 +40,8 @@ export {
   recordEspionageIntel,
   previewDiplomacyMission,
   orderDiplomacyMission,
+  previewPeaceSettlement,
+  orderPeaceSettlement,
   setStrongholdTaxRates,
   setStrongholdGovernancePriority,
   recruitAtStronghold,
@@ -53,12 +55,14 @@ export {
   leaveStrongholdAsCharacter,
   moveCharacter,
   enterStrongholdAsCharacter,
+  interactWithCharacter,
   previewCharacterPath,
   previewUnitPath,
   previewBattle,
   executeInstantBattle,
   setUnitDirective,
   advanceDay,
+  advanceDays,
   getMovementTrace,
   getAiDecisionTrace,
   exportStrategySave,
@@ -77,6 +81,8 @@ export type {
   StrategyMarketDailyBar,
   StrategyMarketDepthLevel,
   StrategyMarketOpenOrder,
+  StrategyPeaceTermsPayload,
+  StrategyPeaceSettlementPreview,
 } from "./strategyClient";
 export type { StrategySaveSlotSummary } from "./strategyTypes";
 export type { StrategyPathPreview, StrategyBattlePreview, StrategyBattleResult, StrategyBattleLogEntry, StrategyInstantBattleResponse, StrategyPolicyChangeResponse, StrategyAdvanceDayResponse, StrategyLordState, StrategyEvent, StrategyEconomySettlementDetail, StrategyEconomyMonthlyDetail, MapPoint } from "./strategyTypes";

@@ -12,4 +12,14 @@ public sealed class StrategyPendingBattleReportStore
 
     public StrategyBattleResultDto? Take(int messengerId)
         => byMessengerId.Remove(messengerId, out var result) ? result : null;
+
+    public IReadOnlyDictionary<int, StrategyBattleResultDto> Snapshot()
+        => new Dictionary<int, StrategyBattleResultDto>(byMessengerId);
+
+    public void Restore(IReadOnlyDictionary<int, StrategyBattleResultDto> restored)
+    {
+        byMessengerId.Clear();
+        foreach (var (messengerId, result) in restored)
+            byMessengerId[messengerId] = result;
+    }
 }

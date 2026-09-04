@@ -4,6 +4,7 @@ using SengokuScroll.Domain.Types;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Battle;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Rules;
 
@@ -68,7 +69,7 @@ public static class InstantBattleCalculator
         int targetX,
         int targetY)
     {
-        var hash = HashCode.Combine(
+        var hash = DeterministicHash.Combine(
             simulationSeed,
             date.Year,
             date.Month,
@@ -77,7 +78,7 @@ public static class InstantBattleCalculator
             defenderId,
             targetX,
             targetY);
-        return hash == int.MinValue ? 0 : Math.Abs(hash);
+        return hash;
     }
 
     /// <summary>兼容旧调用：未传入本局种子时等同 simulationSeed=0。</summary>

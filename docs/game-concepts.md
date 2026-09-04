@@ -594,8 +594,9 @@
 | **占城触发** | **禁止踩格自动占城**；仅攻城指令 + 战后/空城/劝降。 | ✅ | `StrategyStrongholdOccupationSystem` |
 | **陷落后果** | 代官清空、居城迁移、在场将领俘虏、战时占领登记。 | ✅ | `StrongholdCaptureConsequenceRules.cs` |
 | **战时占领登记** | 记录原主/占领者/日期（战史；和谈疆界以当前据点归属为准）。 | ✅ | `StrategyWarOccupationRegistry.cs` |
-| **和谈疆界** | 停战默认 **维持当前据点归属**；割让须显式和谈条款（未实装 UI）。 | 📋 | 设计见 strategy-detail-design §10 |
-| **议和生效** | 经信使送达后生效；关联战争之全部 Battlefield 强制停火。参战国单独退出仅拆其部队所在场。 | 📋 | 设计规格 §5.5 |
+| **战争分数** | 野战胜利 `+5～15`、占领据点 `+10～30`；宣战方视角 `-100～100`，保存近期战果。 | ✅ | `War.cs` / `StrategyWarScoreRules.cs` |
+| **和谈疆界** | 停战默认 **维持当前据点归属**；可显式要求额外割让据点、赔款或外藩臣服。 | ✅ | `PeaceSettlementRules.cs` / 和谈 UI |
+| **议和生效** | 经使节送达后生效；主战国议和结束整场战争并关闭关联 Battlefield，所有交战组合获得 180 日停战；参战国可单独退出。 | ✅ | `PeaceSettlementActions.cs` / `ForceDiplomacyActions.cs` |
 | **势力抵抗 ForceResistance** | 仍有据点或野战部队 → 势力未灭亡。 | ✅ | `ForceResistanceRules.cs` |
 | **当主继承 Succession** | 当主被俘→势力灭亡；阵亡→有抵抗则立继承人（与 BF 内当主阵亡冲击衔接）。 | 📋 | `ForceSuccessionRules.cs` |
 

@@ -735,6 +735,20 @@ export function createMiniKantoState(): StrategyWorldState {
       { targetForceId: 2, relation: "Enemy" },
       { targetForceId: 6, relation: "Allied" },
     ],
+    wars: [
+      {
+        id: 1,
+        aggressorForceId: 1,
+        defenderForceId: 2,
+        aggressorForceIds: [1],
+        defenderForceIds: [2],
+        playerWarScore: 0,
+        startYear: 1560,
+        startMonth: 1,
+        startDay: 1,
+        recentScoreEvents: [],
+      },
+    ],
     strongholds,
     characters: buildMockCharactersFromWorld(strongholds),
     units: [

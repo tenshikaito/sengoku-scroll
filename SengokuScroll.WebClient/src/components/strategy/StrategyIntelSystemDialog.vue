@@ -41,6 +41,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "update:visible": [value: boolean];
+  interact: [targetCharacterId: number, interaction: "Talk" | "Gift"];
 }>();
 
 const masterDataTabs = masterDataPresetTabs();
@@ -156,6 +157,7 @@ function onIntelNavigate(target: IntelNavigateTarget) {
           :navigate-request="navigateRequest"
           detail-only
           @navigate="onIntelNavigate"
+          @interact="(targetId, interaction) => emit('interact', targetId, interaction)"
         />
       </template>
 
@@ -191,6 +193,7 @@ function onIntelNavigate(target: IntelNavigateTarget) {
             :intel-debug-mode="intelDebugMode"
             :navigate-request="navigateRequest"
             @navigate="onIntelNavigate"
+            @interact="(targetId, interaction) => emit('interact', targetId, interaction)"
           />
         </el-tab-pane>
 

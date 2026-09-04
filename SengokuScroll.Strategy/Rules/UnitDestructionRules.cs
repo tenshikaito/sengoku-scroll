@@ -198,14 +198,14 @@ public static class UnitDestructionRules
         if (victor.Soldier > destroyed.Soldier * 2)
             escapeChance -= 15;
 
-        var roll = Math.Abs(HashCode.Combine(
+        var roll = DeterministicHash.Combine(
             gameData.SimulationSeed,
             destroyed.Id,
             victor.Id,
             commander.Id,
             gameData.GameDate.Year,
             gameData.GameDate.Month,
-            gameData.GameDate.Day)) % 100;
+            gameData.GameDate.Day) % 100;
 
         // 业务：掷点低于逃脱率则逃回；介于逃脱率与 +35 之间则被俘；否则战死
         if (roll < escapeChance)

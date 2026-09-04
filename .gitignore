@@ -50,3 +50,7 @@ Desktop.ini
 ## 本地打包产物
 /build/
 SengokuScroll.WebApi/wwwroot/
+
+## 本地运行数据（存档可能包含玩家状态）
+App_Data/
+**/App_Data/

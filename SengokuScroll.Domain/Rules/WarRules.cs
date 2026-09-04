@@ -6,6 +6,9 @@ namespace SengokuScroll.Domain.Rules;
 /// <summary>战争参战/敌对/共战判定（军事堆叠与接敌）。</summary>
 public static class WarRules
 {
+    public const int MinimumWarScore = -100;
+    public const int MaximumWarScore = 100;
+
     /// <summary>两势力是否可军事同格堆叠：同势力，或处于同一场未结束战争的同侧。</summary>
     public static bool CanMilitaryStack(int forceIdA, int forceIdB, GameData gameData)
     {
@@ -62,6 +65,59 @@ public static class WarRules
 
     public static bool IsOnAggressorSide(War war, int forceId)
         => war.AggressorForceIds.Contains(forceId);
+
+    /// <summary>取得指定参战势力视角的战争分数；非参战方返回 0。</summary>
+    public static int GetWarScoreForForce(War war, int forceId)
+    {
+        if (war.AggressorForceIds.Contains(forceId))
+            return war.AggressorWarScore;
+
+        if (war.DefenderForceIds.Contains(forceId))
+            return -war.AggressorWarScore;
+
+        return 0;
+    }
+
+    /// <summary>以实际行动势力视角累计战争分数，并保存宣战方视角的事件增量。</summary>
+    public static int AddWarScore(
+        War war,
+        int actingForceId,
+        int targetForceId,
+        int scoreForActingForce,
+        GameDate date,
+        string reason,
+        int? sourceEntityId = null,
+        string? description = null)
+    {
+        if (war.IsEnded || scoreForActingForce == 0
+            || !AreOnOppositeSides(war, actingForceId, targetForceId))
+            return 0;
+
+        var aggressorDelta = IsOnAggressorSide(war, actingForceId)
+            ? scoreForActingForce
+            : -scoreForActingForce;
+        var before = war.AggressorWarScore;
+        war.AggressorWarScore = Math.Clamp(
+            before + aggressorDelta,
+            MinimumWarScore,
+            MaximumWarScore);
+        var appliedDelta = war.AggressorWarScore - before;
+        if (appliedDelta == 0)
+            return 0;
+
+        war.WarScoreEvents.Add(new WarScoreEvent
+        {
+            Date = date,
+            Delta = appliedDelta,
+            Reason = reason,
+            ActingForceId = actingForceId,
+            TargetForceId = targetForceId,
+            SourceEntityId = sourceEntityId,
+            Description = description,
+        });
+
+        return IsOnAggressorSide(war, actingForceId) ? appliedDelta : -appliedDelta;
+    }
 
     public static bool AreOnSameSide(War war, int forceIdA, int forceIdB)
     {

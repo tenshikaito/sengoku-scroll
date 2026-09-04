@@ -11,4 +11,7 @@ public sealed class CharacterDiplomacyMission
     public int RemainingDays { get; set; }
 
     public int SuccessChancePercent { get; set; }
+
+    /// <summary>议和任务携带的条款；其它外交行动为 null。</summary>
+    public PeaceSettlementTerms? PeaceTerms { get; set; }
 }

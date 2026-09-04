@@ -3,6 +3,7 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Rules;
 
 namespace SengokuScroll.Strategy.Helpers;
@@ -26,7 +27,8 @@ public static class TradeMarketAiHelper
         Stronghold origin,
         Stronghold destination,
         StrongholdActor merchant,
-        GameData gameData)
+        GameData gameData,
+        StrategyIntelligenceLedger? intelligenceLedger = null)
     {
         if (origin.Id == destination.Id)
             return false;
@@ -56,7 +58,13 @@ public static class TradeMarketAiHelper
             return false;
 
         var originPrice = MarketMakerAiHelper.ResolveReferencePrice(origin);
-        var destinationPrice = MarketMakerAiHelper.ResolveReferencePrice(destination);
+        var destinationPrice = ResolveKnownDestinationPrice(
+            merchant.ForceId,
+            destination,
+            gameData,
+            intelligenceLedger);
+        if (destinationPrice <= 0)
+            return false;
         var distance = Math.Abs(origin.Location.X - destination.Location.X)
                        + Math.Abs(origin.Location.Y - destination.Location.Y);
         var transportBp = Math.Max(0, distance) * MarketConstants.RegionalTransportCostBpPerTile;
@@ -67,6 +75,27 @@ public static class TradeMarketAiHelper
             / EconomyConstants.BasisPointsPer100Percent;
 
         return destinationPrice >= minProfitableDestination;
+    }
+
+    private static int ResolveKnownDestinationPrice(
+        int observerForceId,
+        Stronghold destination,
+        GameData gameData,
+        StrategyIntelligenceLedger? intelligenceLedger)
+    {
+        // 兼容纯规则单测/调用方；正式日更始终传入情报账本。
+        if (intelligenceLedger is null)
+            return MarketMakerAiHelper.ResolveReferencePrice(destination);
+
+        var observation = intelligenceLedger.GetLatestPrice(observerForceId, destination.Id);
+        if (observation is null)
+            return 0;
+
+        var ageDays = Math.Max(0, gameData.GameDate.TotalDays - observation.AsOfDate.TotalDays);
+        if (ageDays > MarketConstants.TradeIntelMaxAgeDays)
+            return 0;
+
+        return observation.PriceMoneyPerGo;
     }
 
     public static int CalculateTradeCargoGo(StrongholdActor merchant, Stronghold destination)

@@ -374,16 +374,16 @@
 | 收粮日 | 市民/官府粮增加 → 卖压潜力↑ | ✅ | `HarvestEconomyActions` |
 | 市民日耗粮 | 库存下降 → 买压潜力↑ | ✅ | `StrongholdEconomyActions` |
 | 跨据点运输队 | 粮直接入市民，**不经订单簿** | ✅ | `TradeEconomyActions` |
-| 跨据点 AI 贸易 | 低价据点→高价据点（比较中枢价差） | ✅ | `TradeMarketAiHelper` |
+| 跨据点 AI 贸易 | 低价据点→高价据点（仅比较已知且 ≤60 日行情） | ✅ | `TradeMarketAiHelper` + `StrategyIntelligenceLedger` |
 
 ### 15.3 市场开关与军事（间接 / 极端）
 
 | 因素 | 对粮价影响 | 状态 | 说明 |
 |------|------------|------|------|
 | **围城 / 封锁** | 市场 **关闭**，无挂单无撮合 | ✅ | `GarrisonBehaviorRules.IsStrongholdBlockaded` |
-| 围城恐慌抢粮 | 买单增加、价格飙升 | 📋 | 需与 §14.2 交叉成交 + 事件 |
-| 附近 **战争 / 开战** | 预期供应中断、抢粮 | 📋 | 无专用粮价 modifier |
-| 敌军压境 / 威胁 | 移民、弃城、粮外流 | 📋 | 部分移民逻辑已有，未接粮价 |
+| 围城恐慌抢粮 | 封锁时关市；封锁前威胁阶段提高囤粮偏好 | ✅ 基础 | `MarketContextSignalsHelper` |
+| 附近 **战争 / 开战** | 提高商户/市民囤粮偏好 | ✅ | `EnemyForceCount` → `HoardBiasBp` |
+| 敌军压境 / 威胁 | 额外提高囤粮偏好，并联动移民 | ✅ 基础 | `EnemyNearStronghold` |
 | 运输队被劫 | 在途粮损失，目的地供给↓ | ✅ | 遭遇战；到港量↓间接影响 |
 | 商队砸单 | 短期冲击价格、清空可见档位 | ✅ | `MarketLimitOrderExecutor` |
 

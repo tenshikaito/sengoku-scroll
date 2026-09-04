@@ -73,16 +73,16 @@ function showUnavailableTip(reason: string) {
       <StrategyMapActionButton
         variant="muted"
         :tooltip-side="tooltipSide"
-        tooltip="税率功能尚未实装"
-        @click="showUnavailableTip('税率功能尚未实装')"
+        tooltip="税率按据点设置，请选择本方据点后操作"
+        @click="showUnavailableTip('请在地图上选择本方据点，再从据点指令设置税率')"
       >
         💰 税率
       </StrategyMapActionButton>
       <StrategyMapActionButton
         variant="muted"
         :tooltip-side="tooltipSide"
-        tooltip="贸易功能尚未实装"
-        @click="showUnavailableTip('贸易功能尚未实装')"
+        tooltip="贸易按据点或商队执行，请选择本方据点或部队"
+        @click="showUnavailableTip('请在地图上选择本方据点或商队，再打开市场与贸易指令')"
       >
         💰 贸易
       </StrategyMapActionButton>

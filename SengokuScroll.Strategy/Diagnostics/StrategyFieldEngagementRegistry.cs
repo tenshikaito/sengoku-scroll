@@ -8,10 +8,12 @@ using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Diagnostics;
 
-/// <summary>相邻野战对峙累计日数（非持久化；仿真重启后清零）。</summary>
+/// <summary>同格野战对峙累计日数（随单局存档持久化）。</summary>
 public sealed class StrategyFieldEngagementRegistry
 {
     private readonly Dictionary<(int A, int B), int> standoffDays = [];
+
+    public sealed record Standoff(int UnitAId, int UnitBId, int Days);
 
     public static (int A, int B) PairKey(int unitAId, int unitBId)
         => unitAId < unitBId ? (unitAId, unitBId) : (unitBId, unitAId);
@@ -30,6 +32,16 @@ public sealed class StrategyFieldEngagementRegistry
 
     public void ClearStandoff(int unitAId, int unitBId)
         => standoffDays.Remove(PairKey(unitAId, unitBId));
+
+    public IReadOnlyList<Standoff> Snapshot()
+        => [.. standoffDays.Select(x => new Standoff(x.Key.A, x.Key.B, x.Value))];
+
+    public void Restore(IEnumerable<Standoff> restored)
+    {
+        standoffDays.Clear();
+        foreach (var entry in restored.Where(x => x.Days >= 0))
+            standoffDays[PairKey(entry.UnitAId, entry.UnitBId)] = entry.Days;
+    }
 
     public void PruneNonAdjacent(GameData gameData)
     {

@@ -49,6 +49,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   navigate: [target: IntelNavigateTarget];
+  interact: [targetCharacterId: number, interaction: "Talk" | "Gift"];
 }>();
 
 const listPreset = ref<PersonListPreset>("status");
@@ -67,6 +68,26 @@ const detailTab = ref<
 const selectedPersonId = ref<number | null>(null);
 
 const playerLordCharacterId = computed(() => resolvePlayerLordCharacterId(props.worldState));
+const playerLord = computed(() =>
+  props.worldState.characters?.find((item) => item.id === playerLordCharacterId.value),
+);
+const selectedPerson = computed(() =>
+  props.worldState.characters?.find((item) => item.id === selectedPersonId.value),
+);
+const canInteract = computed(() => {
+  const lord = playerLord.value;
+  const target = selectedPerson.value;
+  if (!lord || !target || lord.id === target.id || props.worldState.allForcesAiControlled) return false;
+  return lord.locationType === "Stronghold"
+    && target.locationType === "Stronghold"
+    && (lord.strongholdId ?? 0) > 0
+    && lord.strongholdId === target.strongholdId;
+});
+const interactionHint = computed(() => {
+  if (props.worldState.allForcesAiControlled) return "观战模式不可手动干预";
+  if (selectedPersonId.value === playerLordCharacterId.value) return "不能与自己互动";
+  return canInteract.value ? "消耗行动力并改变双方关系" : "当主与目标必须在同一据点";
+});
 
 const showPersonStanceEffectTabs = computed(() => {
   if (selectedPersonId.value == null) return false;
@@ -302,6 +323,25 @@ watch(
           @navigate="onIntelNavigate"
         />
         <p v-else class="placeholder">请选择人物。</p>
+        <div v-if="selectedPersonId != null && selectedPersonId !== playerLordCharacterId" class="social-actions">
+          <span class="social-actions__hint">{{ interactionHint }}</span>
+          <el-button
+            size="small"
+            :disabled="!canInteract || (worldState.lord.ap ?? 0) < 1"
+            @click="emit('interact', selectedPersonId, 'Talk')"
+          >
+            交谈（1 AP）
+          </el-button>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            :disabled="!canInteract || (worldState.lord.ap ?? 0) < 2 || (playerLord?.money ?? 0) < 100"
+            @click="emit('interact', selectedPersonId, 'Gift')"
+          >
+            赠礼（2 AP / 100文）
+          </el-button>
+        </div>
       </div>
 
       <div v-else-if="detailTab === 'attributes'" class="detail-body">
@@ -420,6 +460,23 @@ watch(
 .placeholder {
   margin: 0;
   font-size: 0.85rem;
+  color: #64748b;
+}
+
+.social-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.social-actions__hint {
+  margin-right: auto;
+  font-size: 12px;
   color: #64748b;
 }
 </style>

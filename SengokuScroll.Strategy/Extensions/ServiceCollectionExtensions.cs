@@ -114,6 +114,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<StrategyCharacterStaminaSystem>();
         services.AddSingleton<IStrategyCharacterStaminaSystem>(sp => sp.GetRequiredService<StrategyCharacterStaminaSystem>());
 
+        services.AddSingleton<StrategyCharacterObjectiveSystem>();
+        services.AddSingleton<IStrategyCharacterObjectiveSystem>(
+            sp => sp.GetRequiredService<StrategyCharacterObjectiveSystem>());
+
         services.AddSingleton<StrategyAISystem>();
         services.AddSingleton<IStrategyAISystem>(sp => sp.GetRequiredService<StrategyAISystem>());
         services.AddSingleton<IAISystem>(sp => sp.GetRequiredService<StrategyAISystem>());
@@ -154,5 +158,6 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IStrategyBattleResolutionSystem>(),
             sp.GetRequiredService<ICharacterSystem>(),
             sp.GetRequiredService<IStrategyCharacterStaminaSystem>(),
+            sp.GetRequiredService<IStrategyCharacterObjectiveSystem>(),
         ];
 }

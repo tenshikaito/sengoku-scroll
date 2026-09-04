@@ -8,6 +8,10 @@ export interface MapPoint {
 export interface StrategyWorldState {
   scenarioId: string;
   playerForceId: number;
+  /** 观战模式：玩家势力也由 AI 接管。 */
+  allForcesAiControlled?: boolean;
+  /** 当前战役目标和胜败状态。 */
+  campaignStatus?: StrategyCampaignStatus;
   /** Easy | Normal | Hard | Custom */
   difficulty?: string;
   /** 本局固定随机种子 */
@@ -26,6 +30,8 @@ export interface StrategyWorldState {
   messageCarriers: StrategyMessageCarrierState[];
   /** 玩家势力视角外交（目标势力 Id + 关系）。 */
   diplomacies: StrategyDiplomacyState[];
+  /** 玩家参战中的战争与战争分数。 */
+  wars: StrategyWarState[];
   /** 将领摘要（id + 所属势力）；用于本势力将领数统计。 */
   characters?: StrategyCharacterSummaryState[];
   /** 地图上独立行动的将领（溃逃回城等）。 */
@@ -44,6 +50,18 @@ export interface StrategyLoadRequest {
   scenarioId: string;
   difficulty?: "Easy" | "Normal" | "Hard" | "Custom";
   customStartOptions?: GameStartOptionsState;
+  allForcesAiControlled?: boolean;
+}
+
+export interface StrategyCampaignStatus {
+  /** Ongoing | Victory | Defeat | Spectating */
+  state: string;
+  objective: string;
+  playerStrongholdCount: number;
+  rivalStrongholdCount: number;
+  totalStrongholdCount: number;
+  leadingForceId?: number | null;
+  leadingForceName?: string | null;
 }
 
 export interface StrategyVisibilityState {
@@ -317,6 +335,33 @@ export interface StrategyDiplomacyState {
   ourViewEffects?: StrategyEntityEffectState[];
   theirViewEffects?: StrategyEntityEffectState[];
   isInnerVassal?: boolean;
+}
+
+export interface StrategyWarScoreEventState {
+  year: number;
+  month: number;
+  day: number;
+  /** 玩家视角的变化值。 */
+  delta: number;
+  reason: string;
+  actingForceId: number;
+  targetForceId: number;
+  sourceEntityId?: number | null;
+  description?: string | null;
+}
+
+export interface StrategyWarState {
+  id: number;
+  aggressorForceId: number;
+  defenderForceId: number;
+  aggressorForceIds: number[];
+  defenderForceIds: number[];
+  /** 玩家视角 -100～100。 */
+  playerWarScore: number;
+  startYear: number;
+  startMonth: number;
+  startDay: number;
+  recentScoreEvents: StrategyWarScoreEventState[];
 }
 
 export interface StrategyRoadCellState {
@@ -819,6 +864,7 @@ export interface StrategyAdvanceDayResponse {
   state: StrategyWorldState;
   resolvedBattles: StrategyBattleResult[];
   events: StrategyEvent[];
+  daysAdvanced?: number;
 }
 
 export interface StrategyTributeLine {

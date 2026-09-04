@@ -1,6 +1,5 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Definitions;
-using SengokuScroll.Domain.Definitions;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Domain.Enums;
 using SengokuScroll.Strategy.Constants;

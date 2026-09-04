@@ -19,6 +19,8 @@ export interface GameStartSettings {
   difficulty: StrategyDifficultyId;
   customStartOptions: DifficultyBoundStartOptions;
   intelDebugMode: boolean;
+  /** 玩家势力也交给 AI，用于观战与长局验证。 */
+  allForcesAiControlled: boolean;
 }
 
 export const GAME_START_PRESETS: Record<PresetDifficultyId, DifficultyBoundStartOptions> = {
@@ -136,6 +138,7 @@ export function readGameStartSettings(): GameStartSettings | null {
       difficulty: parsed.difficulty ?? "Normal",
       customStartOptions: customStartOptions as DifficultyBoundStartOptions,
       intelDebugMode: parsed.intelDebugMode ?? legacyDebug ?? DEFAULT_INTEL_DEBUG_MODE,
+      allForcesAiControlled: parsed.allForcesAiControlled ?? false,
     };
   } catch {
     return null;

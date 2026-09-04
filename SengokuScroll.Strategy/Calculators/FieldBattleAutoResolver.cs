@@ -3,6 +3,7 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Domain.Types;
 using SengokuScroll.Strategy.Battle;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Rules;
 
@@ -205,7 +206,7 @@ public static class FieldBattleAutoResolver
             defender.Id,
             target.X,
             target.Y);
-        var acceptRoll = Math.Abs(HashCode.Combine(seed, 0x5A11_E11D)) % 100;
+        var acceptRoll = DeterministicHash.Combine(seed, unchecked((int)0x5A11_E11D)) % 100;
         if (!BattleSurrenderRules.RollSurrenderAccepted(acceptChance, seed))
             return false;
 

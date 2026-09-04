@@ -75,7 +75,11 @@ public class UnitMoveAction(
 
                 moveObserver.OnMoveStepCompleted(o, from, p, o.Ap, routes.Count);
 
-#warning 如果抵达则修改状态为等待
+                if (!routes.TryPeek(out _))
+                {
+                    o.Status = UnitStatus.Waiting;
+                    break;
+                }
             }
             else
             {

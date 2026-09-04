@@ -42,7 +42,7 @@ public class StrategyWorldStateMapperTests
         Assert.Equal(24_000, ozu.LaborAvailable);
         Assert.Equal(100, ozu.LaborRatioPercent);
         Assert.NotEmpty(ozu.GarrisonTroopPools);
-        Assert.True(ozu.GarrisonTroopPools.Any(p => p.TypeId == 1 && p.Soldiers > 0));
+        Assert.Contains(ozu.GarrisonTroopPools, p => p.TypeId == 1 && p.Soldiers > 0);
 
         var inuyama = dto.Strongholds.First(s => s.Id == 2);
         Assert.Equal(6, inuyama.LordId);

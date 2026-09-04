@@ -147,6 +147,14 @@ public static class DiplomacyMissionRules
             return false;
         }
 
+        if (normalizedAction == "War"
+            && gameData.Forces.TryGetValue(playerForceId, out var actingForce)
+            && actingForce.Diplomacies.Any(d => d.TargetForceId == targetForceId && d.IsTruce))
+        {
+            error = GameError.DiplomacyError.InvalidForce;
+            return false;
+        }
+
         return true;
     }
 
@@ -190,12 +198,12 @@ public static class DiplomacyMissionRules
         };
 
     public static int ComputeMissionRoll(GameData gameData, int characterId)
-        => Math.Abs(HashCode.Combine(
+        => DeterministicHash.Combine(
             gameData.SimulationSeed,
             characterId,
             gameData.GameDate.Year,
             gameData.GameDate.Month,
-            gameData.GameDate.Day)) % 100;
+            gameData.GameDate.Day) % 100;
 
     public static bool RollMissionSuccess(CharacterDiplomacyMission mission, GameData gameData, int characterId)
         => ComputeMissionRoll(gameData, characterId) < mission.SuccessChancePercent;

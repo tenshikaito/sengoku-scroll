@@ -10,7 +10,7 @@ public interface IClimateSystem : IGameSystem
 /// <summary>
 /// Domain 层气候占位（Order=1，日循环最先）。天气对 sight/movement 的修正尚未接入日更链。
 /// </summary>
-public class ClimateSystem(IGameContext context) : IClimateSystem
+public class ClimateSystem : IClimateSystem
 {
     /// <summary>日循环最先执行，便于后续系统读取当日天气快照。</summary>
     public int Order { get; } = 1;

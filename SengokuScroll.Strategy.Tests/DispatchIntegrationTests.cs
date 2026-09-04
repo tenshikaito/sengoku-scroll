@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SengokuScroll.Domain.Entities.Types;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Rules;
 using SengokuScroll.Strategy.Tests.Fixtures;
@@ -19,13 +20,18 @@ public class SupplyConvoyDispatchIntegrationTests
         ctx.TimeController.AdvanceDay(ctx.World, ctx.Engine);
 
         var transport = Assert.Single(
-            ctx.World.GameData.Units.Values.Where(TransportUnitRules.IsTransportUnit));
+            ctx.World.GameData.Units.Values,
+            TransportUnitRules.IsTransportUnit);
         Assert.Equal(1, transport.TransportTargetUnitId);
         Assert.Equal(UnitStatus.Moving, transport.Status);
         Assert.False(string.IsNullOrWhiteSpace(transport.Name));
         Assert.Contains("粮运", transport.Name);
         Assert.Equal(0, transport.Ap);
         Assert.Equal(new Common.Types.Point3(0, 0), transport.Location);
+        var movementTrace = ctx.Services.GetRequiredService<StrategyMovementTrace>();
+        Assert.DoesNotContain(
+            movementTrace.Snapshot(),
+            entry => entry.UnitId == transport.Id && entry.Phase == "MoveEval");
 
         ctx.TimeController.AdvanceDay(ctx.World, ctx.Engine);
         Assert.Equal(new Common.Types.Point3(1, 0), transport.Location);
@@ -43,7 +49,8 @@ public class SupplyConvoyDispatchIntegrationTests
             ctx.TimeController.AdvanceDay(ctx.World, ctx.Engine);
 
         var transport = Assert.Single(
-            ctx.World.GameData.Units.Values.Where(TransportUnitRules.IsTransportUnit));
+            ctx.World.GameData.Units.Values,
+            TransportUnitRules.IsTransportUnit);
         Assert.True(unit.Food > 100);
         Assert.True(transport.IsReturningToOrigin);
         Assert.Equal(UnitStatus.Moving, transport.Status);

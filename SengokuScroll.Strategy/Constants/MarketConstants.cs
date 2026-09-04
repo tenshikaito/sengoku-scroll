@@ -148,4 +148,7 @@ public static class MarketConstants
 
     /// <summary>邻城套利相对本城中枢的最小净利（万分比）。</summary>
     public const int RegionalArbitrageMinEdgeBp = 800;
+
+    /// <summary>跨城贸易 AI 可接受的行情最大滞后天数；更旧情报不再用于派商队。</summary>
+    public const int TradeIntelMaxAgeDays = 60;
 }

@@ -16,8 +16,7 @@ namespace SengokuScroll.Strategy.Helpers;
 /// <summary>移民队生成与派遣。</summary>
 public class MigrantDispatchHelper(
     IGameContext context,
-    IPathfindingService pathfindingService,
-    StrategyScenarioMeta scenarioMeta)
+    IPathfindingService pathfindingService)
 {
     public int EvaluateAndDispatchDailyMigrations()
     {

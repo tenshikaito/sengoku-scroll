@@ -261,13 +261,13 @@ public static class BattleFactorEvaluator
         if (recklessScore < 3)
             return;
 
-        var rollSeed = HashCode.Combine(
+        var rollSeed = DeterministicHash.Combine(
             gameData.GameDate.Year,
             gameData.GameDate.Month,
             gameData.GameDate.Day,
             commander.Id,
             recklessScore);
-        if (Math.Abs(rollSeed) % 11 == 0)
+        if (rollSeed % 11 == 0)
         {
             b.ForceCommit = true;
             b.Add("commander.reckless", "将领轻率莽撞", 0, detail: commander.Name);

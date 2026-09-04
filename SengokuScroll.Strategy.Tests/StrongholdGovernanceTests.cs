@@ -147,14 +147,17 @@ public class StrongholdGovernanceTests
         var general = gameData.Characters.Values.First(c => c.Name == "柴田胜家");
         PlaceGeneralAtStronghold(general, kiyosu);
         kiyosu.Population = 5000;
+        var assignedGeneral = StrongholdGovernanceRules
+            .ListGovernanceAssignableGenerals(kiyosu, gameData, loaded.Meta)
+            .First();
 
         StrongholdGovernanceActions.ProcessMonthlyGovernanceAssignments(
             kiyosu,
             gameData,
             loaded.Meta);
 
-        Assert.NotNull(general.RecruitAssignment);
-        Assert.Equal(CharacterRecruitTaskKind.Conscript, general.RecruitAssignment!.Kind);
+        Assert.NotNull(assignedGeneral.RecruitAssignment);
+        Assert.Equal(CharacterRecruitTaskKind.Conscript, assignedGeneral.RecruitAssignment!.Kind);
     }
 
     [Fact]
@@ -171,15 +174,18 @@ public class StrongholdGovernanceTests
         kiyosu.Population = 0;
         const int budgetPool = RecruitConstants.MoneyPerKan * 100;
         kiyosu.ForceActor.Money = budgetPool;
+        var assignedGeneral = StrongholdGovernanceRules
+            .ListGovernanceAssignableGenerals(kiyosu, gameData, loaded.Meta)
+            .First();
 
         StrongholdGovernanceActions.ProcessMonthlyGovernanceAssignments(
             kiyosu,
             gameData,
             loaded.Meta);
 
-        Assert.NotNull(general.RecruitAssignment);
-        Assert.Equal(CharacterRecruitTaskKind.Mercenary, general.RecruitAssignment!.Kind);
-        Assert.True(general.RecruitAssignment.BudgetMoney > 0);
+        Assert.NotNull(assignedGeneral.RecruitAssignment);
+        Assert.Equal(CharacterRecruitTaskKind.Mercenary, assignedGeneral.RecruitAssignment!.Kind);
+        Assert.True(assignedGeneral.RecruitAssignment.BudgetMoney > 0);
         Assert.True(kiyosu.ForceActor.Money < budgetPool);
     }
 
@@ -197,16 +203,19 @@ public class StrongholdGovernanceTests
         PlaceGeneralAtStronghold(general, kiyosu);
         kiyosu.ForceActor.Money = RecruitConstants.MoneyPerKan * 100;
         kiyosu.Population = 5000;
+        var assignedGeneral = StrongholdGovernanceRules
+            .ListGovernanceAssignableGenerals(kiyosu, gameData, loaded.Meta)
+            .First();
 
         gameData.GameDate = new GameDate(1560, 6, 2);
         var gameContext = ctx.Services.GetRequiredService<IGameContext>();
         var system = new StrategyStrongholdGovernanceSystem(gameContext, loaded.Meta);
         system.Update();
-        Assert.Null(general.RecruitAssignment);
+        Assert.Null(assignedGeneral.RecruitAssignment);
 
         gameData.GameDate = new GameDate(1560, 7, 1);
         system.Update();
-        Assert.NotNull(general.RecruitAssignment);
+        Assert.NotNull(assignedGeneral.RecruitAssignment);
     }
 
     [Fact]
@@ -251,13 +260,16 @@ public class StrongholdGovernanceTests
 
         var general = gameData.Characters.Values.First(c => c.Name == "柴田胜家");
         PlaceGeneralAtStronghold(general, kiyosu);
+        var assignedGeneral = StrongholdGovernanceRules
+            .ListGovernanceAssignableGenerals(kiyosu, gameData, loaded.Meta)
+            .First();
 
         StrongholdGovernanceActions.ProcessMonthlyGovernanceAssignments(
             kiyosu,
             gameData,
             loaded.Meta);
 
-        Assert.NotNull(general.RecruitAssignment);
+        Assert.NotNull(assignedGeneral.RecruitAssignment);
     }
 
     [Fact]

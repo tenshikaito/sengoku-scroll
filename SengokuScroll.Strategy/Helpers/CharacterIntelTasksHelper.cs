@@ -16,23 +16,26 @@ public static class CharacterIntelTasksHelper
         StrategyScenarioMeta meta,
         IReadOnlyDictionary<int, Stronghold> strongholds)
     {
-        if (character.IntelTasks.Count > 0)
-        {
-            return [.. character.IntelTasks.Select(t => new StrategyCharacterTaskDto
-            {
-                TaskCategory = t.TaskCategory,
-                Name = t.Name,
-                Target = t.Target,
-                Status = t.Status,
-                Remaining = t.Remaining,
-            })];
-        }
-
         var rows = new List<StrategyCharacterTaskDto>();
         rows.AddRange(MapOperationalTasks(character, gameData, strongholds));
-        rows.AddRange(BuildPersonalTasks(character, gameData, meta, strongholds));
-        rows.AddRange(BuildLifeTasks(character, gameData, meta, strongholds));
-        return rows;
+        rows.AddRange(character.IntelTasks.Select(t => new StrategyCharacterTaskDto
+        {
+            TaskCategory = t.TaskCategory,
+            Name = t.Name,
+            Target = t.Target,
+            Status = t.Status,
+            Remaining = t.Remaining,
+        }));
+
+        if (character.IntelTasks.Count == 0)
+        {
+            rows.AddRange(BuildPersonalTasks(character, gameData, meta, strongholds));
+            rows.AddRange(BuildLifeTasks(character, gameData, meta, strongholds));
+        }
+
+        return [.. rows
+            .GroupBy(row => $"{row.TaskCategory}:{row.Name}:{row.Target}", StringComparer.Ordinal)
+            .Select(group => group.First())];
     }
 
     /// <summary>将情报任务写入角色实体（开局 bootstrap）。</summary>
@@ -43,7 +46,6 @@ public static class CharacterIntelTasksHelper
         IReadOnlyDictionary<int, Stronghold> strongholds)
     {
         var dtos = new List<StrategyCharacterTaskDto>();
-        dtos.AddRange(MapOperationalTasks(character, gameData, strongholds));
         dtos.AddRange(BuildPersonalTasks(character, gameData, meta, strongholds));
         dtos.AddRange(BuildLifeTasks(character, gameData, meta, strongholds));
 

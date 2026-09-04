@@ -2,6 +2,7 @@ using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
 using SengokuScroll.Strategy.Battle;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Helpers;
 using SengokuScroll.Strategy.Models;
 using static SengokuScroll.Domain.Entities.Unit;
 
@@ -159,14 +160,14 @@ public static class BattleCommitRules
         chance += Math.Min(10, pursued.Ap);
         chance = Math.Clamp(chance, 10, 85);
 
-        var roll = Math.Abs(HashCode.Combine(
+        var roll = DeterministicHash.Combine(
             gameData.SimulationSeed,
             pursued.Id,
             pursuer.Id,
             gameData.GameDate.Year,
             gameData.GameDate.Month,
             gameData.GameDate.Day,
-            0xD15E_AE)) % 100;
+            0xD15E_AE) % 100;
 
         if (roll >= chance)
             return false;

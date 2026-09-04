@@ -28,6 +28,9 @@ public sealed class GameError(string code, params object[] data)
     /// </summary>
     public static GameError DataNotFound { get; } = new(nameof(DataNotFound));
 
+    /// <summary>请求参数超出允许范围。</summary>
+    public static GameError InvalidArgument { get; } = new(nameof(InvalidArgument));
+
     public static class ForceError
     {
         /// <summary>

@@ -48,12 +48,6 @@ public static class StrategySimulationBootstrap
         services.AddSingleton<StrategyMovementTrace>();
         services.AddSingleton<StrategyAiDecisionTrace>();
         services.AddSingleton<StrategyDayOutcomeBuffer>();
-        services.AddSingleton<StrategyPendingBattleReportStore>();
-        services.AddSingleton<StrategyPendingEventStore>();
-        services.AddSingleton<StrategyFieldEngagementRegistry>();
-        services.AddSingleton<StrategyForceLordRegistry>();
-        services.AddSingleton<StrategyVisibilityLedger>();
-        services.AddSingleton<StrategyMessageLedger>();
         services.AddSingleton(scenarioMeta);
         services.AddSingleton<StrategyUnitMoveTraceObserver>();
         services.AddSingleton<IUnitMoveObserver>(sp => sp.GetRequiredService<StrategyUnitMoveTraceObserver>());

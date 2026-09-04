@@ -22,7 +22,7 @@ public class StrategyMapMasterMapperTests
         Assert.Contains(dto.Terrains, t => t.Key == "forest" && t.Name == "森林");
         Assert.Contains(dto.Terrains, t => t.Key == "water" && t.Name == "水域");
         Assert.Contains(dto.Terrains, t => t.Key == "mountain" && t.Name == "山地");
-        Assert.True(dto.TerrainIds.Any(id => id == dto.Terrains.First(t => t.Key == "forest").Id));
+        Assert.Contains(dto.Terrains.First(t => t.Key == "forest").Id, dto.TerrainIds);
         Assert.Equal(1, dto.RegionIds[0]);
         Assert.Equal(2, dto.RegionIds[10]);
         Assert.True(dto.RoadCells.Count >= 12);

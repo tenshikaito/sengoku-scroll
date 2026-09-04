@@ -12,7 +12,7 @@ public interface IEconomySystem : IGameSystem
 /// Domain 层经济系统占位（RPG 模式可在此挂接日产/税）。
 /// 大战略的全部经济逻辑在 Strategy 层 <see cref="SengokuScroll.Strategy.Systems.StrategyEconomySystem"/>。
 /// </summary>
-public class EconomySystem(IGameContext context) : IEconomySystem
+public class EconomySystem : IEconomySystem
 {
     /// <summary>与市场系统同级 Order，便于 Strategy 层按相同顺序替换。</summary>
     public int Order { get; } = 10;

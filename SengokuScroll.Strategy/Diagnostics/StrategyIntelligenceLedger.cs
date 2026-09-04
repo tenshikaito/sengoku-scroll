@@ -36,5 +36,14 @@ public sealed class StrategyIntelligenceLedger
     public IReadOnlyList<MarketPriceObservation> Snapshot(int observerForceId)
         => observations.Where(o => o.ObserverForceId == observerForceId).ToList();
 
+    public IReadOnlyList<MarketPriceObservation> SnapshotAll()
+        => observations.ToList();
+
+    public void Restore(IEnumerable<MarketPriceObservation> restored)
+    {
+        observations.Clear();
+        observations.AddRange(restored);
+    }
+
     public void Clear() => observations.Clear();
 }

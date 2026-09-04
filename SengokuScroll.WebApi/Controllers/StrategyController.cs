@@ -26,7 +26,9 @@ public class StrategyController(
     public IActionResult Load([FromBody] LoadScenarioRequest request)
     {
         StrategyLoadOptions? loadOptions = null;
-        if (!string.IsNullOrWhiteSpace(request.Difficulty) || request.CustomStartOptions is not null)
+        if (!string.IsNullOrWhiteSpace(request.Difficulty)
+            || request.CustomStartOptions is not null
+            || request.AllForcesAiControlled)
         {
             loadOptions = new StrategyLoadOptions
             {
@@ -35,7 +37,8 @@ public class StrategyController(
                     : StrategyDifficultyRules.Parse(request.Difficulty),
                 CustomStartOptions = request.CustomStartOptions is null
                     ? null
-                    : GameStartOptionsMapper.FromDto(request.CustomStartOptions)
+                    : GameStartOptionsMapper.FromDto(request.CustomStartOptions),
+                AllForcesAiControlled = request.AllForcesAiControlled
             };
         }
 
@@ -78,6 +81,14 @@ public class StrategyController(
             characterId,
             request.StrongholdId,
             request.Force));
+
+    /// <summary>玩家当主与同地人物交谈或赠礼。</summary>
+    [HttpPost("characters/{characterId:int}/interact")]
+    public IActionResult InteractWithCharacter(int characterId, [FromBody] CharacterInteractionRequest request)
+        => ToActionResult(simulationHost.OrderCharacterInteraction(
+            characterId,
+            request.TargetCharacterId,
+            request.Interaction));
 
     [HttpPost("characters/{characterId:int}/preview-path")]
     public IActionResult PreviewCharacterPath(int characterId, [FromBody] MoveUnitRequest request)
@@ -282,6 +293,11 @@ public class StrategyController(
     public IActionResult AdvanceDay()
         => ToAdvanceDayResult(simulationHost.AdvanceDay());
 
+    /// <summary>批量推进 1–31 日；仅构建一次最终世界 DTO。</summary>
+    [HttpPost("advance-days")]
+    public IActionResult AdvanceDays([FromBody] AdvanceDaysRequest request)
+        => ToAdvanceDayResult(simulationHost.AdvanceDays(request.Days));
+
     /// <summary>登记谍报成果（约 2 个月后过期；开发/任务用）。</summary>
     [HttpPost("espionage-intel")]
     public IActionResult RecordEspionageIntel([FromBody] RecordEspionageIntelRequest request)
@@ -402,6 +418,32 @@ public class StrategyController(
             request.CharacterId,
             request.TargetForceId,
             request.Action));
+
+    /// <summary>外交：预览多条款和谈的战争分数成本与接受率。</summary>
+    [HttpPost("diplomacy/peace/preview")]
+    public IActionResult PreviewPeaceSettlement([FromBody] PeaceSettlementRequest request)
+        => ToPreviewResult(simulationHost.PreviewPeaceSettlement(
+            request.CharacterId,
+            request.TargetForceId,
+            new StrategyPeaceTermsDto
+            {
+                CededStrongholdIds = request.CededStrongholdIds,
+                ReparationsMoney = request.ReparationsMoney,
+                DemandOuterVassalage = request.DemandOuterVassalage,
+            }));
+
+    /// <summary>外交：派遣携带多条款和谈书的使节。</summary>
+    [HttpPost("diplomacy/peace")]
+    public IActionResult OrderPeaceSettlement([FromBody] PeaceSettlementRequest request)
+        => ToActionResult(simulationHost.OrderPeaceSettlement(
+            request.CharacterId,
+            request.TargetForceId,
+            new StrategyPeaceTermsDto
+            {
+                CededStrongholdIds = request.CededStrongholdIds,
+                ReparationsMoney = request.ReparationsMoney,
+                DemandOuterVassalage = request.DemandOuterVassalage,
+            }));
 
     /// <summary>获取当前世界状态。</summary>
     [HttpGet("state")]
@@ -553,6 +595,14 @@ public class StrategyController(
     }
 
     private IActionResult ToPreviewResult(GameResult<StrategyDiplomacyMissionPreviewDto> result)
+    {
+        if (result.IsSuccess)
+            return Ok(result.Value);
+
+        return BadRequest(new ApiErrorResponse(result.Error?.Code ?? "Unknown"));
+    }
+
+    private IActionResult ToPreviewResult(GameResult<StrategyPeaceSettlementPreviewDto> result)
     {
         if (result.IsSuccess)
             return Ok(result.Value);

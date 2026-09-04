@@ -173,6 +173,12 @@ public sealed class StrategyBattleResolutionSystem(
         var defender = dayResult.CommittedDefender;
 
         UnitBattleActions.MarkAttacked(attacker, rules);
+        StrategyWarScoreRules.RecordBattleOutcome(
+            gameData,
+            attacker,
+            defender,
+            outcome,
+            surrendered: true);
         aftermathHelper.ApplySurrender(attacker, defender, dayResult.EngagementKind);
 
         var log = new List<StrategyBattleLogEntryDto>
@@ -259,6 +265,7 @@ public sealed class StrategyBattleResolutionSystem(
         }
 
         UnitBattleActions.MarkAttacked(attacker, rules);
+        StrategyWarScoreRules.RecordBattleOutcome(gameData, attacker, defender, outcome);
         aftermathHelper.Apply(attacker, defender, outcome, dayResult.EngagementKind);
 
         if (dayResult.TacticalResult is { } tacticalAftermath)

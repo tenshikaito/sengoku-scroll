@@ -3,6 +3,7 @@ using SengokuScroll.Domain.Entities;
 using SengokuScroll.Strategy.Battle;
 using SengokuScroll.Strategy.Calculators;
 using SengokuScroll.Strategy.Constants;
+using SengokuScroll.Strategy.Helpers;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.Strategy.Rules;
@@ -55,7 +56,7 @@ public static class BattleSurrenderRules
     /// <summary>掷点判定守方是否接受劝降（确定性种子，接受率上限 95%）。</summary>
     public static bool RollSurrenderAccepted(int acceptChancePercent, int seed)
     {
-        var roll = Math.Abs(HashCode.Combine(seed, 0x5A11_E11D)) % 100;
+        var roll = DeterministicHash.Combine(seed, unchecked((int)0x5A11_E11D)) % 100;
         return roll < Math.Clamp(acceptChancePercent, 0, 95);
     }
 

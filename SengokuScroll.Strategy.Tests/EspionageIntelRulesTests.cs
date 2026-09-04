@@ -140,10 +140,26 @@ public class EspionageIntelRulesTests
             acquiredDate: new Domain.Types.GameDate(1560, 1, 1));
 
         ledger.PruneExpired(new Domain.Types.GameDate(1560, 2, 28));
-        Assert.NotNull(ledger.TryGet(EspionageIntelTargetKind.Stronghold, 9));
+        Assert.NotNull(ledger.TryGet(1, EspionageIntelTargetKind.Stronghold, 9));
 
         ledger.PruneExpired(new Domain.Types.GameDate(1560, 3, 1));
-        Assert.Null(ledger.TryGet(EspionageIntelTargetKind.Stronghold, 9));
+        Assert.Null(ledger.TryGet(1, EspionageIntelTargetKind.Stronghold, 9));
+    }
+
+    [Fact]
+    public void RecordMission_IsIsolatedByObserverForce()
+    {
+        var ledger = new StrategyEspionageIntelLedger();
+        ledger.RecordMission(
+            observerForceId: 1,
+            EspionageIntelTargetKind.Stronghold,
+            targetId: 9,
+            EspionageIntelScope.Military,
+            EspionageIntelPrecision.Exact,
+            acquiredDate: new Domain.Types.GameDate(1560, 1, 1));
+
+        Assert.NotNull(ledger.TryGet(1, EspionageIntelTargetKind.Stronghold, 9));
+        Assert.Null(ledger.TryGet(2, EspionageIntelTargetKind.Stronghold, 9));
     }
 
     private static GameData CreateGameData()

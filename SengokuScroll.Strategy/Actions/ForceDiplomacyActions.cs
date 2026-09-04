@@ -1,5 +1,6 @@
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities;
+using SengokuScroll.Domain.Rules;
 using SengokuScroll.Strategy.Rules;
 using static SengokuScroll.Domain.Entities.Diplomacy;
 using static SengokuScroll.Domain.Entities.Force;
@@ -9,6 +10,8 @@ namespace SengokuScroll.Strategy.Actions;
 /// <summary>外交（对他国）与外政（对本家内藩）状态变更。</summary>
 public static class ForceDiplomacyActions
 {
+    public const ushort DefaultTruceDays = 180;
+
     public static bool TrySetRelation(
         GameData gameData,
         int forceId,
@@ -29,8 +32,66 @@ public static class ForceDiplomacyActions
             return false;
         }
 
-        UpsertDiplomacy(gameData, forceId, targetForceId, relation);
-        UpsertDiplomacy(gameData, targetForceId, forceId, relation);
+        var activeWars = gameData.Wars.Values
+            .Where(w => !w.IsEnded && WarRules.AreOnOppositeSides(w, forceId, targetForceId))
+            .ToList();
+        var wasAtWar = activeWars.Count > 0
+            || gameData.Forces[forceId].Diplomacies.Any(d =>
+                d.TargetForceId == targetForceId && d.Relation == DiplomacyRelation.Enemy);
+
+        var forward = UpsertDiplomacy(gameData, forceId, targetForceId, relation);
+        var reverse = UpsertDiplomacy(gameData, targetForceId, forceId, relation);
+
+        if (relation == DiplomacyRelation.Enemy)
+        {
+            forward.IsTruce = false;
+            forward.TrucePeriod = 0;
+            reverse.IsTruce = false;
+            reverse.TrucePeriod = 0;
+            WarRules.EnsureWarBetween(gameData, forceId, targetForceId, gameData.GameDate);
+        }
+        else if (wasAtWar)
+        {
+            foreach (var war in activeWars)
+            {
+                var forceIsAggressor = WarRules.IsOnAggressorSide(war, forceId);
+                var opponents = (forceIsAggressor ? war.DefenderForceIds : war.AggressorForceIds).ToList();
+                var endsWholeWar = forceId == war.AggressorForceId || forceId == war.DefenderForceId;
+                WarRules.SeparatePeace(war, forceId, gameData.GameDate);
+
+                if (endsWholeWar)
+                {
+                    foreach (var aggressorId in war.AggressorForceIds)
+                    foreach (var defenderId in war.DefenderForceIds)
+                        SetNeutralTrucePair(gameData, aggressorId, defenderId);
+
+                    foreach (var battlefield in gameData.Battlefields.Values
+                                 .Where(b => !b.IsClosed && b.WarId == war.Id)
+                                 .ToList())
+                    {
+                        BattlefieldContainerRules.CloseBattlefield(battlefield, gameData);
+                    }
+                }
+                else
+                {
+                    foreach (var opponentId in opponents)
+                        SetNeutralTrucePair(gameData, forceId, opponentId);
+
+                    DetachForceFromWarBattlefields(gameData, war.Id, forceId);
+                }
+            }
+
+            if (activeWars.Count == 0)
+                SetNeutralTrucePair(gameData, forceId, targetForceId);
+            else
+            {
+                forward.IsTruce = true;
+                forward.TrucePeriod = DefaultTruceDays;
+                reverse.IsTruce = true;
+                reverse.TrucePeriod = DefaultTruceDays;
+            }
+        }
+
         return true;
     }
 
@@ -204,7 +265,7 @@ public static class ForceDiplomacyActions
         UpsertDiplomacy(gameData, vassalForceId, suzerainForceId, DiplomacyRelation.Neutral, suzerainForceId);
     }
 
-    private static void UpsertDiplomacy(
+    private static Diplomacy UpsertDiplomacy(
         GameData gameData,
         int forceId,
         int targetForceId,
@@ -212,7 +273,7 @@ public static class ForceDiplomacyActions
         int? suzerainId = null)
     {
         if (!gameData.Forces.TryGetValue(forceId, out var force))
-            return;
+            throw new InvalidOperationException($"Force {forceId} does not exist.");
 
         var existing = force.Diplomacies.FirstOrDefault(d => d.TargetForceId == targetForceId);
         if (existing is null)
@@ -224,11 +285,12 @@ public static class ForceDiplomacyActions
                 Relation = relation,
                 SuzerainId = suzerainId
             });
-            return;
+            return force.Diplomacies[^1];
         }
 
         existing.Relation = relation;
         existing.SuzerainId = suzerainId;
+        return existing;
     }
 
     private static void ClearSuzerainBinding(GameData gameData, int forceId, int targetForceId)
@@ -239,5 +301,46 @@ public static class ForceDiplomacyActions
         var dip = force.Diplomacies.FirstOrDefault(d => d.TargetForceId == targetForceId);
         if (dip is not null)
             dip.SuzerainId = null;
+    }
+
+    private static void SetNeutralTrucePair(GameData gameData, int forceId, int targetForceId)
+    {
+        if (forceId == targetForceId)
+            return;
+
+        var forward = UpsertDiplomacy(gameData, forceId, targetForceId, DiplomacyRelation.Neutral);
+        var reverse = UpsertDiplomacy(gameData, targetForceId, forceId, DiplomacyRelation.Neutral);
+        forward.IsTruce = true;
+        forward.TrucePeriod = DefaultTruceDays;
+        reverse.IsTruce = true;
+        reverse.TrucePeriod = DefaultTruceDays;
+    }
+
+    private static void DetachForceFromWarBattlefields(GameData gameData, int warId, int forceId)
+    {
+        foreach (var battlefield in gameData.Battlefields.Values
+                     .Where(b => !b.IsClosed && b.WarId == warId)
+                     .ToList())
+        {
+            var leavingUnitIds = battlefield.SideAUnitIds
+                .Concat(battlefield.SideBUnitIds)
+                .Distinct()
+                .Where(id => gameData.Units.TryGetValue(id, out var unit) && unit.ForceId == forceId)
+                .ToList();
+            battlefield.SideAUnitIds.RemoveAll(leavingUnitIds.Contains);
+            battlefield.SideBUnitIds.RemoveAll(leavingUnitIds.Contains);
+            foreach (var unitId in leavingUnitIds)
+            {
+                if (gameData.Units.TryGetValue(unitId, out var unit))
+                    BattlefieldContainerRules.LeaveBattlefield(unit);
+            }
+
+            var sideAActive = battlefield.SideAUnitIds.Any(id =>
+                gameData.Units.TryGetValue(id, out var unit) && unit.Soldier > 0);
+            var sideBActive = battlefield.SideBUnitIds.Any(id =>
+                gameData.Units.TryGetValue(id, out var unit) && unit.Soldier > 0);
+            if (!sideAActive || !sideBActive)
+                BattlefieldContainerRules.CloseBattlefield(battlefield, gameData);
+        }
     }
 }

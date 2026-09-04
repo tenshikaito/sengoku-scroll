@@ -1143,25 +1143,37 @@ public sealed class StrategySimulationHost : IDisposable
     }
 
     /// <summary>推进 1 天并执行策略系统链。</summary>
-    public GameResult<StrategyAdvanceDayResponseDto> AdvanceDay()
+    public GameResult<StrategyAdvanceDayResponseDto> AdvanceDay() => AdvanceDays(1);
+
+    /// <summary>在一次锁与一次最终 DTO 映射内推进多日；主要用于观战和长局验证。</summary>
+    public GameResult<StrategyAdvanceDayResponseDto> AdvanceDays(int days)
     {
         lock (sync)
         {
             if (simulation is null)
                 return GameError.DataNotFound;
+            if (days is < 1 or > 31)
+                return GameError.InvalidArgument;
 
             var dayOutcomeBuffer = simulation.Services.GetRequiredService<StrategyDayOutcomeBuffer>();
             var dayDebugLog = simulation.Services.GetRequiredService<IStrategyDayDebugLog>();
-            dayOutcomeBuffer.Clear();
+            var resolvedBattles = new List<StrategyBattleResultDto>();
+            var events = new List<StrategyEventDto>();
 
-            var upcoming = simulation.World.GameData.GameDate.AddDays(1);
-            dayDebugLog.BeginDay(upcoming.Year, upcoming.Month, upcoming.Day, LoadedScenarioId);
+            for (var day = 0; day < days; day++)
+            {
+                dayOutcomeBuffer.Clear();
+                var upcoming = simulation.World.GameData.GameDate.AddDays(1);
+                dayDebugLog.BeginDay(upcoming.Year, upcoming.Month, upcoming.Day, LoadedScenarioId);
 
-            timeController.AdvanceDay(simulation.World, simulation.Engine);
+                timeController.AdvanceDay(simulation.World, simulation.Engine);
 
-            dayDebugLog.EndDay(dayOutcomeBuffer.ResolvedBattles.Count, dayOutcomeBuffer.Events.Count);
-            simulation.MovementTrace.Log("AdvanceDay", "日推进完成", detail:
-                $"{simulation.World.GameData.GameDate.Year}-{simulation.World.GameData.GameDate.Month}-{simulation.World.GameData.GameDate.Day} battles={dayOutcomeBuffer.ResolvedBattles.Count}");
+                dayDebugLog.EndDay(dayOutcomeBuffer.ResolvedBattles.Count, dayOutcomeBuffer.Events.Count);
+                resolvedBattles.AddRange(dayOutcomeBuffer.ResolvedBattles);
+                events.AddRange(dayOutcomeBuffer.Events);
+                simulation.MovementTrace.Log("AdvanceDay", "日推进完成", detail:
+                    $"{simulation.World.GameData.GameDate.Year}-{simulation.World.GameData.GameDate.Month}-{simulation.World.GameData.GameDate.Day} battles={dayOutcomeBuffer.ResolvedBattles.Count}");
+            }
 
             var world = BuildStateResult();
             if (!world.IsSuccess)
@@ -1170,8 +1182,9 @@ public sealed class StrategySimulationHost : IDisposable
             return new StrategyAdvanceDayResponseDto
             {
                 State = world.Value!,
-                ResolvedBattles = [.. dayOutcomeBuffer.ResolvedBattles],
-                Events = [.. dayOutcomeBuffer.Events],
+                ResolvedBattles = resolvedBattles,
+                Events = events,
+                DaysAdvanced = days,
                 DayDebugLogPath = dayDebugLog.LastWrittenFilePath,
                 DayDebugEntryCount = dayDebugLog.Snapshot().Count
             };
@@ -1207,11 +1220,14 @@ public sealed class StrategySimulationHost : IDisposable
             if (simulation is null || LoadedScenarioId is null)
                 return GameError.DataNotFound;
 
-            return StrategyWorldSaveService.Capture(
+            var save = StrategyWorldSaveService.Capture(
                 simulation.World,
                 LoadedScenarioId,
                 simulation.ScenarioMeta.PlayerForceId,
-                simulation.Services.GetRequiredService<StrategyVisibilityLedger>());
+                simulation.Services.GetRequiredService<StrategyVisibilityLedger>(),
+                simulation.ScenarioMeta);
+            save.RuntimeServices = StrategyRuntimeServicesSaveService.Capture(simulation.Services);
+            return save;
         }
     }
 
@@ -1223,7 +1239,24 @@ public sealed class StrategySimulationHost : IDisposable
             if (string.IsNullOrWhiteSpace(save.ScenarioId))
                 return GameError.DataNotFound;
 
-            var loadResult = LoadScenario(save.ScenarioId);
+            var difficulty = Enum.TryParse<StrategyDifficulty>(
+                save.Difficulty,
+                ignoreCase: true,
+                out var savedDifficulty)
+                ? savedDifficulty
+                : (StrategyDifficulty?)null;
+            var loadOptions = difficulty is null && save.AllForcesAiControlled is null
+                ? null
+                : new StrategyLoadOptions
+                {
+                    Difficulty = difficulty,
+                    CustomStartOptions = difficulty == StrategyDifficulty.Custom && save.StartOptions is not null
+                        ? GameStartOptionsMapper.FromDto(save.StartOptions)
+                        : null,
+                    AllForcesAiControlled = save.AllForcesAiControlled ?? false,
+                };
+
+            var loadResult = LoadScenario(save.ScenarioId, loadOptions);
             if (!loadResult.IsSuccess)
                 return loadResult.Error!;
 
@@ -1231,6 +1264,7 @@ public sealed class StrategySimulationHost : IDisposable
                 return GameError.DataNotFound;
 
             StrategyWorldSaveService.Apply(save, simulation.World);
+            StrategyRuntimeServicesSaveService.TryRestore(save.RuntimeServices, simulation.Services);
             simulation.MovementTrace.Clear();
             simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
 
@@ -1978,6 +2012,115 @@ public sealed class StrategySimulationHost : IDisposable
                     characterId,
                     targetForceId,
                     action,
+                    out var error))
+            {
+                return error ?? GameError.DataNotFound;
+            }
+
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>玩家当主与同地人物交谈或赠礼，立即更新双向关系。</summary>
+    public GameResult<StrategyWorldStateDto> OrderCharacterInteraction(
+        int characterId,
+        int targetCharacterId,
+        string interaction)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var result = CharacterSocialActions.TryInteract(
+                simulation.World.GameData,
+                simulation.ScenarioMeta,
+                characterId,
+                targetCharacterId,
+                interaction,
+                out var message);
+            if (!result.IsSuccess)
+                return result.Error!;
+
+            simulation.MovementTrace.Log(
+                "CharacterInteraction",
+                message,
+                characterId,
+                detail: $"target={targetCharacterId} interaction={interaction}");
+            return BuildStateResult();
+        }
+    }
+
+    /// <summary>预览多条款和谈的战争分数成本与接受率。</summary>
+    public GameResult<StrategyPeaceSettlementPreviewDto> PreviewPeaceSettlement(
+        int characterId,
+        int targetForceId,
+        StrategyPeaceTermsDto termsDto)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var gameData = simulation.World.GameData;
+            if (!gameData.Characters.TryGetValue(characterId, out var envoy)
+                || envoy.ForceId != meta.PlayerForceId)
+            {
+                return GameError.DiplomacyError.NotSelfForce;
+            }
+
+            if (!DiplomacyMissionRules.CanAssignMissionTarget(
+                    gameData,
+                    meta,
+                    meta.PlayerForceId,
+                    targetForceId,
+                    "Peace",
+                    out var assignError))
+            {
+                return assignError ?? GameError.DiplomacyError.InvalidForce;
+            }
+
+            var baseChance = DiplomacyMissionRules.EstimateSuccessChancePercent(
+                envoy,
+                gameData,
+                meta.PlayerForceId,
+                targetForceId,
+                "Peace");
+            if (!PeaceSettlementRules.TryBuildPreview(
+                    gameData,
+                    meta.PlayerForceId,
+                    targetForceId,
+                    PeaceSettlementRules.ToDomainTerms(termsDto),
+                    baseChance,
+                    out var preview,
+                    out var error))
+            {
+                return error ?? GameError.DiplomacyError.InvalidForce;
+            }
+
+            return preview;
+        }
+    }
+
+    /// <summary>派遣携带多条款和谈书的使节。</summary>
+    public GameResult<StrategyWorldStateDto> OrderPeaceSettlement(
+        int characterId,
+        int targetForceId,
+        StrategyPeaceTermsDto termsDto)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            if (!DiplomacyMissionActions.TryAssignMission(
+                    simulation.World.GameData,
+                    simulation.ScenarioMeta,
+                    characterId,
+                    targetForceId,
+                    "Peace",
+                    PeaceSettlementRules.ToDomainTerms(termsDto),
                     out var error))
             {
                 return error ?? GameError.DataNotFound;

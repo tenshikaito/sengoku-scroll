@@ -26,26 +26,37 @@ public sealed class StrategyVisibilityLedger
     {
         byForce.Clear();
         var tileMap = world.GameMapMasterData.TileMap;
-        var playerForceId = meta.PlayerForceId;
-        var state = GetOrCreate(playerForceId);
-        state.EnsureCapacity(tileMap.Width, tileMap.Height);
-        state.KnownStrongholdIds.Clear();
-
-        var realmRoot = TributeRoutingHelper.ResolveRealmRootForceId(playerForceId, world.GameData);
-        foreach (var stronghold in world.GameData.Strongholds.Values)
+        foreach (var forceId in world.GameData.Forces.Keys)
         {
-            if (TributeRoutingHelper.ResolveRealmRootForceId(stronghold.ForceId, world.GameData) != realmRoot)
-                continue;
+            var state = GetOrCreate(forceId);
+            state.EnsureCapacity(tileMap.Width, tileMap.Height);
+            state.KnownStrongholdIds.Clear();
+            var realmRoot = TributeRoutingHelper.ResolveRealmRootForceId(forceId, world.GameData);
+            foreach (var stronghold in world.GameData.Strongholds.Values)
+            {
+                // AI 掌握剧本公开的城址（战略地图常识），但敌军仍须进入实时视野才可感知。
+                // 玩家继续遵循剧本 KnownStrongholdIds 与己方领地配置。
+                if (forceId == meta.PlayerForceId
+                    && TributeRoutingHelper.ResolveRealmRootForceId(stronghold.ForceId, world.GameData) != realmRoot)
+                    continue;
 
-            RegisterKnownStronghold(state, stronghold.Id, stronghold.Location.X, stronghold.Location.Y, tileMap.Width);
+                RegisterKnownStronghold(
+                    state,
+                    stronghold.Id,
+                    stronghold.Location.X,
+                    stronghold.Location.Y,
+                    tileMap.Width);
+            }
         }
 
+        var playerForceId = meta.PlayerForceId;
+        var playerState = GetOrCreate(playerForceId);
         foreach (var knownId in meta.KnownStrongholdIds)
         {
             if (!world.GameData.Strongholds.TryGetValue(knownId, out var known))
                 continue;
 
-            RegisterKnownStronghold(state, known.Id, known.Location.X, known.Location.Y, tileMap.Width);
+            RegisterKnownStronghold(playerState, known.Id, known.Location.X, known.Location.Y, tileMap.Width);
         }
 
         Recompute(world, meta);
@@ -55,36 +66,65 @@ public sealed class StrategyVisibilityLedger
     {
         var options = meta.StartOptions;
         var tileMap = world.GameMapMasterData.TileMap;
-        var playerForceId = meta.PlayerForceId;
-        var state = GetOrCreate(playerForceId);
-        state.EnsureCapacity(tileMap.Width, tileMap.Height);
-        state.VisibleCells.Clear();
-
         var profile = GameStartOptionsProfile.Create(options, meta.Difficulty);
-        var visible = profile.Fog.VisionPolicy.ComputeVisibleTiles(world, meta, playerForceId, options);
-        foreach (var cell in visible)
-            state.VisibleCells.Add(cell);
+        var forceIds = world.GameData.Forces.Keys.OrderBy(id => id).ToArray();
+        var visibleSnapshots = new HashSet<(int X, int Y)>[forceIds.Length];
 
-        if (profile.Fog.FogDisabled)
+        void ComputeVisibility(int index)
         {
-            for (var y = 0; y < tileMap.Height; y++)
-            {
-                for (var x = 0; x < tileMap.Width; x++)
-                    state.MarkExplored(x, y, tileMap.Width);
-            }
+            var forceId = forceIds[index];
+            // 玩家严格遵循开局迷雾；AI 使用势力视野，避免角色迷雾错误复用玩家当主位置。
+            var visionPolicy = forceId == meta.PlayerForceId
+                ? profile.Fog.VisionPolicy
+                : ForceVisionPolicyInstance;
+            visibleSnapshots[index] = visionPolicy.ComputeVisibleTiles(world, meta, forceId, options);
         }
-        else
-        {
-            state.MarkExplored(visible, tileMap.Width);
-            foreach (var strongholdId in state.KnownStrongholdIds)
-            {
-                if (!world.GameData.Strongholds.TryGetValue(strongholdId, out var sh))
-                    continue;
 
-                state.MarkExplored(sh.Location.X, sh.Location.Y, tileMap.Width);
+        // 可见格计算彼此独立且只读世界状态，适合安全并行；应用结果仍固定按 ForceId 顺序进行。
+        StrategyParallelWork.ForEachIndex(
+            forceIds.Length,
+            ComputeVisibility,
+            minimumParallelCount: 4);
+
+        for (var index = 0; index < forceIds.Length; index++)
+        {
+            var forceId = forceIds[index];
+            var state = GetOrCreate(forceId);
+            state.EnsureCapacity(tileMap.Width, tileMap.Height);
+            state.VisibleCells.Clear();
+            var visible = visibleSnapshots[index];
+            foreach (var cell in visible)
+                state.VisibleCells.Add(cell);
+
+            if (forceId == meta.PlayerForceId && profile.Fog.FogDisabled)
+            {
+                for (var y = 0; y < tileMap.Height; y++)
+                {
+                    for (var x = 0; x < tileMap.Width; x++)
+                        state.MarkExplored(x, y, tileMap.Width);
+                }
+            }
+            else
+            {
+                state.MarkExplored(visible, tileMap.Width);
+                foreach (var strongholdId in state.KnownStrongholdIds)
+                {
+                    if (!world.GameData.Strongholds.TryGetValue(strongholdId, out var sh))
+                        continue;
+
+                    state.MarkExplored(sh.Location.X, sh.Location.Y, tileMap.Width);
+                }
+            }
+
+            foreach (var stronghold in world.GameData.Strongholds.Values)
+            {
+                if (state.VisibleCells.Contains((stronghold.Location.X, stronghold.Location.Y)))
+                    state.KnownStrongholdIds.Add(stronghold.Id);
             }
         }
     }
+
+    private static readonly ForceVisionPolicy ForceVisionPolicyInstance = new();
 
     public void RegisterKnownStronghold(
         ForceVisibilityState state,

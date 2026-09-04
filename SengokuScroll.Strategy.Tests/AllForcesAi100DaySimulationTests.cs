@@ -101,25 +101,29 @@ public class AllForcesAi100DaySimulationTests
             analysis.DirectiveChanges > 0 || analysis.SuccessfulActions > 0,
             "100 日内应出现 AI 方针变更或成功行动");
 
-        // 合理性：地图上单位应发生移动（至少 2 个不同位置）
-        Assert.True(
-            analysis.UniquePositionsByUnit.Values.Any(c => c >= 2),
-            "至少一支部队应在 100 日内移动过");
+        // 合理性：三支初始野战军都必须真正参与战略移动，不能靠移民/商队通过验收。
+        foreach (var unitId in new[] { 1, 2, 21 })
+        {
+            Assert.True(
+                analysis.UniquePositionsByUnit.TryGetValue(unitId, out var positions) && positions >= 2,
+                $"初始野战军 #{unitId} 在 100 日内应发生移动");
+        }
 
-        // 合理性：对峙 Skip 不应占 AI 条目的大多数（脱困/清理后应能继续行动）
+        // 合理性：过滤非军事噪音后，对峙/攻城锁定允许占较大比例，但不能吞没绝大多数决策。
         Assert.True(
-            analysis.StandoffSkipCount < analysis.AiTraceEntries / 2,
+            analysis.StandoffSkipCount * 4 < analysis.AiTraceEntries * 3,
             $"对峙 Skip 过多：{analysis.StandoffSkipCount}/{analysis.AiTraceEntries}");
 
-        // 合理性：敌对势力之间应产生战斗或占城（mini_kanto 默认多势力敌对）
+        // 合理性：不能用三次偶发行动糊弄验收；百日内应有持续行动并实际改变版图。
         Assert.True(
-            analysis.SuccessfulActions >= 3
-            || analysis.StrongholdOwnershipChanges >= 1
-            || analysis.ActionCodeCounts.ContainsKey("MarchEnemy")
-            || analysis.ActionCodeCounts.ContainsKey("EngageAdjacent")
-            || analysis.ActionCodeCounts.ContainsKey("SiegeAssault")
-            || analysis.ActionCodeCounts.ContainsKey("SiegeEncircle"),
-            "100 日仿真应出现行军、接敌或攻城等军事行为");
+            analysis.SuccessfulActions >= 20,
+            $"100 日有效军事行动过少：{analysis.SuccessfulActions}");
+        Assert.True(
+            analysis.StrongholdOwnershipChanges >= 1,
+            "100 日仿真应至少发生一次据点易主");
+        Assert.Contains("ContinueRoute", analysis.ActionCodeCounts.Keys);
+        Assert.Contains("MarchAttack", analysis.ActionCodeCounts.Keys);
+        Assert.Contains("SiegeAssault", analysis.ActionCodeCounts.Keys);
     }
 
     private readonly ITestOutputHelper _output;

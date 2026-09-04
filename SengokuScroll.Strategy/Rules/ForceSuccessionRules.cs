@@ -127,6 +127,7 @@ public static class ForceSuccessionRules
         }
 
         lordRegistry.SetLordCharacterId(forceId, successorId);
+        force.LordCharacterId = successorId;
 
         // 业务：新当主不可兼任外臣领主或代官；原据点改回直辖/待任命
         StrongholdGovernanceRules.ReleaseGovernanceRoles(forceId, successorId, gameData);

@@ -1577,21 +1577,6 @@ function strongholdMilitiaCount(stronghold: StrategyStrongholdState): number {
   return Math.max(0, stronghold.garrisonSoldiers ?? 0);
 }
 
-function strongholdStandingSoldiers(stronghold: StrategyStrongholdState): number {
-  return (stronghold.standingGarrisonUnits ?? [])
-    .filter((unit) => unit.role === "Samurai")
-    .reduce((sum, unit) => sum + Math.max(0, unit.soldiers), 0);
-}
-
-function strongholdTotalGarrisonSoldiers(stronghold: StrategyStrongholdState): number {
-  const fromUnits = (stronghold.standingGarrisonUnits ?? []).reduce(
-    (sum, unit) => sum + Math.max(0, unit.soldiers),
-    0,
-  );
-  if (fromUnits > 0) return fromUnits;
-  return strongholdMilitiaCount(stronghold) + strongholdStandingSoldiers(stronghold);
-}
-
 function strongholdCityGarrison(stronghold: StrategyStrongholdState): number {
   return strongholdTotalSoldiers(stronghold);
 }

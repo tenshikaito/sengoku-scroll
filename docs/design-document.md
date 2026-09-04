@@ -235,9 +235,9 @@ SengokuScroll.Host       ← 组装与DI
 SengokuScroll.WebApi     ← HTTP/SignalR
 ```
 
-### 2.6 当前代码结构（2026-06-28）
+### 2.6 当前代码结构（2026-09-05）
 
-设计目标见 §2.1。当前仓库已实现部分核心库与 Web 层，**模式专属项目（Rpg/Strategy/Mmo/Combat）尚未拆分**：
+设计目标见 §2.1。当前仓库已拆分并实现策略单机纵切；RPG、MMO 与独立战术地图项目仍未启动：
 
 ```
 SengokuScroll.sln（当前）
@@ -246,8 +246,11 @@ SengokuScroll.sln（当前）
 ├── SengokuScroll.Application     ← GameLoop、Command、Director
 ├── SengokuScroll.Host            ← DI 组装
 ├── SengokuScroll.WebApi          ← HTTP API
-├── SengokuScroll.WebClient       ← Vue 3 前端原型
-└── SengokuScroll.Application.Tests
+├── SengokuScroll.WebClient       ← Vue 3 + PixiJS 策略 UI
+├── SengokuScroll.Application.Tests
+├── SengokuScroll.Strategy        ← 策略仿真、AI、经济、外交、存档
+├── SengokuScroll.Strategy.Tests  ← 策略规则与长局验收
+└── SengokuScroll.WebApi.Tests
 ```
 
 ---
@@ -289,12 +292,12 @@ SengokuScroll.sln（当前）
 | 时间推进 System 链 | shared-detail §6 | 🟡 Climate/Character/Unit 骨架 |
 | 战术地图战斗 | shared-detail §7 | ❌ 未实现 |
 | 策略多人 / MMO 网络 | shared-detail §8 | ❌ 未实现 |
-| 存档系统 | shared-detail §9 | ❌ 未实现 |
+| 存档系统 | shared-detail §9 | ✅ V2 完整世界与运行台账；兼容 V1 |
 | RPG 模式系统 | rpg-detail | ❌ 未拆分 |
-| 大战略模式系统 | strategy-detail | ❌ 未拆分 |
+| 大战略模式系统 | strategy-detail | 🟡 M4 单机纵切已实现，持续补内容与平衡 |
 | MMO 模式系统 | mmo-detail | ❌ 未实现 |
 | 共通 UI | shared-ui-design | ❌ 前端原型 |
-| 模式专属 UI | *-ui-design | ❌ 未实现 |
+| 模式专属 UI | *-ui-design | 🟡 Strategy Vue/Pixi UI 已实现；RPG/MMO 未开始 |
 
 详细对照与开发阶段建议见 **[设计文档索引 §6](./README.md#6-设计与代码对照)**。
 

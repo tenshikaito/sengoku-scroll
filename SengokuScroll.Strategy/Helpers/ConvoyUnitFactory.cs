@@ -51,6 +51,7 @@ public static class ConvoyUnitFactory
             Training = 50,
             Movement = LogisticsConstants.ConvoyDailyAp,
             Ap = 0,
+            IsReadyToMove = false,
             IsMilitary = false,
             Kind = kind,
             InStronghold = false,
