@@ -22,6 +22,7 @@ import {
   type StrategyApiMode,
 } from "./strategyDiagnostics";
 import { getAcceptLanguageHeader } from "@/i18n/localePreference";
+import { readMultiplayerSession, setMultiplayerReady } from "./multiplayerClient";
 import {
   mockAdvanceDay,
   mockExecuteInstantBattle,
@@ -53,6 +54,14 @@ async function fetchLive<T>(
   };
   const token = localStorage.getItem("token");
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  const multiplayer = readMultiplayerSession();
+  if (multiplayer) {
+    headers["X-Sengoku-Room-Id"] = multiplayer.roomId;
+    headers["X-Sengoku-Player-Token"] = multiplayer.playerToken;
+    if (method !== "GET" && method !== "HEAD") {
+      headers["X-Sengoku-Command-Id"] = crypto.randomUUID();
+    }
+  }
 
   const requestInit: RequestInit = { method, headers };
   if (body !== undefined) requestInit.body = JSON.stringify(body);
@@ -217,6 +226,10 @@ async function request<T>(
   live: () => Promise<T>,
   mock: () => T
 ): Promise<T> {
+  if (readMultiplayerSession()) {
+    return live();
+  }
+
   const mode = getApiMode();
 
   if (mode === "mock") {
@@ -1213,8 +1226,12 @@ export const setUnitDirective = (unitId: number, directive: string) =>
     }
   );
 
-export const advanceDay = () =>
-  request(
+export const advanceDay = () => {
+  if (readMultiplayerSession()) {
+    return setMultiplayerReady(true).then((result) => result.advance);
+  }
+
+  return request(
     "POST",
     "/advance-day",
     () =>
@@ -1243,9 +1260,14 @@ export const advanceDay = () =>
       };
     }
   );
+};
 
-export const advanceDays = (days: number) =>
-  request(
+export const advanceDays = (days: number) => {
+  if (readMultiplayerSession()) {
+    return advanceDay();
+  }
+
+  return request(
     "POST",
     "/advance-days",
     () =>
@@ -1268,6 +1290,7 @@ export const advanceDays = (days: number) =>
       throw new Error("Mock 模式不支持批量推进");
     },
   );
+};
 
 export interface StrategyMovementTraceEntry {
   sequence: number;

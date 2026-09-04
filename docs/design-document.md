@@ -77,9 +77,9 @@ SengokuScroll（战国绘卷）是一款以日本战国时代为背景的**多�
 
 | 顺序 | 阶段 | 状态 |
 |------|------|------|
-| **1** | **大战略（策略）单机** | **当前 — M0 已确认，M1 待启动** |
+| **1** | **大战略（策略）单机** | **可玩原型已完成，持续补内容与平衡** |
 | 2 | 立志传（RPG） | 未开始 — **策略基础上的增量**（时间推进、城内场景、剧情） |
-| 3 | **策略多人联机（1–8 人）** | 未开始 — **RPG 完成后** |
+| 3 | **策略多人联机（1–8 人）** | **局域网服务器权威 MVP 已实现；生产化待继续** |
 | 4 | MMO | 未开始 — RPG 可玩里程碑后 |
 
 **规则**：同一时间只做一个阶段。策略单机计划见 **[strategy-development-plan.md](./strategy-development-plan.md)**。
@@ -130,7 +130,7 @@ Web Client
 
 Backend
 ├── WebApi         REST（账号、存档元数据、命令）
-├── SignalR Hub    实时联机/MMO（规划）
+├── SignalR Hub    大战略房间通知已实现；MMO 协议仍规划
 ├── Game Server    独立进程：Tick、指令、AI（规划，MMO 必需）
 └── Domain + Application   共享仿真核心
 ```
@@ -237,7 +237,7 @@ SengokuScroll.WebApi     ← HTTP/SignalR
 
 ### 2.6 当前代码结构（2026-09-05）
 
-设计目标见 §2.1。当前仓库已拆分并实现策略单机纵切；RPG、MMO 与独立战术地图项目仍未启动：
+设计目标见 §2.1。当前仓库已拆分并实现策略单机纵切与 1–8 人联机 MVP；RPG、MMO 与独立战术地图项目仍未启动：
 
 ```
 SengokuScroll.sln（当前）
@@ -245,7 +245,7 @@ SengokuScroll.sln（当前）
 ├── SengokuScroll.Domain          ← 实体、规则、System、Evaluator
 ├── SengokuScroll.Application     ← GameLoop、Command、Director
 ├── SengokuScroll.Host            ← DI 组装
-├── SengokuScroll.WebApi          ← HTTP API
+├── SengokuScroll.WebApi          ← HTTP API、房间管理、SignalR Hub
 ├── SengokuScroll.WebClient       ← Vue 3 + PixiJS 策略 UI
 ├── SengokuScroll.Application.Tests
 ├── SengokuScroll.Strategy        ← 策略仿真、AI、经济、外交、存档
@@ -291,7 +291,7 @@ SengokuScroll.sln（当前）
 | 角色/单位移动指令 | shared-detail §5 | 🟡 部分实现 |
 | 时间推进 System 链 | shared-detail §6 | 🟡 Climate/Character/Unit 骨架 |
 | 战术地图战斗 | shared-detail §7 | ❌ 未实现 |
-| 策略多人 / MMO 网络 | shared-detail §8 | ❌ 未实现 |
+| 策略多人 / MMO 网络 | shared-detail §8 | 🟡 策略房间 MVP 已实现；MMO 未实现 |
 | 存档系统 | shared-detail §9 | ✅ V2 完整世界与运行台账；兼容 V1 |
 | RPG 模式系统 | rpg-detail | ❌ 未拆分 |
 | 大战略模式系统 | strategy-detail | 🟡 M4 单机纵切已实现，持续补内容与平衡 |

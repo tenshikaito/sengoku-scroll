@@ -91,6 +91,10 @@ public sealed class StrategySimulationHost : IDisposable
             if (!gameData.Units.TryGetValue(sourceUnitId, out var source))
                 return GameError.UnitError.UnitNotFound;
 
+            var ownership = PlayerUnitControlRules.ValidateOwnership(source, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
+
             if (!gameData.Units.TryGetValue(targetUnitId, out var target))
                 return GameError.UnitError.UnitNotFound;
 
@@ -129,6 +133,10 @@ public sealed class StrategySimulationHost : IDisposable
             var gameData = simulation.World.GameData;
             if (!gameData.Units.TryGetValue(unitId, out var parent))
                 return GameError.UnitError.UnitNotFound;
+
+            var ownership = PlayerUnitControlRules.ValidateOwnership(parent, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
 
             var spawnLocation = new Point3(spawn.X, spawn.Y);
             var result = UnitSplitActions.SplitSubUnits(
@@ -211,6 +219,9 @@ public sealed class StrategySimulationHost : IDisposable
             var gameData = simulation.World.GameData;
             if (!gameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
             if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
                 return GameError.StrongholdError.StrongholdNotFound;
 
@@ -235,6 +246,9 @@ public sealed class StrategySimulationHost : IDisposable
             var gameData = simulation.World.GameData;
             if (!gameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
             if (!gameData.Strongholds.TryGetValue(strongholdId, out var stronghold))
                 return GameError.StrongholdError.StrongholdNotFound;
 
@@ -258,6 +272,10 @@ public sealed class StrategySimulationHost : IDisposable
             var gameData = simulation.World.GameData;
             if (!gameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
+
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
 
             var result = UnitStrongholdPresenceActions.OrganizationalDisband(
                 simulation.GameContext.GameWorldContext,
@@ -303,6 +321,10 @@ public sealed class StrategySimulationHost : IDisposable
             if (!gameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
 
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
+
             if (!gameData.Strongholds.TryGetValue(unit.LocationStrongholdId, out var stronghold))
                 return GameError.StrongholdError.StrongholdNotFound;
 
@@ -330,6 +352,10 @@ public sealed class StrategySimulationHost : IDisposable
             var gameData = simulation.World.GameData;
             if (!gameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
+
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
 
             if (!gameData.Strongholds.TryGetValue(unit.LocationStrongholdId, out var stronghold))
                 return GameError.StrongholdError.StrongholdNotFound;
@@ -562,6 +588,10 @@ public sealed class StrategySimulationHost : IDisposable
             if (!gameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
 
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
+
             if (!gameData.Strongholds.TryGetValue(unit.LocationStrongholdId, out var stronghold))
                 return GameError.StrongholdError.StrongholdNotFound;
 
@@ -590,6 +620,10 @@ public sealed class StrategySimulationHost : IDisposable
             if (!gameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
 
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
+
             if (!gameData.Strongholds.TryGetValue(unit.LocationStrongholdId, out var stronghold))
                 return GameError.StrongholdError.StrongholdNotFound;
 
@@ -617,6 +651,10 @@ public sealed class StrategySimulationHost : IDisposable
 
             if (!simulation.World.GameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
+
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
 
             unit.TradePolicy = policy;
             unit.TradeLimitPriceMoneyPerGo = Math.Max(0, limitPriceMoneyPerGo);
@@ -690,6 +728,9 @@ public sealed class StrategySimulationHost : IDisposable
 
             var meta = simulation.ScenarioMeta;
             var gameData = simulation.World.GameData;
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, meta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
             var helper = simulation.Services.GetRequiredService<MessageCarrierDispatchHelper>();
             var issuer = StrategyLordHelper.ResolvePolicyIssuerLocation(unit, gameData, meta);
             var strongholdId = StrategyLordHelper.ResolveSourceStrongholdId(gameData, meta, issuer);
@@ -831,6 +872,10 @@ public sealed class StrategySimulationHost : IDisposable
 
             if (!simulation.World.GameData.Units.TryGetValue(unitId, out var unit))
                 return GameError.UnitError.UnitNotFound;
+
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
 
             var pathfinding = simulation.Services.GetRequiredService<IPathfindingService>();
             var movementRules = simulation.Services.GetRequiredService<Domain.Rules.MovementRules>();
@@ -1078,6 +1123,13 @@ public sealed class StrategySimulationHost : IDisposable
             if (simulation is null)
                 return GameError.DataNotFound;
 
+            if (!simulation.World.GameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
+
             var battle = simulation.Services.GetRequiredService<StrategyInstantBattleSystem>();
             return battle.Preview(unitId, target);
         }
@@ -1090,6 +1142,13 @@ public sealed class StrategySimulationHost : IDisposable
         {
             if (simulation is null)
                 return GameError.DataNotFound;
+
+            if (!simulation.World.GameData.Units.TryGetValue(unitId, out var unit))
+                return GameError.UnitError.UnitNotFound;
+
+            var ownership = PlayerUnitControlRules.ValidateOwnership(unit, simulation.ScenarioMeta);
+            if (!ownership.IsSuccess)
+                return ownership.Error!;
 
             var battle = simulation.Services.GetRequiredService<StrategyInstantBattleSystem>();
             var result = battle.Execute(unitId, target);
@@ -1188,6 +1247,70 @@ public sealed class StrategySimulationHost : IDisposable
                 DayDebugLogPath = dayDebugLog.LastWrittenFilePath,
                 DayDebugEntryCount = dayDebugLog.Snapshot().Count
             };
+        }
+    }
+
+    /// <summary>
+    /// 配置本房间当前由真人占用的势力。未列出的势力继续由 AI 接管。
+    /// </summary>
+    public GameResult ConfigureHumanControlledForces(IEnumerable<int> forceIds)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var normalized = forceIds.Distinct().OrderBy(id => id).ToHashSet();
+            if (normalized.Any(id => !simulation.World.GameData.Forces.ContainsKey(id)))
+                return GameError.ForceError.ForceNotFound;
+
+            simulation.ScenarioMeta.HumanControlledForceIds = normalized;
+            return GameResult.Ok();
+        }
+    }
+
+    /// <summary>
+    /// 临时把当前请求切换为指定势力的玩家视角。调用方必须保证同一房间请求串行，
+    /// 并在命令或 DTO 映射结束后释放返回的作用域。
+    /// </summary>
+    public GameResult<IDisposable> UsePlayerForce(int forceId)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return GameError.DataNotFound;
+
+            var gameData = simulation.World.GameData;
+            if (!gameData.Forces.TryGetValue(forceId, out var force))
+                return GameError.ForceError.ForceNotFound;
+
+            var meta = simulation.ScenarioMeta;
+            var snapshot = new PlayerForceContextSnapshot(
+                meta.PlayerForceId,
+                meta.LordName,
+                meta.LordUnitId,
+                meta.LordStrongholdId);
+
+            meta.PlayerForceId = forceId;
+            var lordId = StrategyStrongholdLordHelper.ResolveForceLordCharacterId(forceId, meta, gameData);
+            gameData.Characters.TryGetValue(lordId, out var lord);
+            meta.LordName = lord?.Name ?? force.Name;
+            meta.LordUnitId = lord is null
+                ? null
+                : gameData.Units.Values
+                    .Where(unit => unit.ForceId == forceId && unit.LeaderId == lord.Id)
+                    .OrderBy(unit => unit.Id)
+                    .Select(unit => (int?)unit.Id)
+                    .FirstOrDefault();
+            meta.LordStrongholdId = meta.ForceLordResidenceStrongholdIds.TryGetValue(forceId, out var residenceId)
+                ? residenceId
+                : gameData.Strongholds.Values
+                    .Where(stronghold => stronghold.ForceId == forceId)
+                    .OrderBy(stronghold => stronghold.Id)
+                    .Select(stronghold => (int?)stronghold.Id)
+                    .FirstOrDefault();
+
+            return new PlayerForceContextLease(this, snapshot);
         }
     }
 
@@ -1371,6 +1494,40 @@ public sealed class StrategySimulationHost : IDisposable
             simulation?.Dispose();
             simulation = null;
             LoadedScenarioId = null;
+        }
+    }
+
+    private void RestorePlayerForceContext(PlayerForceContextSnapshot snapshot)
+    {
+        lock (sync)
+        {
+            if (simulation is null)
+                return;
+
+            var meta = simulation.ScenarioMeta;
+            meta.PlayerForceId = snapshot.PlayerForceId;
+            meta.LordName = snapshot.LordName;
+            meta.LordUnitId = snapshot.LordUnitId;
+            meta.LordStrongholdId = snapshot.LordStrongholdId;
+        }
+    }
+
+    private sealed record PlayerForceContextSnapshot(
+        int PlayerForceId,
+        string LordName,
+        int? LordUnitId,
+        int? LordStrongholdId);
+
+    private sealed class PlayerForceContextLease(
+        StrategySimulationHost owner,
+        PlayerForceContextSnapshot snapshot) : IDisposable
+    {
+        private StrategySimulationHost? currentOwner = owner;
+
+        public void Dispose()
+        {
+            var toRestore = Interlocked.Exchange(ref currentOwner, null);
+            toRestore?.RestorePlayerForceContext(snapshot);
         }
     }
 

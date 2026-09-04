@@ -36,9 +36,6 @@ public class StrategyCharacterAISystem(
         var worldContext = context.GameWorldContext;
         var gameData = worldContext.GameWorld.GameData;
         var gameDate = gameData.GameDate;
-        var playerForceId = scenarioMeta.PlayerForceId;
-        var allAi = scenarioMeta.AllForcesAiControlled;
-
         foreach (var character in worldContext.EachCharacter())
         {
             if (character.ActionStatus == CharacterActionStatus.Resting)
@@ -50,9 +47,12 @@ public class StrategyCharacterAISystem(
             if (CharacterAiRules.ShouldSkipDailyAi(character))
                 continue;
 
-            if (!allAi
-                && character.ForceId == playerForceId
-                && CharacterAiRules.IsPlayerLord(character, scenarioMeta, gameData))
+            var forceLordId = StrategyStrongholdLordHelper.ResolveForceLordCharacterId(
+                character.ForceId,
+                scenarioMeta,
+                gameData);
+            if (!StrategyAiControlRules.IsForceAiControlled(scenarioMeta, character.ForceId)
+                && character.Id == forceLordId)
             {
                 continue;
             }

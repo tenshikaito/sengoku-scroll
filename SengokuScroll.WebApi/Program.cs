@@ -8,18 +8,21 @@ using SengokuScroll.Strategy.Extensions;
 using SengokuScroll.Strategy.Hosting;
 using SengokuScroll.Strategy.Persistence;
 using SengokuScroll.WebApi;
+using SengokuScroll.WebApi.Multiplayer;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddSignalR();
 builder.Services.AddCors(options =>
     options.AddPolicy("default", policy =>
         policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 builder.Services.Configure<StrategyDayDebugOptions>(builder.Configuration.GetSection("Strategy:DayDebug"));
 builder.Services.AddStrategySimulationHost();
+builder.Services.AddSingleton<StrategyMultiplayerRoomManager>();
 builder.Services.AddSingleton(sp =>
 {
     var env = sp.GetRequiredService<IHostEnvironment>();
@@ -50,6 +53,7 @@ app.UseAuthorization();
 ClientStaticWebHelper.UseClientStaticWebIfAvailable(app);
 
 app.MapControllers();
+app.MapHub<StrategyRoomHub>("/hubs/strategy");
 
 ClientStaticWebHelper.MapClientSpaFallbackIfAvailable(app);
 
@@ -83,6 +87,9 @@ if (app.Configuration.GetValue("Strategy:OpenBrowserOnStart", app.Environment.Is
             var url = addresses?.FirstOrDefault(a =>
                           a.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
                       ?? "http://127.0.0.1:5100";
+            url = url
+                .Replace("0.0.0.0", "127.0.0.1", StringComparison.Ordinal)
+                .Replace("[::]", "127.0.0.1", StringComparison.Ordinal);
             Process.Start(new ProcessStartInfo
             {
                 FileName = url,

@@ -100,7 +100,7 @@ public class StrategyAISystem(
 
         foreach (var force in gameData.Forces.Values)
         {
-            if (force.Id == playerForceId && !scenarioMeta.AllForcesAiControlled)
+            if (!StrategyAiControlRules.IsForceAiControlled(scenarioMeta, force.Id))
                 continue;
 
             if (StrategyUnitAIRules.TryDispatchLordRelief(
@@ -120,7 +120,7 @@ public class StrategyAISystem(
         {
             foreach (var force in gameData.Forces.Values)
             {
-                if (force.Id == playerForceId && !scenarioMeta.AllForcesAiControlled)
+                if (!StrategyAiControlRules.IsForceAiControlled(scenarioMeta, force.Id))
                     continue;
 
                 foreach (var stronghold in gameData.Strongholds.Values.Where(x => x.ForceId == force.Id))

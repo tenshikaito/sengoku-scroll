@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.SignalR;
 using SengokuScroll.Common.Types;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Entities.Types;
@@ -8,6 +10,7 @@ using SengokuScroll.Strategy.Persistence;
 using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Rules;
 using SengokuScroll.WebApi.Models;
+using SengokuScroll.WebApi.Multiplayer;
 using static SengokuScroll.Domain.Entities.Unit;
 
 namespace SengokuScroll.WebApi.Controllers;
@@ -16,11 +19,162 @@ namespace SengokuScroll.WebApi.Controllers;
 [ApiController]
 [Route("strategy")]
 [Route("api/strategy")]
-public class StrategyController(
-    StrategySimulationHost simulationHost,
-    StrategySaveSlotRepository saveSlotRepository,
-    ILogger<StrategyController> logger) : ControllerBase
+public class StrategyController : ControllerBase, IAsyncActionFilter
 {
+    private readonly StrategySimulationHost defaultSimulationHost;
+    private readonly StrategySaveSlotRepository saveSlotRepository;
+    private readonly ILogger<StrategyController> logger;
+    private readonly StrategyMultiplayerRoomManager multiplayerRooms;
+    private readonly IHubContext<StrategyRoomHub> roomHub;
+    private StrategySimulationHost? multiplayerSimulationHost;
+
+    private StrategySimulationHost simulationHost
+        => multiplayerSimulationHost ?? defaultSimulationHost;
+
+    public StrategyController(
+        StrategySimulationHost simulationHost,
+        StrategySaveSlotRepository saveSlotRepository,
+        ILogger<StrategyController> logger,
+        StrategyMultiplayerRoomManager multiplayerRooms,
+        IHubContext<StrategyRoomHub> roomHub)
+    {
+        defaultSimulationHost = simulationHost;
+        this.saveSlotRepository = saveSlotRepository;
+        this.logger = logger;
+        this.multiplayerRooms = multiplayerRooms;
+        this.roomHub = roomHub;
+    }
+
+    [NonAction]
+    public async Task OnActionExecutionAsync(
+        ActionExecutingContext context,
+        ActionExecutionDelegate next)
+    {
+        var roomId = Request.Headers[StrategyMultiplayerHeaders.RoomId].FirstOrDefault()?.Trim();
+        if (string.IsNullOrWhiteSpace(roomId))
+        {
+            await next();
+            return;
+        }
+
+        if (!multiplayerRooms.TryGetRoom(roomId, out var room))
+        {
+            context.Result = NotFound(new ApiErrorResponse("RoomNotFound"));
+            return;
+        }
+
+        var playerToken = Request.Headers[StrategyMultiplayerHeaders.PlayerToken].FirstOrDefault()?.Trim();
+        if (string.IsNullOrWhiteSpace(playerToken))
+        {
+            context.Result = Unauthorized(new ApiErrorResponse("MissingPlayerToken"));
+            return;
+        }
+
+        var path = Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
+        if (IsBlockedMultiplayerPath(path))
+        {
+            context.Result = StatusCode(
+                StatusCodes.Status403Forbidden,
+                new ApiErrorResponse("MultiplayerOperationNotAllowed"));
+            return;
+        }
+
+        await room.Gate.WaitAsync(HttpContext.RequestAborted);
+        string? reservedCommandId = null;
+        var commandReserved = false;
+        var commandSucceeded = false;
+        try
+        {
+            if (!room.TryAuthenticate(playerToken, out var player))
+            {
+                context.Result = Unauthorized(new ApiErrorResponse("InvalidRoomCredentials"));
+                return;
+            }
+
+            room.MarkConnected(player);
+            room.RefreshHumanControlledForces();
+            var isMutation = IsMutatingRequest(Request.Method, path);
+            if (isMutation)
+            {
+                reservedCommandId = Request.Headers[StrategyMultiplayerHeaders.CommandId]
+                    .FirstOrDefault()?.Trim();
+                if (string.IsNullOrWhiteSpace(reservedCommandId) || reservedCommandId.Length > 100)
+                {
+                    context.Result = BadRequest(new ApiErrorResponse("MissingOrInvalidCommandId"));
+                    return;
+                }
+
+                if (!room.TryReserveCommandId(reservedCommandId))
+                {
+                    context.Result = Conflict(new ApiErrorResponse("DuplicateCommand"));
+                    return;
+                }
+                commandReserved = true;
+            }
+
+            var playerContext = room.Host.UsePlayerForce(player.ForceId);
+            if (!playerContext.IsSuccess)
+            {
+                context.Result = BadRequest(new ApiErrorResponse(playerContext.Error?.Code ?? "ForceContextFailed"));
+                return;
+            }
+
+            using (playerContext.Value)
+            {
+                multiplayerSimulationHost = room.Host;
+                var executed = await next();
+                commandSucceeded = executed.Exception is null && IsSuccessfulResult(executed.Result);
+                if (isMutation && commandSucceeded)
+                {
+                    room.MarkWorldChanged();
+                    await roomHub.Clients.Group(StrategyRoomHub.GroupName(room.RoomId)).SendAsync(
+                        "WorldChanged",
+                        new
+                        {
+                            roomId = room.RoomId,
+                            worldVersion = room.WorldVersion,
+                            reason = "CommandCommitted"
+                        },
+                        CancellationToken.None);
+                }
+            }
+
+            Response.Headers[StrategyMultiplayerHeaders.WorldVersion] = room.WorldVersion.ToString();
+        }
+        finally
+        {
+            multiplayerSimulationHost = null;
+            if (reservedCommandId is not null && commandReserved && !commandSucceeded)
+                room.ReleaseCommandId(reservedCommandId);
+            room.Gate.Release();
+        }
+    }
+
+    private static bool IsBlockedMultiplayerPath(string path)
+        => path.EndsWith("/load", StringComparison.Ordinal)
+           || path.Contains("/advance-day", StringComparison.Ordinal)
+           || path.Contains("/advance-days", StringComparison.Ordinal)
+           || path.Contains("/restore-save", StringComparison.Ordinal)
+           || path.Contains("/save-slots", StringComparison.Ordinal)
+           || path.EndsWith("/save", StringComparison.Ordinal)
+           || path.Contains("/instant-battle", StringComparison.Ordinal);
+
+    private static bool IsMutatingRequest(string method, string path)
+        => !HttpMethods.IsGet(method)
+           && !HttpMethods.IsHead(method)
+           && !path.Contains("/preview", StringComparison.Ordinal);
+
+    private static bool IsSuccessfulResult(IActionResult? result)
+    {
+        var statusCode = result switch
+        {
+            ObjectResult objectResult => objectResult.StatusCode,
+            StatusCodeResult statusResult => statusResult.StatusCode,
+            _ => null
+        };
+        return statusCode is null or < StatusCodes.Status400BadRequest;
+    }
+
     /// <summary>加载 JSON 剧本（如 mini_kanto）。</summary>
     [HttpPost("load")]
     public IActionResult Load([FromBody] LoadScenarioRequest request)

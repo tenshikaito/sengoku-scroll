@@ -1,16 +1,29 @@
 <script setup lang="ts">
-import { nextTick, ref } from "vue";
+import { nextTick, onMounted, ref } from "vue";
 import StrategyPanel from "@/views/Strategy.vue";
 import StrategyGameStartDialog from "@/components/strategy/StrategyGameStartDialog.vue";
+import StrategyMultiplayerLobbyDialog from "@/components/strategy/StrategyMultiplayerLobbyDialog.vue";
 import type { GameStartSettings } from "@/utils/strategyGameStartSettings";
 import { writeGameStartSettings } from "@/utils/strategyGameStartSettings";
+import {
+  clearMultiplayerSession,
+  readMultiplayerSession,
+  reconnectMultiplayerSession,
+  type MultiplayerSession,
+} from "@/api/multiplayerClient";
 
 const dialogVisible = ref(false);
+const multiplayerVisible = ref(false);
 const gameActive = ref(false);
 const strategyRef = ref<InstanceType<typeof StrategyPanel> | null>(null);
 
 function openGameStartDialog() {
+  clearMultiplayerSession();
   dialogVisible.value = true;
+}
+
+function openMultiplayerDialog() {
+  multiplayerVisible.value = true;
 }
 
 function closeGameStartDialog() {
@@ -18,12 +31,33 @@ function closeGameStartDialog() {
 }
 
 async function onConfirm(settings: GameStartSettings) {
+  clearMultiplayerSession();
   writeGameStartSettings(settings);
   dialogVisible.value = false;
   gameActive.value = true;
   await nextTick();
   await strategyRef.value?.startGameWithSettings(settings);
 }
+
+async function onMultiplayerEntered(_session: MultiplayerSession) {
+  multiplayerVisible.value = false;
+  gameActive.value = true;
+  await nextTick();
+  await strategyRef.value?.resumeMultiplayerGame();
+}
+
+onMounted(async () => {
+  if (!readMultiplayerSession()) return;
+  try {
+    const room = await reconnectMultiplayerSession();
+    if (!room) return;
+    gameActive.value = true;
+    await nextTick();
+    await strategyRef.value?.resumeMultiplayerGame();
+  } catch {
+    clearMultiplayerSession();
+  }
+});
 </script>
 
 <template>
@@ -35,8 +69,9 @@ async function onConfirm(settings: GameStartSettings) {
         <p class="subtitle">经营领国、运筹外交、统率军势，在乱世中完成天下一统。</p>
         <div class="landing-actions">
           <el-button type="primary" size="large" @click="openGameStartDialog">开始新局</el-button>
+          <el-button size="large" @click="openMultiplayerDialog">多人联机</el-button>
         </div>
-        <p class="prototype-note">当前版本包含标准游玩与全势力 AI 观战模式</p>
+        <p class="prototype-note">支持单机、全势力 AI 观战与 1–8 人房间联机</p>
       </div>
     </section>
 
@@ -44,6 +79,7 @@ async function onConfirm(settings: GameStartSettings) {
       v-else
       ref="strategyRef"
       @request-game-start="openGameStartDialog"
+      @exit-multiplayer="gameActive = false"
     />
 
     <StrategyGameStartDialog
@@ -52,6 +88,12 @@ async function onConfirm(settings: GameStartSettings) {
       scenario-id="mini_kanto"
       @confirm="onConfirm"
       @cancel="closeGameStartDialog"
+    />
+
+    <StrategyMultiplayerLobbyDialog
+      :visible="multiplayerVisible"
+      @entered="onMultiplayerEntered"
+      @cancel="multiplayerVisible = false"
     />
   </div>
 </template>
@@ -122,6 +164,9 @@ async function onConfirm(settings: GameStartSettings) {
 }
 
 .landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-top: 32px;
 }
 
@@ -130,6 +175,10 @@ async function onConfirm(settings: GameStartSettings) {
   border-color: #b98a43;
   background: #8f3b2f;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+}
+
+.landing-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .landing-actions :deep(.el-button:hover) {

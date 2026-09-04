@@ -57,6 +57,7 @@ import {
   type MapPoint,
   type StrategyPeaceTermsPayload,
 } from "@/api/strategy";
+import { leaveMultiplayerRoom, readMultiplayerSession } from "@/api/multiplayerClient";
 import StrategyMapCanvas from "@/components/strategy/StrategyMapCanvas.vue";
 import StrategyMapCellEntityPicker from "@/components/strategy/StrategyMapCellEntityPicker.vue";
 import StrategyMapLoadingScene, {
@@ -220,6 +221,7 @@ import {
 
 const emit = defineEmits<{
   "request-game-start": [];
+  "exit-multiplayer": [];
 }>();
 
 const props = withDefaults(
@@ -244,6 +246,7 @@ const initialLoadError = ref("");
 const loading = ref(false);
 const error = ref("");
 const info = ref("");
+const multiplayerSession = ref(readMultiplayerSession());
 const tutorialVisible = ref(false);
 const TUTORIAL_STORAGE_KEY = "sengoku.strategy.tutorial.completed.v1";
 const selectedUnitId = ref<number | null>(null);
@@ -935,6 +938,7 @@ const gameSpeed = ref<1 | 2 | 4 | 8>(1);
 const AUTO_DAY_BASE_MS = 2000;
 
 let autoAdvanceTimer: ReturnType<typeof setTimeout> | null = null;
+let multiplayerPollTimer: ReturnType<typeof setInterval> | null = null;
 let autoAdvanceGeneration = 0;
 
 function clearAutoAdvanceTimer() {
@@ -3262,6 +3266,36 @@ async function resumeExistingGame() {
   }
 }
 
+function startMultiplayerPolling() {
+  if (multiplayerPollTimer) clearInterval(multiplayerPollTimer);
+  if (!multiplayerSession.value) return;
+
+  multiplayerPollTimer = setInterval(async () => {
+    if (loading.value || initialLoading.value || !multiplayerSession.value) return;
+    try {
+      const next = await getStrategyState();
+      await ensureMapMaster(next);
+      state.value = next;
+    } catch {
+      // 短暂掉线由下一次轮询恢复；主动操作仍会显示明确错误。
+    }
+  }, 2500);
+}
+
+async function resumeMultiplayerGame() {
+  multiplayerSession.value = readMultiplayerSession();
+  if (!multiplayerSession.value) {
+    error.value = "没有有效的多人房间会话";
+    return;
+  }
+
+  await resumeExistingGame();
+  if (!initialLoadError.value) {
+    info.value = `联机房间 ${multiplayerSession.value.roomName}（${multiplayerSession.value.roomId}），势力 ${multiplayerSession.value.forceId}`;
+    startMultiplayerPolling();
+  }
+}
+
 function applyApiSourceInfoMessage() {
   const message = resolveStrategyApiSourceInfo(
     usingMockFallback.value,
@@ -3272,6 +3306,24 @@ function applyApiSourceInfoMessage() {
 
 function goToGameStartSettings() {
   emit("request-game-start");
+}
+
+async function exitMultiplayerRoom() {
+  if (!multiplayerSession.value) return;
+  try {
+    await ElMessageBox.confirm("退出后该势力会暂时由 AI 接管。确定退出房间吗？", "退出联机", {
+      confirmButtonText: "退出",
+      cancelButtonText: "取消",
+      type: "warning",
+    });
+    await leaveMultiplayerRoom();
+    multiplayerSession.value = null;
+    if (multiplayerPollTimer) clearInterval(multiplayerPollTimer);
+    multiplayerPollTimer = null;
+    emit("exit-multiplayer");
+  } catch (e) {
+    if (e instanceof Error) ElMessage.error(e.message);
+  }
 }
 
 async function bootstrapGame() {
@@ -3315,6 +3367,12 @@ async function fetchGameState() {
 
 /** 开发用：从剧本 JSON 重新初始化后端内存仿真。 */
 async function reloadScenario() {
+  if (multiplayerSession.value) {
+    await fetchGameState();
+    info.value = "已刷新多人房间状态";
+    return;
+  }
+
   if (lastGameStartSettings.value) {
     loading.value = true;
     try {
@@ -3420,6 +3478,11 @@ async function onAdvanceDay() {
     const response = await advanceDay();
     state.value = response.state;
     appendEvents(response.events ?? []);
+    if (multiplayerSession.value && response.daysAdvanced === 0) {
+      info.value = "已准备，等待房间内其他在线玩家准备完成";
+    } else if (multiplayerSession.value) {
+      info.value = "全员已准备，服务器已统一推进一天";
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : "推进日期失败";
     // 业务：自动推进失败时切回战略，避免空转重试
@@ -3440,6 +3503,11 @@ async function refreshSaveSlots() {
 }
 
 async function openSaveSlotDialog() {
+  if (multiplayerSession.value) {
+    info.value = "多人房间由服务器统一保存，不能使用单机存档槽";
+    return;
+  }
+
   error.value = "";
   saveSlotDialogVisible.value = true;
   try {
@@ -3503,6 +3571,9 @@ async function onAdvanceDays(days: number) {
     const response = await advanceDays(days);
     state.value = response.state;
     appendEvents(response.events ?? []);
+    if (multiplayerSession.value && response.daysAdvanced === 0) {
+      info.value = "已准备，等待房间内其他在线玩家准备完成";
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : "批量推进日期失败";
     if (!gamePaused.value) gamePaused.value = true;
@@ -3569,6 +3640,7 @@ onMounted(() => {
 
 defineExpose({
   startGameWithSettings,
+  resumeMultiplayerGame,
 });
 
 onBeforeUnmount(() => {
@@ -3578,6 +3650,8 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", updateMapTopOverlayHeight);
   mapTopOverlayResizeObserver?.disconnect();
   mapTopOverlayResizeObserver = null;
+  if (multiplayerPollTimer) clearInterval(multiplayerPollTimer);
+  multiplayerPollTimer = null;
   clearAutoAdvanceTimer();
 });
 
@@ -3601,6 +3675,14 @@ watch(
 
     <div class="strategy-body">
       <aside class="side-panel" :class="{ 'side-panel--pick-mode': isDiplomacyForcePicking }">
+        <template v-if="multiplayerSession">
+          <h3>多人房间</h3>
+          <p class="hint">
+            {{ multiplayerSession.roomName }} · {{ multiplayerSession.roomId }}<br>
+            {{ multiplayerSession.playerName }} · 势力 {{ multiplayerSession.forceId }}
+          </p>
+          <el-button size="small" type="danger" plain @click="exitMultiplayerRoom">退出房间</el-button>
+        </template>
         <h3>调试</h3>
         <el-button size="small" :loading="loading" @click="reloadScenario">重新加载剧本</el-button>
         <el-button size="small" @click="goToGameStartSettings">开局设置</el-button>

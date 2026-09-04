@@ -36,7 +36,6 @@ export default defineConfig(() => {
         "/api": {
           target: "http://127.0.0.1:5100",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, ""),
           configure: (proxy) => {
             proxy.on("error", (_err, _req, res) => {
               if (!("writeHead" in res) || typeof res.writeHead !== "function") return;
@@ -50,6 +49,11 @@ export default defineConfig(() => {
               );
             });
           },
+        },
+        "/hubs": {
+          target: "http://127.0.0.1:5100",
+          changeOrigin: true,
+          ws: true,
         },
       },
     },

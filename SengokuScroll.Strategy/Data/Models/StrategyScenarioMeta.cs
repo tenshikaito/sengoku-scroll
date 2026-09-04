@@ -5,7 +5,13 @@ namespace SengokuScroll.Strategy.Data.Models;
 /// <summary>剧本元数据：玩家势力与当主位置（M3-b）。</summary>
 public sealed class StrategyScenarioMeta
 {
-    public int PlayerForceId { get; init; } = 1;
+    public int PlayerForceId { get; set; } = 1;
+
+    /// <summary>
+    /// 联机房间中由真人占用的势力；为空时沿用单机的 PlayerForceId 规则。
+    /// 该集合只影响 AI 接管，不改变当前请求的观察者身份。
+    /// </summary>
+    public IReadOnlySet<int> HumanControlledForceIds { get; set; } = new HashSet<int>();
 
     /// <summary>全势力军事由 AI 接管（仿真/观战；玩家势力亦按 AI 逻辑行动）。</summary>
     public bool AllForcesAiControlled { get; init; }
@@ -20,13 +26,13 @@ public sealed class StrategyScenarioMeta
     /// <summary>开局即「已知位置」的非己方据点 Id（剧本 JSON）。</summary>
     public IReadOnlyList<int> KnownStrongholdIds { get; init; } = [];
 
-    public string LordName { get; init; } = "当主";
+    public string LordName { get; set; } = "当主";
 
     /// <summary>当主所在军事单位 Id；优先于 <see cref="LordStrongholdId"/>。</summary>
-    public int? LordUnitId { get; init; }
+    public int? LordUnitId { get; set; }
 
     /// <summary>当主驻留据点 Id（当主不在部队中时使用）。</summary>
-    public int? LordStrongholdId { get; init; }
+    public int? LordStrongholdId { get; set; }
 
     /// <summary>各势力当主角色 Id（ForceId → Character.Id）。</summary>
     public IReadOnlyDictionary<int, int> ForceLordCharacterIds { get; init; }
