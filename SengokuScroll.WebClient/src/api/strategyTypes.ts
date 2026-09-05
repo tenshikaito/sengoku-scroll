@@ -119,6 +119,7 @@ export interface StrategyCharacterRelationshipState {
 
 export interface StrategyCharacterSummaryState {
   socialMemories?: Array<{ id: number; day: number; otherCharacterId: number; kind: string; description: string }>;
+  recentDecisions?: Array<{ day: number; behavior: string; targetCharacterId: number; score: number; threshold: number; outcome: string; factors: Array<{ name: string; value: number }> }>;
   defectionWarningDay?: number | null;
   pendingMarriageFromId?: number | null;
   id: number;

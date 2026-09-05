@@ -12,6 +12,6 @@ test("social errors explain cooldown and marriage eligibility", () => {
 });
 test("character panel exposes proposal consent decline and actual memories", () => {
   const component = readFileSync(new URL("../src/components/strategy/intel/StrategyIntelPersonPane.vue", import.meta.url), "utf8");
-  for (const text of ["'Marry'", "'DeclineMarriage'", "pendingMarriageFromId", "socialMemories", "defectionWarningDay"])
+  for (const text of ["'Marry'", "'DeclineMarriage'", "pendingMarriageFromId", "socialMemories", "defectionWarningDay", "recentDecisions", "decision.factors", "评分不等于成功率"])
     assert.ok(component.includes(text));
 });
