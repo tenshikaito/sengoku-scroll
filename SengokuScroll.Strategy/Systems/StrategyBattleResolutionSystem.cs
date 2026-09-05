@@ -356,11 +356,14 @@ public sealed class StrategyBattleResolutionSystem(
         var message =
             $"⚔ {unitA.Name} 与 {unitB.Name} 大军对峙第 {standoffDays} 日，战线僵持未决。";
 
-        dayOutcomeBuffer.AddEvent(new StrategyEventDto
+        if (scenarioMeta.HasHumanControlConfiguration)
         {
-            Category = "StandoffReport",
-            Message = message
-        });
+            foreach (var forceId in new[] { unitA.ForceId, unitB.ForceId }.Distinct().Order())
+                battleReportDeliveryHelper.DeliverPlayerStrategicReport(forceId, unitA.Location, gameData,
+                    new StrategyEventDto { Category = "StandoffReport", Message = message });
+            return;
+        }
+        dayOutcomeBuffer.AddEvent(new StrategyEventDto { Category = "StandoffReport", Message = message });
 
         DispatchStandoffForForce(unitA.ForceId, unitA.Location, gameData, unitA, unitB);
         if (unitB.ForceId != unitA.ForceId)
@@ -423,6 +426,12 @@ public sealed class StrategyBattleResolutionSystem(
                 attackerParticipants,
                 defenderParticipants);
         }
+        var otherForces = (attackerParticipants ?? []).Concat(defenderParticipants ?? [])
+            .Where(gameData.Units.ContainsKey).Select(id => gameData.Units[id].ForceId)
+            .Where(id => id != attacker.ForceId && id != defender.ForceId).Distinct().Order();
+        foreach (var forceId in otherForces)
+            battleReportDeliveryHelper.DeliverDecisiveBattleReport(forceId, attacker.Location, gameData,
+                outcome, attacker, defender, battleResult, attackerParticipants, defenderParticipants);
     }
 
     private static IReadOnlyList<string> ResolveReinforcementNames(

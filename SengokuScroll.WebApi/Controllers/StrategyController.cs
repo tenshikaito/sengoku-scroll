@@ -53,6 +53,11 @@ public class StrategyController : ControllerBase, IAsyncActionFilter
         var roomId = Request.Headers[StrategyMultiplayerHeaders.RoomId].FirstOrDefault()?.Trim();
         if (string.IsNullOrWhiteSpace(roomId))
         {
+            if (Request.Headers.ContainsKey(StrategyMultiplayerHeaders.PlayerToken))
+            {
+                context.Result = BadRequest(new ApiErrorResponse("MissingRoomId"));
+                return;
+            }
             await next();
             return;
         }
@@ -129,6 +134,8 @@ public class StrategyController : ControllerBase, IAsyncActionFilter
                 commandSucceeded = executed.Exception is null && IsSuccessfulResult(executed.Result);
                 if (isMutation && commandSucceeded)
                 {
+                    // Editing orders after ready requires an explicit confirmation again.
+                    room.SetReady(player, false);
                     room.MarkWorldChanged();
                     try
                     {
@@ -150,6 +157,7 @@ public class StrategyController : ControllerBase, IAsyncActionFilter
                 }
             }
 
+            if (isMutation && commandSucceeded) multiplayerRooms.Persist(room);
             Response.Headers[StrategyMultiplayerHeaders.WorldVersion] = room.WorldVersion.ToString();
         }
         finally

@@ -4,6 +4,7 @@ using SengokuScroll.Strategy.Data.Models;
 using SengokuScroll.Strategy.Diagnostics;
 using SengokuScroll.Strategy.Models;
 using SengokuScroll.Strategy.Vision;
+using SengokuScroll.Strategy.Helpers;
 
 namespace SengokuScroll.Strategy.Persistence;
 
@@ -16,6 +17,9 @@ internal static class StrategyRuntimeServicesSaveService
     {
         var snapshot = new StrategyRuntimeServicesSnapshot
         {
+            PrivateMailboxes = services.GetRequiredService<StrategyPrivateEventLedger>().Snapshot(),
+            ReportDelivery = services.GetRequiredService<BattleReportDeliveryHelper>().Snapshot(),
+            ForceVisibility = services.GetRequiredService<StrategyVisibilityLedger>().SnapshotAll(),
             MarketPriceObservations = [.. services
                 .GetRequiredService<StrategyIntelligenceLedger>()
                 .SnapshotAll()],
@@ -93,7 +97,8 @@ internal static class StrategyRuntimeServicesSaveService
             || snapshot.SeenMessageKeys is null
             || snapshot.ForceLords is null
             || snapshot.WarOccupations is null
-            || snapshot.FieldStandoffs is null)
+            || snapshot.FieldStandoffs is null || snapshot.PrivateMailboxes is null
+            || snapshot.ForceVisibility is null || snapshot.ReportDelivery is null)
             return false;
 
         services.GetRequiredService<StrategyIntelligenceLedger>()
@@ -112,7 +117,10 @@ internal static class StrategyRuntimeServicesSaveService
         services.GetRequiredService<MonthlyTaxCollectionLedger>()
             .Restore(snapshot.MonthlyTaxObligations);
         services.GetRequiredService<StrategyTributeLedger>()
-            .Restore(snapshot.Tribute);
+            .Restore(snapshot.Tribute, scenarioMeta?.PlayerForceId ?? 0);
+        services.GetRequiredService<StrategyPrivateEventLedger>().Restore(snapshot.PrivateMailboxes);
+        services.GetRequiredService<BattleReportDeliveryHelper>().Restore(snapshot.ReportDelivery);
+        services.GetRequiredService<StrategyVisibilityLedger>().RestoreAll(snapshot.ForceVisibility);
         services.GetRequiredService<StrategyMessageLedger>()
             .Restore(snapshot.SeenMessageKeys);
         services.GetRequiredService<StrategyForceLordRegistry>()
@@ -127,6 +135,9 @@ internal static class StrategyRuntimeServicesSaveService
 
 internal sealed class StrategyRuntimeServicesSnapshot
 {
+    public IReadOnlyList<StrategyPrivateEventLedger.Mailbox> PrivateMailboxes { get; init; } = [];
+    public BattleReportDeliveryHelper.DeliveryState ReportDelivery { get; init; } = new([], []);
+    public IReadOnlyList<StrategyVisibilityLedger.ForceSnapshot> ForceVisibility { get; init; } = [];
     public List<StrategyIntelligenceLedger.MarketPriceObservation> MarketPriceObservations { get; init; } = [];
 
     public List<StrategyEspionageIntelLedger.Record> EspionageIntel { get; init; } = [];

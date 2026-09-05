@@ -3,6 +3,9 @@ namespace SengokuScroll.Strategy.Models;
 /// <summary>日推进或信使投递产生的玩家可见事件（左上角消息栏）。</summary>
 public sealed record StrategyEventDto
 {
+    /// <summary>Explicit private recipient; legacy single-player events may omit it.</summary>
+    public int? RecipientForceId { get; init; }
+    public string? OccurrenceKey { get; init; }
     /// <summary>MessengerArrived | PolicyDelivered | BattleReportArrived 等。</summary>
     public required string Category { get; init; }
 

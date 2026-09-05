@@ -35,7 +35,8 @@ export default defineConfig(() => {
       proxy: {
         "/api": {
           target: "http://127.0.0.1:5100",
-          changeOrigin: true,
+          // Preserve browser Host so the API can validate same-origin LAN requests.
+          changeOrigin: false,
           configure: (proxy) => {
             proxy.on("error", (_err, _req, res) => {
               if (!("writeHead" in res) || typeof res.writeHead !== "function") return;
@@ -52,7 +53,7 @@ export default defineConfig(() => {
         },
         "/hubs": {
           target: "http://127.0.0.1:5100",
-          changeOrigin: true,
+          changeOrigin: false,
           ws: true,
         },
       },

@@ -184,12 +184,13 @@ internal static class MessageCarrierNotificationHelper
 {
     public static void NotifyPolicyDelivered(MessagePayloadDeliveryContext ctx, Unit unit)
     {
-        if (ctx.Carrier.ForceId != ctx.ScenarioMeta.PlayerForceId)
+        if (!StrategyForcePerspective.ReceivesReports(ctx.ScenarioMeta, ctx.Carrier.ForceId))
             return;
 
         var directive = ctx.Carrier.Payload.PendingDirective?.ToString() ?? "未知";
         ctx.DayOutcomeBuffer.AddEvent(new StrategyEventDto
         {
+            RecipientForceId = ctx.Carrier.ForceId,
             Category = "PolicyDelivered",
             Message = $"📨 方针已传达至 {unit.Name}：{UnitDirectiveLabelRegistry.Label(directive)}"
         });
@@ -197,11 +198,12 @@ internal static class MessageCarrierNotificationHelper
 
     public static void NotifyTaxRateDelivered(MessagePayloadDeliveryContext ctx, Stronghold stronghold)
     {
-        if (ctx.Carrier.ForceId != ctx.ScenarioMeta.PlayerForceId)
+        if (!StrategyForcePerspective.ReceivesReports(ctx.ScenarioMeta, ctx.Carrier.ForceId))
             return;
 
         ctx.DayOutcomeBuffer.AddEvent(new StrategyEventDto
         {
+            RecipientForceId = ctx.Carrier.ForceId,
             Category = "TaxRateDelivered",
             Message = $"📨 税令已传达至 {stronghold.Name}，新税率已生效"
         });
@@ -211,12 +213,13 @@ internal static class MessageCarrierNotificationHelper
         MessagePayloadDeliveryContext ctx,
         Stronghold stronghold)
     {
-        if (ctx.Carrier.ForceId != ctx.ScenarioMeta.PlayerForceId)
+        if (!StrategyForcePerspective.ReceivesReports(ctx.ScenarioMeta, ctx.Carrier.ForceId))
             return;
 
         var label = StrongholdGovernancePriorityLabelRegistry.Label(stronghold.GovernancePriority);
         ctx.DayOutcomeBuffer.AddEvent(new StrategyEventDto
         {
+            RecipientForceId = ctx.Carrier.ForceId,
             Category = "GovernancePriorityDelivered",
             Message = $"📨 方针已传达至 {stronghold.Name}：{label}"
         });
@@ -224,12 +227,13 @@ internal static class MessageCarrierNotificationHelper
 
     public static void NotifyCharacterRecallDelivered(MessagePayloadDeliveryContext ctx, string? characterName = null)
     {
-        if (ctx.Carrier.ForceId != ctx.ScenarioMeta.PlayerForceId)
+        if (!StrategyForcePerspective.ReceivesReports(ctx.ScenarioMeta, ctx.Carrier.ForceId))
             return;
 
         var name = string.IsNullOrWhiteSpace(characterName) ? "将领" : characterName.Trim();
         ctx.DayOutcomeBuffer.AddEvent(new StrategyEventDto
         {
+            RecipientForceId = ctx.Carrier.ForceId,
             Category = "CharacterRecallDelivered",
             Message = $"📨 召回令已传达，{name} 正尽快回城"
         });
@@ -237,7 +241,7 @@ internal static class MessageCarrierNotificationHelper
 
     public static void NotifyBattleReportArrived(MessagePayloadDeliveryContext ctx)
     {
-        if (ctx.Carrier.ForceId != ctx.ScenarioMeta.PlayerForceId)
+        if (!StrategyForcePerspective.ReceivesReports(ctx.ScenarioMeta, ctx.Carrier.ForceId))
             return;
 
         var carrier = ctx.Carrier;
@@ -246,6 +250,7 @@ internal static class MessageCarrierNotificationHelper
         {
             ctx.DayOutcomeBuffer.AddEvent(new StrategyEventDto
             {
+                RecipientForceId = ctx.Carrier.ForceId,
                 Category = "BattleReportArrived",
                 Message = $"📨 战报已送达（{carrier.Location.X}, {carrier.Location.Y}）"
             });
@@ -255,12 +260,12 @@ internal static class MessageCarrierNotificationHelper
         ctx.BattleReportDeliveryHelper.NotifyPlayerBattleReportArrivedFromMessenger(
             battleResult,
             carrier.Location,
-            ctx.GameData);
+            ctx.GameData, carrier.ForceId);
     }
 
     public static void NotifyStrategicReportArrived(MessagePayloadDeliveryContext ctx)
     {
-        if (ctx.Carrier.ForceId != ctx.ScenarioMeta.PlayerForceId)
+        if (!StrategyForcePerspective.ReceivesReports(ctx.ScenarioMeta, ctx.Carrier.ForceId))
             return;
 
         var carrier = ctx.Carrier;
@@ -269,6 +274,7 @@ internal static class MessageCarrierNotificationHelper
         {
             ctx.DayOutcomeBuffer.AddEvent(new StrategyEventDto
             {
+                RecipientForceId = ctx.Carrier.ForceId,
                 Category = "StrategicReportArrived",
                 Message = $"📨 情报已送达（{carrier.Location.X}, {carrier.Location.Y}）"
             });
@@ -276,7 +282,7 @@ internal static class MessageCarrierNotificationHelper
         }
 
         ctx.BattleReportDeliveryHelper.NotifyPlayerStrategicReportArrivedFromMessenger(
-            reportEvent,
+            reportEvent with { RecipientForceId = carrier.ForceId },
             carrier.Location,
             ctx.GameData);
     }

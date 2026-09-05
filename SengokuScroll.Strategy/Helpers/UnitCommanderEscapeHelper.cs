@@ -16,7 +16,12 @@ public static class UnitCommanderEscapeHelper
     public static IEnumerable<int> CollectCommanderIds(Unit unit, GameData gameData)
     {
         var ids = new HashSet<int>();
-        CollectCommanderIdsRecursive(unit, gameData, ids);
+        if (unit.LeaderId > 0) ids.Add(unit.LeaderId);
+        // SubUnit IDs belong to a separate table, not the Unit hierarchy. Looking
+        // them up as Units can recurse into the same ID forever or release enemy leaders.
+        foreach (var subId in unit.SubUnitIds)
+            if (gameData.SubUnits.TryGetValue(subId, out var sub) && sub.LeaderId > 0)
+                ids.Add(sub.LeaderId);
         return ids;
     }
 
@@ -143,17 +148,4 @@ public static class UnitCommanderEscapeHelper
             .FirstOrDefault();
     }
 
-    private static void CollectCommanderIdsRecursive(Unit unit, GameData gameData, HashSet<int> ids)
-    {
-        if (unit.LeaderId > 0)
-            ids.Add(unit.LeaderId);
-
-        foreach (var subUnitId in unit.SubUnitIds)
-        {
-            if (!gameData.Units.TryGetValue(subUnitId, out var subUnit))
-                continue;
-
-            CollectCommanderIdsRecursive(subUnit, gameData, ids);
-        }
-    }
 }

@@ -7,7 +7,8 @@ namespace SengokuScroll.Strategy.Diagnostics;
 /// </summary>
 public sealed class StrategyIntelligenceLedger
 {
-    private readonly List<MarketPriceObservation> observations = [];
+    // Only the latest received quote is consumed by trade AI. Preserve first-on-tie semantics.
+    private readonly Dictionary<(int Force, int Stronghold), MarketPriceObservation> observations = [];
 
     public sealed record MarketPriceObservation(
         int ObserverForceId,
@@ -19,30 +20,29 @@ public sealed class StrategyIntelligenceLedger
         int ReliabilityBp);
 
     public void Record(MarketPriceObservation observation)
-        => observations.Add(observation);
+    {
+        var key = (observation.ObserverForceId, observation.SubjectStrongholdId);
+        if (!observations.TryGetValue(key, out var previous)
+            || observation.ReceivedDate.TotalDays > previous.ReceivedDate.TotalDays)
+            observations[key] = observation;
+    }
 
     /// <summary>取某势力对某据点最新一条粮价情报（按收到日）。</summary>
     public MarketPriceObservation? GetLatestPrice(
         int observerForceId,
         int subjectStrongholdId)
-        => observations
-            .Where(o => o.ObserverForceId == observerForceId
-                        && o.SubjectStrongholdId == subjectStrongholdId)
-            .OrderByDescending(o => o.ReceivedDate.Year)
-            .ThenByDescending(o => o.ReceivedDate.Month)
-            .ThenByDescending(o => o.ReceivedDate.Day)
-            .FirstOrDefault();
+        => observations.GetValueOrDefault((observerForceId, subjectStrongholdId));
 
     public IReadOnlyList<MarketPriceObservation> Snapshot(int observerForceId)
-        => observations.Where(o => o.ObserverForceId == observerForceId).ToList();
+        => SnapshotAll().Where(o => o.ObserverForceId == observerForceId).ToList();
 
     public IReadOnlyList<MarketPriceObservation> SnapshotAll()
-        => observations.ToList();
+        => observations.OrderBy(x => x.Key.Force).ThenBy(x => x.Key.Stronghold).Select(x => x.Value).ToList();
 
     public void Restore(IEnumerable<MarketPriceObservation> restored)
     {
         observations.Clear();
-        observations.AddRange(restored);
+        foreach (var observation in restored) Record(observation);
     }
 
     public void Clear() => observations.Clear();

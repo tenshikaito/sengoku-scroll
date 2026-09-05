@@ -24,6 +24,10 @@ public sealed class TariffTaxLedger
     public void MarkTransitCharged(int convoyId, int strongholdId)
         => chargedTransit.Add((convoyId, strongholdId));
 
+    // Keep every extant convoy, including paused/returning ones; only destroyed IDs are safe to forget.
+    public void PruneRemovedConvoys(SengokuScroll.Domain.GameData data)
+        => chargedTransit.RemoveWhere(x => !data.Units.ContainsKey(x.ConvoyId));
+
     /// <summary>征收指定据点全部待缴关税，返回总额。</summary>
     public int CollectForStronghold(int strongholdId)
     {
@@ -37,10 +41,10 @@ public sealed class TariffTaxLedger
         => accruedByStronghold.GetValueOrDefault(strongholdId);
 
     public IReadOnlyList<Accrual> SnapshotAccruals()
-        => [.. accruedByStronghold.Select(x => new Accrual(x.Key, x.Value))];
+        => [.. accruedByStronghold.OrderBy(x => x.Key).Select(x => new Accrual(x.Key, x.Value))];
 
     public IReadOnlyList<TransitCharge> SnapshotTransitCharges()
-        => [.. chargedTransit.Select(x => new TransitCharge(x.ConvoyId, x.StrongholdId))];
+        => [.. chargedTransit.OrderBy(x => x.ConvoyId).ThenBy(x => x.StrongholdId).Select(x => new TransitCharge(x.ConvoyId, x.StrongholdId))];
 
     public void Restore(IEnumerable<Accrual> accruals, IEnumerable<TransitCharge> transitCharges)
     {

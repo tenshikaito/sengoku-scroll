@@ -36,7 +36,7 @@ public class StrategyMessageCarrierSystem(
         var carriers = gameData.MessageCarriers;
         var toRemove = new List<int>();
 
-        foreach (var carrier in carriers.Values.ToList())
+        foreach (var carrier in carriers.Values.OrderBy(carrier => carrier.Id).ToList())
         {
             if (carrier.Status != MessageCarrierStatus.Moving)
                 continue;
@@ -59,6 +59,8 @@ public class StrategyMessageCarrierSystem(
 
         foreach (var id in toRemove)
             carriers.Remove(id);
+        pendingBattleReports.PruneMissingCarriers(gameData);
+        pendingEvents.PruneMissingCarriers(gameData);
     }
 
     private void Deliver(MessageCarrier carrier, Domain.GameData gameData)

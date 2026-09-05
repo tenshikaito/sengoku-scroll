@@ -144,37 +144,22 @@ public class StrategyEconomySystem(
             return;
 
         var (reportYear, reportMonth) = ResolvePreviousMonth(gameDate);
-        var playerMaintenance = 0;
-        var playerArmyMaintenance = 0;
+        var settlements = gameData.Forces.Values.OrderBy(f => f.Id)
+            .ToDictionary(f => f.Id, f => ForceEconomyActions.ApplyMonthlyMaintenance(f, gameData));
 
-        foreach (var force in gameData.Forces.Values)
-        {
-            var result = ForceEconomyActions.ApplyMonthlyMaintenance(force, gameData);
-            if (force.Id != scenarioMeta.PlayerForceId)
-                continue;
-
-            playerMaintenance = result.ExpenseMoney;
-            playerArmyMaintenance = result.ArmyMaintenanceMoney;
-        }
-
-        if (!gameData.Forces.TryGetValue(scenarioMeta.PlayerForceId, out var playerForce))
-            return;
-
-        EmitMonthlySettlement(
-            reportYear,
-            reportMonth,
-            playerMaintenance,
-            playerArmyMaintenance,
-            playerForce);
-
+        // World population growth must not depend on a surviving observer/player.
         if (gameDate.Month == 1)
-        {
             ApplyAnnualPopulationChange(gameData);
-            EmitAnnualSettlement(
-                gameDate.Year - 1,
-                playerMaintenance,
-                playerArmyMaintenance,
-                playerForce);
+
+        foreach (var playerForce in gameData.Forces.Values.OrderBy(f => f.Id))
+        {
+            if (!StrategyForcePerspective.ReceivesReports(scenarioMeta, playerForce.Id)) continue;
+            var settlement = settlements[playerForce.Id];
+            EmitMonthlySettlement(reportYear, reportMonth, settlement.ExpenseMoney,
+                settlement.ArmyMaintenanceMoney, playerForce);
+            if (gameDate.Month == 1)
+                EmitAnnualSettlement(gameDate.Year - 1, settlement.ExpenseMoney,
+                    settlement.ArmyMaintenanceMoney, playerForce);
         }
     }
 
@@ -185,7 +170,7 @@ public class StrategyEconomySystem(
         int playerArmyMaintenance,
         Domain.Entities.Force playerForce)
     {
-        var tributeSummary = tributeLedger.ConsumeMonthlySettlement(reportYear, reportMonth);
+        var tributeSummary = tributeLedger.ConsumeMonthlySettlement(reportYear, reportMonth, playerForce.Id);
         var settlement = BuildSettlementDetail(
             "Monthly",
             tributeSummary,
@@ -198,6 +183,7 @@ public class StrategyEconomySystem(
         dayOutcomeBuffer.AddEvent(new StrategyEventDto
         {
             Category = "EconomyMonthly",
+            RecipientForceId = playerForce.Id,
             Brief = $"📋 {reportYear}年{reportMonth}月收支结算",
             Message =
                 $"📋 月度收支结算（{reportYear}年{reportMonth}月）\n" +
@@ -216,7 +202,7 @@ public class StrategyEconomySystem(
         int playerArmyMaintenance,
         Domain.Entities.Force playerForce)
     {
-        var tributeSummary = tributeLedger.ConsumeAnnualSettlement(reportYear);
+        var tributeSummary = tributeLedger.ConsumeAnnualSettlement(reportYear, playerForce.Id);
         var settlement = BuildSettlementDetail(
             "Annual",
             tributeSummary,
@@ -229,6 +215,7 @@ public class StrategyEconomySystem(
         dayOutcomeBuffer.AddEvent(new StrategyEventDto
         {
             Category = "EconomyAnnual",
+            RecipientForceId = playerForce.Id,
             Brief = $"📋 {reportYear}年年度收支结算",
             Message =
                 $"📋 年度收支结算（{reportYear}年）\n" +

@@ -13,6 +13,12 @@ public sealed class StrategyPendingEventStore
     public StrategyEventDto? Take(int messengerId)
         => byMessengerId.Remove(messengerId, out var evt) ? evt : null;
 
+    public void PruneMissingCarriers(SengokuScroll.Domain.GameData data)
+    {
+        foreach (var id in byMessengerId.Keys.Where(id => !data.MessageCarriers.ContainsKey(id)).ToArray())
+            byMessengerId.Remove(id);
+    }
+
     public IReadOnlyDictionary<int, StrategyEventDto> Snapshot()
         => new Dictionary<int, StrategyEventDto>(byMessengerId);
 

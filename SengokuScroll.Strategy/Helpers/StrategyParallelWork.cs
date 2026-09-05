@@ -9,10 +9,21 @@ public static class StrategyParallelWork
     // Only one region fans out at a time. Other rooms (and nested regions) do
     // useful sequential work instead of blocking or multiplying worker budgets.
     private static readonly SemaphoreSlim ParallelRegion = new(1, 1);
+    private static readonly int ConfiguredDegree = ResolveConfiguredDegree();
+
+    // Read the environment at first scheduler use, not during unrelated module initialization.
+    static StrategyParallelWork() { }
 
     /// <summary>单个并行区域的上限；这是并发度限制，不代表操作系统保留 CPU 核心。</summary>
     public static int MaxDegreeOfParallelism
-        => Math.Max(1, Environment.ProcessorCount - 1);
+        => ConfiguredDegree;
+
+    private static int ResolveConfiguredDegree()
+    {
+        var defaultDegree = Math.Max(1, Environment.ProcessorCount - 1);
+        return int.TryParse(Environment.GetEnvironmentVariable("SENGOKU_MAX_PARALLELISM"), out var requested)
+            && requested > 0 ? Math.Clamp(requested, 1, defaultDegree) : defaultDegree;
+    }
 
     public static TResult[] MapOrdered<TSource, TResult>(
         IReadOnlyList<TSource> source,
@@ -26,8 +37,8 @@ public static class StrategyParallelWork
         if (source.Count == 0)
             return results;
 
-        if (source.Count < minimumParallelCount || MaxDegreeOfParallelism <= 1
-            || !ParallelRegion.Wait(0))
+        var degree = ResolveWorkDegree(source.Count, minimumParallelCount);
+        if (degree <= 1 || !ParallelRegion.Wait(0))
         {
             for (var index = 0; index < source.Count; index++)
                 results[index] = selector(source[index]);
@@ -39,7 +50,7 @@ public static class StrategyParallelWork
             Parallel.For(
                 0,
                 source.Count,
-                new ParallelOptions { MaxDegreeOfParallelism = MaxDegreeOfParallelism },
+                new ParallelOptions { MaxDegreeOfParallelism = degree },
                 index => results[index] = selector(source[index]));
         }
         finally
@@ -54,8 +65,8 @@ public static class StrategyParallelWork
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         ArgumentNullException.ThrowIfNull(action);
 
-        if (count < minimumParallelCount || MaxDegreeOfParallelism <= 1
-            || !ParallelRegion.Wait(0))
+        var degree = ResolveWorkDegree(count, minimumParallelCount);
+        if (degree <= 1 || !ParallelRegion.Wait(0))
         {
             for (var index = 0; index < count; index++)
                 action(index);
@@ -67,7 +78,7 @@ public static class StrategyParallelWork
             Parallel.For(
                 0,
                 count,
-                new ParallelOptions { MaxDegreeOfParallelism = MaxDegreeOfParallelism },
+                new ParallelOptions { MaxDegreeOfParallelism = degree },
                 action);
         }
         finally
@@ -75,4 +86,9 @@ public static class StrategyParallelWork
             ParallelRegion.Release();
         }
     }
+
+    // The threshold is a minimum batch size per worker, not permission to launch
+    // the entire machine's budget for one tiny batch. At least two batches are needed.
+    private static int ResolveWorkDegree(int count, int minimumParallelCount)
+        => Math.Min(MaxDegreeOfParallelism, Math.Max(1, count / Math.Max(1, minimumParallelCount)));
 }

@@ -57,7 +57,8 @@ import {
   type MapPoint,
   type StrategyPeaceTermsPayload,
 } from "@/api/strategy";
-import { heartbeatMultiplayerRoom, leaveMultiplayerRoom, readMultiplayerSession } from "@/api/multiplayerClient";
+import { heartbeatMultiplayerRoom, getMultiplayerEvents, acknowledgeMultiplayerEvents,
+  leaveMultiplayerRoom, readMultiplayerSession } from "@/api/multiplayerClient";
 import StrategyMapCanvas from "@/components/strategy/StrategyMapCanvas.vue";
 import StrategyMapCellEntityPicker from "@/components/strategy/StrategyMapCellEntityPicker.vue";
 import StrategyMapLoadingScene, {
@@ -3272,6 +3273,7 @@ function startMultiplayerPolling() {
   if (multiplayerPollTimer) clearInterval(multiplayerPollTimer);
   const generation = ++multiplayerPollGeneration;
   let lastWorldVersion = -1;
+  let lastPresentedSequence = 0;
   if (!multiplayerSession.value) return;
 
   multiplayerPollTimer = setInterval(async () => {
@@ -3281,6 +3283,19 @@ function startMultiplayerPolling() {
     multiplayerPollPending = true;
     try {
       const room = await heartbeatMultiplayerRoom(session);
+      if (generation !== multiplayerPollGeneration || multiplayerSession.value !== session) return;
+      const mailbox = await getMultiplayerEvents(session);
+      if (generation !== multiplayerPollGeneration || multiplayerSession.value !== session) return;
+      const unread = mailbox.entries.filter(entry => entry.sequence > lastPresentedSequence);
+      if (unread.length > 0) {
+        if (mailbox.historyTruncated && lastPresentedSequence < unread[0]!.sequence - 1)
+          info.value = "离线消息超过保留上限，部分旧消息已过期。";
+        appendEvents(unread.map(entry => entry.event));
+        lastPresentedSequence = unread[unread.length - 1]!.sequence;
+      }
+      // A failed acknowledgement retries the same cursor without displaying duplicates in this session.
+      if (mailbox.entries.length > 0)
+        await acknowledgeMultiplayerEvents(session, mailbox.entries[mailbox.entries.length - 1]!.sequence);
       if (generation !== multiplayerPollGeneration || multiplayerSession.value !== session) return;
       if (room.worldVersion === lastWorldVersion) return;
       const next = await getStrategyState();

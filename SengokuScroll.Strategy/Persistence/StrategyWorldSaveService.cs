@@ -24,6 +24,7 @@ public sealed class StrategySaveDocument
     public required string ScenarioId { get; init; }
 
     public required int PlayerForceId { get; init; }
+    public bool IsMultiplayer { get; init; }
 
     /// <summary>保存本局难度与开局规则；旧存档缺省时沿用剧本默认。</summary>
     public string? Difficulty { get; init; }
@@ -287,13 +288,27 @@ public static class StrategyWorldSaveService
         {
             ScenarioId = scenarioId,
             PlayerForceId = playerForceId,
+            IsMultiplayer = scenarioMeta?.HasHumanControlConfiguration ?? false,
             Difficulty = scenarioMeta?.Difficulty.ToString(),
             StartOptions = scenarioMeta is null
                 ? null
                 : GameStartOptionsMapper.ToDto(scenarioMeta.StartOptions),
             AllForcesAiControlled = scenarioMeta?.AllForcesAiControlled,
             SimulationSeed = data.SimulationSeed,
-            RuntimeState = JsonSerializer.SerializeToElement(data, RuntimeStateJsonOptions),
+            RuntimeState = JsonSerializer.SerializeToElement(new GameData
+            {
+                GameDate = data.GameDate, SimulationSeed = data.SimulationSeed,
+                NextBattlefieldId = data.NextBattlefieldId,
+                Forces = data.Forces.OrderBy(x => x.Key).ToDictionary(),
+                Strongholds = data.Strongholds.OrderBy(x => x.Key).ToDictionary(),
+                Units = data.Units.OrderBy(x => x.Key).ToDictionary(),
+                SubUnits = data.SubUnits.OrderBy(x => x.Key).ToDictionary(),
+                Characters = data.Characters.OrderBy(x => x.Key).ToDictionary(),
+                SupplyConvoys = data.SupplyConvoys.OrderBy(x => x.Key).ToDictionary(),
+                MessageCarriers = data.MessageCarriers.OrderBy(x => x.Key).ToDictionary(),
+                Wars = data.Wars.OrderBy(x => x.Key).ToDictionary(),
+                Battlefields = data.Battlefields.OrderBy(x => x.Key).ToDictionary()
+            }, RuntimeStateJsonOptions),
             Visibility = visibilityLedger.Capture(playerForceId, tileMap.Width, tileMap.Height),
             Date = new StrategySaveDate
             {
@@ -387,10 +402,11 @@ public static class StrategyWorldSaveService
     /// <summary>将存档覆盖到已加载剧本世界（先 LoadScenario 再 Apply）。</summary>
     public static void Apply(StrategySaveDocument save, GameWorld world)
     {
-        if (save.FormatVersion >= 2
-            && save.RuntimeState is { ValueKind: JsonValueKind.Object } runtimeState
-            && TryRestoreRuntimeState(runtimeState, world))
+        if (save.FormatVersion >= 2)
         {
+            if (save.RuntimeState is not { ValueKind: JsonValueKind.Object } runtimeState
+                || !TryRestoreRuntimeState(runtimeState, world))
+                throw new InvalidOperationException("完整运行时存档损坏，不能降级为旧格式恢复。");
             return;
         }
 

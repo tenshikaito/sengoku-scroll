@@ -10,14 +10,15 @@ public static class EconomyCalculator
 {
     /// <summary>按比例计算：amount × rateBp / 10000，税收向下取整。</summary>
     public static int ApplyBasisPointsTax(int amount, int rateBp)
-        => amount <= 0 || rateBp <= 0 ? 0 : amount * rateBp / EconomyConstants.BasisPointsPer100Percent;
+        => amount <= 0 || rateBp <= 0 ? 0 : (int)Math.Min(int.MaxValue,
+            (long)amount * rateBp / EconomyConstants.BasisPointsPer100Percent);
 
     /// <summary>按比例分配：amount × shareBp / 10000，四舍五入。</summary>
     public static int ApplyBasisPointsShare(int amount, int shareBp)
         => amount <= 0 || shareBp <= 0
             ? 0
-            : (amount * shareBp + EconomyConstants.BasisPointsPer100Percent / 2)
-              / EconomyConstants.BasisPointsPer100Percent;
+            : (int)Math.Min(int.MaxValue, ((long)amount * shareBp + EconomyConstants.BasisPointsPer100Percent / 2)
+              / EconomyConstants.BasisPointsPer100Percent);
 
     /// <summary>中央实际收税比例（万分比）。</summary>
     public static int CalculateCollectionEfficiencyBp(Stronghold stronghold)

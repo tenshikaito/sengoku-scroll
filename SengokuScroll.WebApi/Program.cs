@@ -16,13 +16,29 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
+var browserOrigins = (builder.Configuration.GetSection("Strategy:AllowedBrowserOrigins").Get<string[]>() ?? [])
+    .Concat(builder.Environment.IsDevelopment()
+        ? ["http://localhost:5173", "http://127.0.0.1:5173", "http://[::1]:5173"]
+        : Array.Empty<string>())
+    .Select(origin => BrowserOriginPolicy.NormalizeOrigin(origin)
+        ?? throw new InvalidOperationException("Strategy:AllowedBrowserOrigins requires explicit HTTP(S) origins."))
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
 builder.Services.AddCors(options =>
     options.AddPolicy("default", policy =>
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+        policy.SetIsOriginAllowed(origin =>
+            BrowserOriginPolicy.NormalizeOrigin(origin) is { } normalized && browserOrigins.Contains(normalized))
+            .AllowAnyHeader().AllowAnyMethod()));
 
 builder.Services.Configure<StrategyDayDebugOptions>(builder.Configuration.GetSection("Strategy:DayDebug"));
+builder.Services.Configure<StrategyAiTraceOptions>(builder.Configuration.GetSection("Strategy:AiTrace"));
 builder.Services.AddStrategySimulationHost();
+builder.Services.AddOptions<StrategyMultiplayerOptions>()
+    .Bind(builder.Configuration.GetSection("Strategy:Multiplayer"))
+    .Validate(options => options.ConnectionLeaseSeconds is >= 15 and <= 3600,
+        "Strategy:Multiplayer:ConnectionLeaseSeconds must be between 15 and 3600.")
+    .ValidateOnStart();
 builder.Services.AddSingleton<StrategyMultiplayerRoomManager>();
+builder.Services.AddHostedService<StrategyRoomMemoryMaintenance>();
 builder.Services.AddSingleton(sp =>
 {
     var env = sp.GetRequiredService<IHostEnvironment>();
@@ -31,6 +47,32 @@ builder.Services.AddSingleton(sp =>
 });
 
 var app = builder.Build();
+
+app.Use(async (context, next) =>
+{
+    try { await next(); }
+    catch (StrategyMultiplayerException ex) when (ex.Code == "RoomStorageFailed" && !context.Response.HasStarted)
+    {
+        context.Response.Clear();
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new SengokuScroll.WebApi.Models.ApiErrorResponse(ex.Code));
+    }
+});
+
+// CORS headers alone do not prevent simple cross-origin requests from executing.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+    if ((path.StartsWithSegments("/api") || path.StartsWithSegments("/strategy")
+            || path.StartsWithSegments("/hubs"))
+        && !BrowserOriginPolicy.Allows(context.Request, browserOrigins))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new SengokuScroll.WebApi.Models.ApiErrorResponse("UntrustedBrowserOrigin"));
+        return;
+    }
+    await next();
+});
 
 app.Use(async (context, next) =>
 {

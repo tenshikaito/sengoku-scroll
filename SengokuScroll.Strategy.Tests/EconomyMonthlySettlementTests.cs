@@ -13,6 +13,14 @@ namespace SengokuScroll.Strategy.Tests;
 public class EconomyMonthlySettlementTests
 {
     [Fact]
+    public void BasisPoints_LargeTreasuryDoesNotOverflowToNegativeTax()
+    {
+        Assert.Equal(500_000, EconomyCalculator.ApplyBasisPointsShare(1_000_000, 5000));
+        Assert.Equal(500_000, EconomyCalculator.ApplyBasisPointsTax(1_000_000, 5000));
+        Assert.Equal(int.MaxValue, EconomyCalculator.ApplyBasisPointsTax(int.MaxValue, 10000));
+        Assert.Equal(int.MaxValue, EconomyCalculator.ApplyBasisPointsShare(int.MaxValue, int.MaxValue));
+    }
+    [Fact]
     public void EconomyCalculator_StrongholdTax_ScalesWithPopulationAndRates()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Maps", "mini_kanto.json");
@@ -136,6 +144,23 @@ public class EconomyMonthlySettlementTests
 
         Assert.Equal(1200, mapped.Money);
         Assert.Equal(500, mapped.Food);
+    }
+
+    [Fact]
+    public void AnnualPopulationGrowth_DoesNotDependOnObserverForceExisting()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Maps", "mini_kanto.json");
+        var loaded = StrategyScenarioLoader.LoadFromFile(path);
+        loaded.Meta.PlayerForceId = int.MaxValue;
+        using var ctx = StrategyTestWorldFactory.CreateFromWorld(loaded.World, loaded.Meta);
+        ctx.World.GameData.GameDate = new Domain.Types.GameDate(1561, 1, 1);
+        var stronghold = ctx.World.GameData.Strongholds.Values.First();
+        stronghold.CivilianActor.PopularFeelings = 80;
+        var expected = Math.Max(100, stronghold.Population
+            + EconomyCalculator.CalculateAnnualPopulationGrowth(stronghold));
+        Assert.NotEqual(stronghold.Population, expected);
+        ctx.Services.GetRequiredService<SengokuScroll.Strategy.Systems.IStrategyEconomySystem>().Update();
+        Assert.Equal(expected, stronghold.Population);
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
 using SengokuScroll.Strategy.Models;
 using SengokuScroll.WebApi.Models;
 using SengokuScroll.WebApi.Multiplayer;
@@ -9,9 +10,13 @@ namespace SengokuScroll.WebApi.Tests;
 public sealed class StrategyMultiplayerApiTests : IClassFixture<StrategyWebApplicationFactory>
 {
     private readonly HttpClient client;
+    private readonly StrategyMultiplayerRoomManager roomManager;
 
     public StrategyMultiplayerApiTests(StrategyWebApplicationFactory factory)
-        => client = factory.CreateClient();
+    {
+        client = factory.CreateClient();
+        roomManager = factory.Services.GetRequiredService<StrategyMultiplayerRoomManager>();
+    }
 
     [Fact]
     public async Task CreateJoinAndState_KeepPlayerForceContextsIsolated()
@@ -135,6 +140,8 @@ public sealed class StrategyMultiplayerApiTests : IClassFixture<StrategyWebAppli
         var guestReady = await Ready(host.Room.RoomId, guest.Credentials.PlayerToken);
         Assert.True(guestReady.Advanced);
         Assert.Equal(1, guestReady.Advance.DaysAdvanced);
+        Assert.Null(guestReady.Advance.DayDebugLogPath);
+        Assert.Equal(0, guestReady.Advance.DayDebugEntryCount);
 
         var after = await GetState(host.Room.RoomId, host.Credentials.PlayerToken);
         Assert.Equal(before.Date.Year, after.Date.Year);
@@ -234,6 +241,93 @@ public sealed class StrategyMultiplayerApiTests : IClassFixture<StrategyWebAppli
             TestContext.Current.CancellationToken);
         Assert.Equal(host.Room.WorldVersion, room!.WorldVersion);
         Assert.All(room.Players, player => Assert.True(player.Connected));
+    }
+
+    [Fact]
+    public async Task PlayerTokenWithoutRoomId_DoesNotFallThroughToSinglePlayer()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/strategy/state");
+        request.Headers.Add(StrategyMultiplayerHeaders.PlayerToken, "orphaned-token");
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(TestContext.Current.CancellationToken);
+        Assert.Equal("MissingRoomId", error!.ErrorCode);
+    }
+
+    [Fact]
+    public async Task EditingOrdersAfterReady_RequiresPlayerToConfirmAgain()
+    {
+        var host = await CreateRoom();
+        var guestForce = host.Room.Forces.First(force => !force.Occupied);
+        using var joined = await client.PostAsJsonAsync(
+            $"/api/multiplayer/rooms/{host.Room.RoomId}/join",
+            new StrategyMultiplayerJoinRoomRequest { PlayerName = "guest", ForceId = guestForce.ForceId },
+            TestContext.Current.CancellationToken);
+        var guest = (await joined.Content.ReadFromJsonAsync<StrategyMultiplayerRoomResponse>(
+            TestContext.Current.CancellationToken))!;
+        var state = await GetState(host.Room.RoomId, host.Credentials.PlayerToken);
+        var target = state.Units.First(unit => unit.ForceId == host.Credentials.ForceId);
+        Assert.False((await Ready(host.Room.RoomId, host.Credentials.PlayerToken)).Advanced);
+
+        // Invalid commands must not cancel a previously confirmed turn.
+        using var rejected = await SendRoomJson(HttpMethod.Post, "/api/strategy/units/-1/directive",
+            host.Room.RoomId, host.Credentials.PlayerToken,
+            new SetUnitDirectiveRequest { Directive = "Retreat" }, Guid.NewGuid().ToString("N"));
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        var snapshot = await client.GetFromJsonAsync<StrategyMultiplayerRoomDto>(
+            $"/api/multiplayer/rooms/{host.Room.RoomId}", TestContext.Current.CancellationToken);
+        Assert.True(snapshot!.Players.Single(p => p.PlayerId == host.Credentials.PlayerId).Ready);
+
+        using var edited = await SendRoomJson(HttpMethod.Post, $"/api/strategy/units/{target.Id}/directive",
+            host.Room.RoomId, host.Credentials.PlayerToken,
+            new SetUnitDirectiveRequest { Directive = "Retreat" }, Guid.NewGuid().ToString("N"));
+        Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+        Assert.False((await Ready(host.Room.RoomId, guest.Credentials.PlayerToken)).Advanced);
+        Assert.True((await Ready(host.Room.RoomId, host.Credentials.PlayerToken)).Advanced);
+    }
+
+    [Fact]
+    public async Task PrivateEvents_RequireCredentialsAndNeverReturnOtherForces()
+    {
+        var host = await CreateRoom();
+        var path = $"/api/multiplayer/rooms/{host.Room.RoomId}/events";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(path, TestContext.Current.CancellationToken)).StatusCode);
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Add(StrategyMultiplayerHeaders.PlayerToken, host.Credentials.PlayerToken);
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+        response.EnsureSuccessStatusCode();
+        var batch = (await response.Content.ReadFromJsonAsync<SengokuScroll.Strategy.Diagnostics.StrategyPrivateEventLedger.Batch>(
+            TestContext.Current.CancellationToken))!;
+        Assert.All(batch.Entries, e => Assert.Equal(host.Credentials.ForceId, e.Event.RecipientForceId));
+        var invalid = await SendRoomJson(HttpMethod.Post, path + "/ack", host.Room.RoomId,
+            host.Credentials.PlayerToken, new { Sequence = batch.LastSequence + 1 }, "badack");
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        var ready = await Ready(host.Room.RoomId, host.Credentials.PlayerToken);
+        Assert.Empty(ready.Advance.Events);
+        Assert.Empty(ready.Advance.ResolvedBattles);
+    }
+
+    [Fact]
+    public async Task OppositeReadyOrder_ProducesIdenticalWorldAndMailboxes()
+    {
+        async Task<string> Run(bool reverse)
+        {
+            var host = await CreateRoom();
+            var guestForce = host.Room.Forces.First(f => !f.Occupied).ForceId;
+            var response = await client.PostAsJsonAsync($"/api/multiplayer/rooms/{host.Room.RoomId}/join",
+                new StrategyMultiplayerJoinRoomRequest { PlayerName = "guest", ForceId = guestForce },
+                TestContext.Current.CancellationToken);
+            response.EnsureSuccessStatusCode();
+            var guest = (await response.Content.ReadFromJsonAsync<StrategyMultiplayerRoomResponse>(TestContext.Current.CancellationToken))!;
+            for (var i = 0; i < 3; i++)
+            {
+                Assert.False((await Ready(host.Room.RoomId, reverse ? guest.Credentials.PlayerToken : host.Credentials.PlayerToken)).Advanced);
+                Assert.True((await Ready(host.Room.RoomId, reverse ? host.Credentials.PlayerToken : guest.Credentials.PlayerToken)).Advanced);
+            }
+            Assert.True(roomManager.TryGetRoom(host.Room.RoomId, out var room));
+            return SengokuScroll.Strategy.Hosting.StrategySimulationHost.SerializeSave(room.Host.CaptureSave().Value);
+        }
+        Assert.Equal(await Run(false), await Run(true));
     }
 
     private async Task<StrategyMultiplayerRoomResponse> CreateRoom()

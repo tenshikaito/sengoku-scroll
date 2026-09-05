@@ -160,10 +160,10 @@ public sealed class StrongholdCaptureHelper(
                 $" [{defenseSnapshot}]"
         };
 
-        if (previousForceId == scenarioMeta.PlayerForceId || captor.ForceId == scenarioMeta.PlayerForceId)
+        foreach (var recipient in new[] { previousForceId, captor.ForceId }.Distinct().Order())
         {
             reportDelivery.DeliverPlayerStrategicReport(
-                scenarioMeta.PlayerForceId,
+                recipient,
                 stronghold.Location,
                 gameData,
                 captureEvent);

@@ -257,7 +257,7 @@ public static class StrategyUnitAIRules
             UnitDirective.Move =>
                 StrategyAiDecision.Fail("Hold", $"方针 {unit.Directive}：待机不规划路径", thought),
             UnitDirective.Support => ExecuteSupportRelief(
-                unit, gameData, pathfinding, worldContext, meta, thought),
+                unit, gameData, pathfinding, worldContext, meta, thought, hostileUnits),
             UnitDirective.Occupy or UnitDirective.Raid => AggressiveAction(
                 unit, gameData, hostileUnits, hostileStrongholds, pathfinding, worldContext, rules, mapMaster, meta, thought),
             _ => StrategyAiDecision.Fail("UnknownDirective", $"未知方针 {unit.Directive}", thought)
@@ -321,12 +321,11 @@ public static class StrategyUnitAIRules
         Unit unit,
         GameData gameData,
         StrategyVisibilityLedger visibility)
-        => [.. ResolveHostileStrongholds(unit, gameData)
-            .Where(stronghold => visibility.IsKnownStronghold(unit.ForceId, stronghold.Id)
-                || visibility.IsVisible(
-                    unit.ForceId,
-                    stronghold.Location.X,
-                    stronghold.Location.Y))];
+        => [.. visibility.ObserveStrongholds(unit.ForceId, gameData.GameDate.TotalDays)
+            .Where(s => s.ForceId != unit.ForceId
+                && TryResolveDiplomaticForce(unit.ForceId, gameData, out var mine)
+                && TryResolveDiplomaticForce(s.ForceId, gameData, out var owner)
+                && DiplomacyRules.IsEnemy(mine, owner).IsSuccess)];
 
     /// <summary>内藩/外藩单位按宗主外交关系判定敌友。</summary>
     private static bool TryResolveDiplomaticForce(int forceId, GameData gameData, out Force force)
@@ -637,7 +636,7 @@ public static class StrategyUnitAIRules
                 continue;
             }
 
-            var garrison = CountGarrisonAt(gameData, stronghold.Location.X, stronghold.Location.Y, stronghold.ForceId);
+            var garrison = stronghold.ForceActor.Soldier;
             var score = 700 - dist * 30 + (unit.Soldier - garrison) / 15 - stronghold.Defense / 4;
             // 业务：空城据点额外加分，鼓励速占
             if (garrison == 0)
@@ -677,7 +676,8 @@ public static class StrategyUnitAIRules
         IPathfindingService pathfinding,
         IGameWorldContext? worldContext,
         StrategyScenarioMeta? meta,
-        StrategyAiThought thought)
+        StrategyAiThought thought,
+        IReadOnlyList<Unit> observedEnemies)
     {
         // 业务：编制同调——挂目标单位且可叠时跟随其位置/路径
         if (unit.DirectiveTargetId > 0
@@ -715,7 +715,7 @@ public static class StrategyUnitAIRules
                 $"跟随 {followTarget.Name}→({followTarget.Location.X},{followTarget.Location.Y})");
         }
 
-        var threatened = ResolveThreatenedFriendlyStrongholds(unit, gameData);
+        var threatened = ResolveThreatenedFriendlyStrongholds(unit, gameData, observedEnemies);
         thought.Add("受威胁友城数={0}", threatened.Count);
 
         if (threatened.Count == 0)
@@ -794,6 +794,8 @@ public static class StrategyUnitAIRules
                      ?? hostileStrongholds.FirstOrDefault(s => unit.Location.IsSameTile(s.Location));
         if (onTile is not null)
         {
+            // Contact permits authoritative validation, and Apply must mutate the real castle.
+            onTile = gameData.Strongholds[onTile.Id];
             var assaultAp = ResolveAutoSiegeApCost(unit, onTile, siegeApCost);
             thought.Add("已踩敌城 {0}，尝试强攻（令AP={1}）", onTile.Name, assaultAp);
             if (SiegeOrderRules.Validate(unit, onTile, UnitSiegeMode.Assault, gameData, assaultAp).IsSuccess)
@@ -814,11 +816,12 @@ public static class StrategyUnitAIRules
         var encircleTarget = ResolveDirectiveAdjacentStronghold(unit, gameData, hostileStrongholds)
                              ?? hostileStrongholds
                                  .Where(s => unit.Location.IsAdjacent(s.Location) && !unit.Location.IsSameTile(s.Location))
-                                 .OrderByDescending(s => StrongholdGarrisonRules.CountTotalGarrisonAt(s, gameData))
+                                 .OrderByDescending(s => s.ForceActor.Soldier)
                                  .FirstOrDefault();
 
         if (encircleTarget is not null)
         {
+            encircleTarget = gameData.Strongholds[encircleTarget.Id];
             // 业务：Occupy 且方针锁定据点时，优先踏上城格再强攻，邻格不提前包围
             if (unit.Directive == UnitDirective.Occupy
                 && ResolveDirectiveHostileStronghold(unit, gameData, hostileStrongholds) is { } directive
@@ -856,9 +859,10 @@ public static class StrategyUnitAIRules
         GameData gameData,
         StrategyScenarioMeta meta,
         IPathfindingService pathfinding,
-        IGameWorldContext worldContext)
+        IGameWorldContext worldContext,
+        StrategyVisibilityLedger? visibility = null)
     {
-        if (forceId == meta.PlayerForceId && !meta.AllForcesAiControlled)
+        if (!StrategyAiControlRules.IsForceAiControlled(meta, forceId))
             return false;
 
         var residenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(forceId, gameData, meta);
@@ -868,9 +872,10 @@ public static class StrategyUnitAIRules
 
         var threatened = gameData.Strongholds.Values
             .Where(s => s.ForceId == forceId && s.Id != residenceId)
-            .Where(s => GarrisonBehaviorRules.IsStrongholdUnderAttack(s, gameData))
-            .OrderByDescending(s => GarrisonBehaviorRules.FindFieldBattleProximityThreats(s, gameData).Count)
-            .ThenByDescending(s => GarrisonBehaviorRules.IsStrongholdBlockaded(s, gameData))
+            .Select(s => new { Castle = s, Threats = GarrisonBehaviorRules.FindFieldBattleProximityThreats(s, gameData)
+                .Count(u => visibility is null || visibility.IsVisible(forceId, u.Location.X, u.Location.Y)) })
+            .Where(s => s.Threats > 0)
+            .OrderByDescending(s => s.Threats).ThenBy(s => s.Castle.Id).Select(s => s.Castle)
             .ToList();
 
         if (threatened.Count == 0)
@@ -922,7 +927,20 @@ public static class StrategyUnitAIRules
     }
 
     /// <summary>己方受威胁据点，按威胁程度排序。</summary>
-    public static IReadOnlyList<Stronghold> ResolveThreatenedFriendlyStrongholds(Unit unit, GameData gameData)
+    public static IReadOnlyList<Stronghold> ResolveThreatenedFriendlyStrongholds(Unit unit, GameData gameData,
+        IReadOnlyList<Unit>? observedEnemies = null)
+    {
+        if (observedEnemies is not null)
+            return gameData.Strongholds.Values.Where(s => s.ForceId == unit.ForceId)
+                .Select(s => new { Castle = s, Threats = observedEnemies.Count(u =>
+                    Manhattan((Point2)u.Location, (Point2)s.Location) <= GarrisonBehaviorRules.ThreatManhattanDistance) })
+                .Where(s => s.Threats > 0).OrderByDescending(s => s.Threats)
+                .ThenBy(s => Manhattan((Point2)unit.Location, (Point2)s.Castle.Location)).ThenBy(s => s.Castle.Id)
+                .Select(s => s.Castle).ToArray();
+        return ResolveLegacyThreatenedStrongholds(unit, gameData);
+    }
+
+    private static IReadOnlyList<Stronghold> ResolveLegacyThreatenedStrongholds(Unit unit, GameData gameData)
         => [.. gameData.Strongholds.Values
             .Where(s => s.ForceId == unit.ForceId)
             .Where(s => GarrisonBehaviorRules.IsStrongholdUnderAttack(s, gameData))
@@ -936,6 +954,8 @@ public static class StrategyUnitAIRules
         GameData gameData,
         IReadOnlyList<Stronghold>? hostileStrongholds = null)
     {
+        if (hostileStrongholds is not null)
+            return hostileStrongholds.FirstOrDefault(s => s.Id == unit.DirectiveTargetId);
         if (unit.DirectiveTargetId <= 0
             || !gameData.Strongholds.TryGetValue(unit.DirectiveTargetId, out var target))
             return null;

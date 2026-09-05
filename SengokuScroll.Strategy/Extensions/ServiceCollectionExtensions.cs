@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Options;
 using SengokuScroll.Application.Constants;
 using SengokuScroll.Domain;
 using SengokuScroll.Domain.Systems;
@@ -20,10 +19,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddStrategySimulationHost(this IServiceCollection services)
     {
         services.AddSengokuLocalization();
-        services.TryAddSingleton<IOptions<StrategyDayDebugOptions>>(
-            _ => Options.Create(new StrategyDayDebugOptions()));
-        services.TryAddSingleton<IOptions<StrategyAiTraceOptions>>(
-            _ => Options.Create(new StrategyAiTraceOptions()));
+        services.AddOptions<StrategyDayDebugOptions>();
+        services.AddOptions<StrategyAiTraceOptions>();
         services.TryAddSingleton<IStrategyDayDebugLog, StrategyDayDebugLog>();
         services.AddSingleton<StrategySimulationHost>();
         return services;
@@ -53,6 +50,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<BattleAftermathHelper>();
 
         services.AddSingleton<StrategyTributeLedger>();
+        services.AddSingleton<StrategyPrivateEventLedger>();
         services.AddSingleton<StrategyIntelligenceLedger>();
         services.AddSingleton<MerchantTaxLedger>();
         services.AddSingleton<TariffTaxLedger>();

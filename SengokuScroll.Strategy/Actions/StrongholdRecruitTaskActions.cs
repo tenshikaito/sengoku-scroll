@@ -558,7 +558,8 @@ public static class StrongholdRecruitTaskActions
         StrategyScenarioMeta? meta,
         StrategyDayOutcomeBuffer? dayOutcomeBuffer)
     {
-        if (meta is null || dayOutcomeBuffer is null || character.ForceId != meta.PlayerForceId)
+        if (meta is null || dayOutcomeBuffer is null
+            || !SengokuScroll.Strategy.Helpers.StrategyForcePerspective.ReceivesReports(meta, character.ForceId))
             return;
 
         var kindLabel = task.Kind == CharacterRecruitTaskKind.Mercenary ? "募兵" : "征兵";
@@ -591,6 +592,7 @@ public static class StrongholdRecruitTaskActions
         dayOutcomeBuffer.AddEvent(new StrategyEventDto
         {
             Category = "RecruitTaskCompleted",
+            RecipientForceId = character.ForceId,
             Title = formalTitle,
             Message = string.Join('\n', detailLines),
             Brief = informalBrief,

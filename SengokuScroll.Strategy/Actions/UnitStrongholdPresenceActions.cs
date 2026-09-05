@@ -112,10 +112,10 @@ public static class UnitStrongholdPresenceActions
 
         dayOutcomeBuffer?.AddEvent(reportEvent);
 
-        if (reportDelivery is not null && unit.ForceId == meta.PlayerForceId)
+        if (reportDelivery is not null && StrategyForcePerspective.ReceivesReports(meta, unit.ForceId))
         {
             reportDelivery.DeliverPlayerStrategicReport(
-                meta.PlayerForceId,
+                unit.ForceId,
                 origin?.Location ?? unit.Location,
                 gameData,
                 reportEvent);

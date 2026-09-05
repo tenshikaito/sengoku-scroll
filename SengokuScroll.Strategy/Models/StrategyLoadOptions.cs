@@ -5,6 +5,7 @@ namespace SengokuScroll.Strategy.Models;
 /// <summary>加载剧本时的开局覆盖（UI 确认后传入）。</summary>
 public sealed record StrategyLoadOptions
 {
+    public bool IsMultiplayer { get; init; }
     /// <summary>覆盖剧本 JSON 难度；省略则沿用剧本默认。</summary>
     public StrategyDifficulty? Difficulty { get; init; }
 

@@ -23,13 +23,13 @@ public sealed class StrategyUnitMoveTraceObserver(
             $"AP={unit.Ap} cost={cost} strongholdExtra={strongholdExtra} ok={result.IsSuccess} err={result.Error?.Code ?? "-"}";
 
         trace.Log("MoveEval", "评估移动", unit.Id, unit.Location, target, detail);
-        logger.LogInformation(
+        logger.LogDebug(
             "[StrategyMove] Unit {UnitId} eval ({From})->({Target}) {Detail}",
             unit.Id, unit.Location, target, detail);
 
         if (!result.IsSuccess)
         {
-            logger.LogWarning(
+            logger.LogDebug(
                 "[StrategyMove] Unit {UnitId} BLOCKED at ({From})->({Target}) reason={Reason}",
                 unit.Id, unit.Location, target, result.Error?.Code);
         }
@@ -48,7 +48,7 @@ public sealed class StrategyUnitMoveTraceObserver(
             to.X,
             to.Y,
             detail);
-        logger.LogInformation(
+        logger.LogDebug(
             "[StrategyMove] Unit {UnitId} moved ({From})->({To}) {Detail}",
             unit.Id, from, to, detail);
     }
@@ -63,7 +63,7 @@ public sealed class StrategyUnitMoveTraceObserver(
             unit.Location.X,
             unit.Location.Y,
             reason);
-        logger.LogInformation("[StrategyMove] Unit {UnitId} skip: {Reason} status={Status} route={RouteCount}",
+        logger.LogDebug("[StrategyMove] Unit {UnitId} skip: {Reason} status={Status} route={RouteCount}",
             unit.Id, reason, unit.Status, unit.ActionTarget.RoutePoints.Count);
     }
 }

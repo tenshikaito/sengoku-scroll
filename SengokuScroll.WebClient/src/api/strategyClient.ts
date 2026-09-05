@@ -24,6 +24,7 @@ import {
 import { getAcceptLanguageHeader } from "@/i18n/localePreference";
 import { readMultiplayerSession, setMultiplayerReady } from "./multiplayerClient";
 import { createCommandId } from "@/utils/commandId";
+import { withRequestTimeout } from "@/utils/requestTimeout";
 import { canUseInitialMockFallback, LiveRequestError } from "./apiFallbackPolicy";
 import {
   mockAdvanceDay,
@@ -69,62 +70,65 @@ async function fetchLive<T>(
   const requestInit: RequestInit = { method, headers };
   if (body !== undefined) requestInit.body = JSON.stringify(body);
 
-  let response: Response;
-  try {
-    response = await fetch(path, requestInit);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "NetworkError";
-    recordDiagnostic({
-      method,
-      path,
-      fullUrl,
-      pageOrigin: window.location.origin,
-      source: "live",
-      ok: false,
-      error: message,
-    });
-    throw new LiveRequestError(`网络错误 [${method} ${fullUrl}]：${message}`, null);
-  }
-
-  if (!response.ok) {
-    let detail = response.statusText;
+  return withRequestTimeout(async (signal) => {
+    requestInit.signal = signal;
+    let response: Response;
     try {
-      const errBody = await response.json();
-      if (errBody?.message) detail = String(errBody.message);
-      else if (errBody?.errorCode) detail = String(errBody.errorCode);
-      else if (errBody?.code) detail = String(errBody.code);
-    } catch {
-      if (response.status === 500 || response.status === 502) {
-        detail =
-          "策略 API（5100）可能未启动。请运行：dotnet run --project SengokuScroll.WebApi --launch-profile http";
-      }
+      response = await fetch(path, requestInit);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "NetworkError";
+      recordDiagnostic({
+        method,
+        path,
+        fullUrl,
+        pageOrigin: window.location.origin,
+        source: "live",
+        ok: false,
+        error: message,
+      });
+      throw new LiveRequestError(`网络错误 [${method} ${fullUrl}]：${message}`, null);
     }
 
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        const errBody = await response.json();
+        if (errBody?.message) detail = String(errBody.message);
+        else if (errBody?.errorCode) detail = String(errBody.errorCode);
+        else if (errBody?.code) detail = String(errBody.code);
+      } catch {
+        if (response.status === 500 || response.status === 502) {
+          detail =
+            "策略 API（5100）可能未启动。请运行：dotnet run --project SengokuScroll.WebApi --launch-profile http";
+        }
+      }
+
+      recordDiagnostic({
+        method,
+        path,
+        fullUrl,
+        pageOrigin: window.location.origin,
+        source: "live",
+        ok: false,
+        status: response.status,
+        error: detail,
+      });
+      throw new LiveRequestError(`HTTP ${response.status} [${method} ${fullUrl}]：${detail}`, response.status);
+    }
+
+    const data = (await response.json()) as T;
+    hasLiveSession = true;
     recordDiagnostic({
       method,
       path,
       fullUrl,
       pageOrigin: window.location.origin,
       source: "live",
-      ok: false,
+      ok: true,
       status: response.status,
-      error: detail,
     });
-    throw new LiveRequestError(`HTTP ${response.status} [${method} ${fullUrl}]：${detail}`, response.status);
-  }
-
-  const data = (await response.json()) as T;
-  hasLiveSession = true;
-  recordDiagnostic({
-    method,
-    path,
-    fullUrl,
-    pageOrigin: window.location.origin,
-    source: "live",
-    ok: true,
-    status: response.status,
-  });
-  return data;
+    return data;
+  }, method === "GET" || method === "HEAD" ? 15_000 : 120_000);
 }
 
 function isWorldState(value: unknown): value is StrategyWorldState {

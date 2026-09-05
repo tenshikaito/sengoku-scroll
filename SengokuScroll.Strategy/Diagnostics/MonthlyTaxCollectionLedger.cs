@@ -40,7 +40,7 @@ public sealed class MonthlyTaxCollectionLedger
     }
 
     public IReadOnlyList<Obligation> Snapshot()
-        => [.. moneyTributeObligationByStronghold.Select(x => new Obligation(x.Key, x.Value))];
+        => [.. moneyTributeObligationByStronghold.OrderBy(x => x.Key).Select(x => new Obligation(x.Key, x.Value))];
 
     public void Restore(IEnumerable<Obligation> restored)
     {

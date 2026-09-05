@@ -12,7 +12,8 @@ public sealed class StrategyTributeLedger
         int OriginStrongholdId,
         string OriginName,
         int Food,
-        int Money);
+        int Money,
+        int RecipientForceId = 0);
 
     public sealed record YearlyArrivalRecord(int Year, TributeArrivalRecord Record);
 
@@ -33,32 +34,32 @@ public sealed class StrategyTributeLedger
         int originStrongholdId,
         string originName,
         int food,
-        int money)
+        int money, int recipientForceId = 0)
     {
         if (food <= 0 && money <= 0)
             return;
 
-        var record = new TributeArrivalRecord(originStrongholdId, originName, food, money);
+        var record = new TributeArrivalRecord(originStrongholdId, originName, food, money, recipientForceId);
         monthlyArrivals.Add(record);
         yearlyArrivals.Add(new YearlyArrivalRecord(calendarYear, record));
     }
 
-    public TributeSettlementSummary ConsumeMonthlySettlement(int reportingYear, int reportingMonth)
+    public TributeSettlementSummary ConsumeMonthlySettlement(int reportingYear, int reportingMonth, int recipientForceId = 0)
     {
-        var lines = monthlyArrivals.ToList();
-        monthlyArrivals.Clear();
+        var lines = monthlyArrivals.Where(a => a.RecipientForceId == recipientForceId).ToList();
+        monthlyArrivals.RemoveAll(a => a.RecipientForceId == recipientForceId);
 
         return BuildSummary(reportingYear, reportingMonth, lines);
     }
 
-    public TributeSettlementSummary ConsumeAnnualSettlement(int reportingYear)
+    public TributeSettlementSummary ConsumeAnnualSettlement(int reportingYear, int recipientForceId = 0)
     {
         var lines = yearlyArrivals
-            .Where(a => a.Year == reportingYear)
+            .Where(a => a.Year == reportingYear && a.Record.RecipientForceId == recipientForceId)
             .Select(a => a.Record)
             .ToList();
 
-        yearlyArrivals.RemoveAll(a => a.Year == reportingYear);
+        yearlyArrivals.RemoveAll(a => a.Year == reportingYear && a.Record.RecipientForceId == recipientForceId);
 
         return BuildSummary(reportingYear, 0, lines);
     }
@@ -66,12 +67,14 @@ public sealed class StrategyTributeLedger
     public State Snapshot()
         => new(monthlyArrivals.ToList(), yearlyArrivals.ToList());
 
-    public void Restore(State restored)
+    public void Restore(State restored, int legacyRecipientForceId = 0)
     {
         monthlyArrivals.Clear();
-        monthlyArrivals.AddRange(restored.MonthlyArrivals);
+        monthlyArrivals.AddRange(restored.MonthlyArrivals.Select(r => r.RecipientForceId == 0
+            ? r with { RecipientForceId = legacyRecipientForceId } : r));
         yearlyArrivals.Clear();
-        yearlyArrivals.AddRange(restored.YearlyArrivals);
+        yearlyArrivals.AddRange(restored.YearlyArrivals.Select(r => r.Record.RecipientForceId == 0
+            ? r with { Record = r.Record with { RecipientForceId = legacyRecipientForceId } } : r));
     }
 
     private static TributeSettlementSummary BuildSummary(

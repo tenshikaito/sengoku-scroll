@@ -18,19 +18,26 @@ public static class StrategyStrongholdLordHelper
         StrategyForceLordRegistry? lordRegistry = null)
     {
         if (lordRegistry?.TryGetLordCharacterId(forceId, out var runtimeLordId) == true
-            && gameData.Characters.ContainsKey(runtimeLordId))
+            && IsValidLord(runtimeLordId))
         {
             return runtimeLordId;
         }
 
-        // 业务：运行时未登记则回退剧本元数据中的当主角色
+        if (gameData.Forces.TryGetValue(forceId, out var force)
+            && force.LordCharacterId is int currentLordId && IsValidLord(currentLordId))
+            return currentLordId;
+
+        // 仅无有效运行时当主时兼容旧剧本。
         if (meta.ForceLordCharacterIds.TryGetValue(forceId, out var lordId)
-            && gameData.Characters.ContainsKey(lordId))
+            && IsValidLord(lordId))
         {
             return lordId;
         }
 
         return 0;
+
+        bool IsValidLord(int id) => gameData.Characters.TryGetValue(id, out var character)
+            && !character.IsDead && character.ForceId == forceId;
     }
 
     /// <summary>解析势力当主显示名。</summary>

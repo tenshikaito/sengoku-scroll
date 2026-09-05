@@ -59,11 +59,12 @@ public static class TariffEconomyActions
         if (paid > 0
             && dayOutcomeBuffer is not null
             && meta is not null
-            && transport.ForceId == meta.PlayerForceId)
+            && SengokuScroll.Strategy.Helpers.StrategyForcePerspective.ReceivesReports(meta, transport.ForceId))
         {
             dayOutcomeBuffer.AddEvent(new StrategyEventDto
             {
                 Category = "TariffTransitCharged",
+                RecipientForceId = transport.ForceId,
                 Brief = $"🛃 {stronghold.Name} 过境关税 {paid:N0} 文",
                 Message =
                     $"贸易队「{transport.Name}」途经 {stronghold.Name}，缴纳过境关税 {paid:N0} 文（载货估值 {cargoValue:N0} 文）。"

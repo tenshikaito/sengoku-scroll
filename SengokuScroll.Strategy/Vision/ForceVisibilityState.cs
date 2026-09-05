@@ -4,6 +4,8 @@ namespace SengokuScroll.Strategy.Vision;
 public sealed class ForceVisibilityState
 {
     private bool[] explored = [];
+    public int Width { get; private set; }
+    public int Height { get; private set; }
 
     public HashSet<(int X, int Y)> VisibleCells { get; } = [];
 
@@ -11,6 +13,8 @@ public sealed class ForceVisibilityState
 
     public void EnsureCapacity(int width, int height)
     {
+        Width = width;
+        Height = height;
         var size = Math.Max(1, width * height);
         if (explored.Length == size)
             return;
@@ -63,6 +67,8 @@ public sealed class ForceVisibilityState
 
     public void UnpackExploredBits(IReadOnlyList<uint> bits, int width, int height)
     {
+        if (bits.Count != (Math.Max(1, checked(width * height)) + 31) / 32)
+            throw new ArgumentException("Invalid visibility bitmap length");
         EnsureCapacity(width, height);
         Array.Clear(explored);
 

@@ -14,6 +14,91 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
     private readonly ConcurrentDictionary<string, StrategyMultiplayerRoomSession> rooms =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly object creationSync = new();
+    private readonly TimeSpan connectionLease;
+    private readonly Func<StrategySimulationHost> createHost;
+    private readonly StrategyRoomStore store;
+    private readonly ILogger logger;
+    private readonly TimeSpan? idleTimeout;
+
+    public StrategyMultiplayerRoomManager(
+        Microsoft.Extensions.Options.IOptions<StrategyMultiplayerOptions> options,
+        ILoggerFactory loggerFactory,
+        Microsoft.Extensions.Options.IOptions<SengokuScroll.Strategy.Diagnostics.StrategyDayDebugOptions> dayDebugOptions,
+        Microsoft.Extensions.Options.IOptions<SengokuScroll.Strategy.Diagnostics.StrategyAiTraceOptions> aiTraceOptions,
+        IHostEnvironment environment)
+    {
+        connectionLease = TimeSpan.FromSeconds(options.Value.ConnectionLeaseSeconds);
+        idleTimeout = options.Value.PersistenceEnabled && options.Value.IdleHibernateSeconds > 0
+            ? TimeSpan.FromSeconds(options.Value.IdleHibernateSeconds) : null;
+        createHost = () => new StrategySimulationHost(loggerFactory, dayDebugOptions, aiTraceOptions);
+        logger = loggerFactory.CreateLogger<StrategyMultiplayerRoomManager>();
+        store = new(options.Value, environment.ContentRootPath);
+        foreach (var (path, snapshot) in store.ReadAll())
+        {
+            StrategySimulationHost? host = null;
+            try
+            {
+                if (snapshot is null || snapshot.FormatVersion != 1 || !snapshot.World.IsMultiplayer
+                    || snapshot.Players.Count is < 1 or > 8 || snapshot.MaxPlayers is < 1 or > 8
+                    || snapshot.Players.Count > snapshot.MaxPlayers || snapshot.TurnNumber < 0 || snapshot.WorldVersion < 1
+                    || snapshot.ProcessedCommands.Count > 2048 || rooms.Count >= MaximumRoomCount)
+                    throw new InvalidOperationException("Invalid room snapshot");
+                host = createHost();
+                if (!host.RestoreSave(snapshot.World).IsSuccess) throw new InvalidOperationException("World restore failed");
+                var room = new StrategyMultiplayerRoomSession(snapshot.RoomId, snapshot.RoomName, snapshot.ScenarioId,
+                    snapshot.MaxPlayers, host, snapshot.Forces, connectionLease: connectionLease);
+                room.RestoreSession(snapshot);
+                ConfigureHibernation(room);
+                room.RefreshHumanControlledForces();
+                if (!rooms.TryAdd(room.RoomId, room)) throw new InvalidOperationException("Duplicate room");
+                host = null;
+            }
+            catch (Exception ex)
+            {
+                host?.Dispose();
+                // Preserve invalid files for manual recovery, never replace them during startup.
+                logger.LogWarning("Skipped room snapshot {Path}: {ErrorType}", path, ex.GetType().Name);
+            }
+        }
+    }
+
+    // Caller holds Gate; serialize only after its player perspective lease has ended.
+    private void ConfigureHibernation(StrategyMultiplayerRoomSession room)
+        => room.SetWakeFactory(() =>
+        {
+            var host = createHost();
+            try
+            {
+                var snapshot = store.Read(room.RoomId);
+                if (snapshot.RoomId != room.RoomId || !host.RestoreSave(snapshot.World).IsSuccess)
+                    throw new InvalidOperationException("Room wake failed");
+                return host;
+            }
+            catch { host.Dispose(); throw; }
+        });
+
+    public void HibernateIdleRooms()
+    {
+        if (idleTimeout is not TimeSpan timeout) return;
+        foreach (var room in rooms.Values)
+        {
+            if (!room.Gate.Wait(0)) continue;
+            try { room.TryHibernate(timeout, () => Persist(room)); }
+            catch (Exception ex) { logger.LogWarning("Room hibernation failed: {ErrorType}", ex.GetType().Name); }
+            finally { room.Gate.Release(); }
+        }
+    }
+
+    public void Persist(StrategyMultiplayerRoomSession room)
+    {
+        try { store.Write(room.CaptureSnapshot()); }
+        catch (Exception ex)
+        {
+            room.StorageFailed = true;
+            logger.LogError(ex, "Room storage failed for {RoomId}; room suspended until restart", room.RoomId);
+            throw new StrategyMultiplayerException("RoomStorageFailed");
+        }
+    }
 
     public IReadOnlyList<StrategyMultiplayerRoomDto> ListRooms()
         => rooms.Values
@@ -27,6 +112,12 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
 
     public bool TryRemoveRoom(string roomId)
     {
+        try { store.Delete(NormalizeRoomId(roomId)); }
+        catch (Exception)
+        {
+            if (TryGetRoom(roomId, out var failedRoom)) failedRoom.StorageFailed = true;
+            throw new StrategyMultiplayerException("RoomStorageFailed");
+        }
         if (!rooms.TryRemove(NormalizeRoomId(roomId), out var room))
             return false;
         // Called with the room gate held: waiters must be allowed to acquire it
@@ -37,7 +128,7 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
 
     public IReadOnlyList<StrategyMultiplayerForceDto> ListPlayableForces(string scenarioId)
     {
-        using var host = new StrategySimulationHost();
+        using var host = createHost();
         var loaded = host.LoadScenario(
             string.IsNullOrWhiteSpace(scenarioId) ? "mini_kanto" : scenarioId.Trim(),
             new StrategyLoadOptions { Difficulty = StrategyDifficulty.Normal });
@@ -86,9 +177,10 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
                 ? GameStartOptionsMapper.FromDto(request.CustomStartOptions)
                 : null,
             AllForcesAiControlled = false,
+            IsMultiplayer = true,
         };
 
-        var host = new StrategySimulationHost();
+        var host = createHost();
         var loaded = host.LoadScenario(scenarioId, loadOptions);
         if (!loaded.IsSuccess)
         {
@@ -112,7 +204,7 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
 
         var roomId = Enumerable.Range(0, 8)
             .Select(_ => CreateRoomId())
-            .FirstOrDefault(candidate => !rooms.ContainsKey(candidate));
+            .FirstOrDefault(candidate => !rooms.ContainsKey(candidate) && !store.Exists(candidate));
         if (roomId is null)
         {
             host.Dispose();
@@ -125,9 +217,13 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
             scenarioId,
             request.MaxPlayers,
             host,
-            playableForces);
+            playableForces,
+            connectionLease: connectionLease);
         var joined = room.AddPlayer(playerName, request.ForceId, isHost: true);
+        ConfigureHibernation(room);
         room.RefreshHumanControlledForces();
+        try { Persist(room); }
+        catch { room.Dispose(); throw; }
         if (!rooms.TryAdd(roomId, room))
         {
             room.Dispose();
@@ -145,6 +241,7 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
         foreach (var room in rooms.Values)
             room.Dispose();
         rooms.Clear();
+        store.Dispose();
     }
 
     private static string CreateRoomId()
@@ -163,7 +260,7 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
 public sealed class StrategyMultiplayerRoomSession : IDisposable
 {
     private const int ProcessedCommandCapacity = 2048;
-    private static readonly TimeSpan ConnectionLease = TimeSpan.FromSeconds(12);
+    private readonly TimeSpan connectionLease;
     private readonly object sync = new();
     private readonly Dictionary<string, StrategyMultiplayerPlayer> playersById =
         new(StringComparer.Ordinal);
@@ -176,6 +273,60 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
     private long turnNumber;
     private bool hasStarted;
     private bool closed;
+    private StrategySimulationHost? host;
+    private Func<StrategySimulationHost>? wakeFactory;
+    public bool IsHibernating { get { lock (sync) return !closed && host is null; } }
+    internal void SetWakeFactory(Func<StrategySimulationHost> factory) => wakeFactory = factory;
+
+    // Caller owns Gate; metadata and credentials remain resident while the world is on disk.
+    public bool TryHibernate(TimeSpan idle, Action persist)
+    {
+        lock (sync)
+        {
+            RefreshConnectionStatesNoLock();
+            if (closed || StorageFailed || host is null || wakeFactory is null || playersById.Count == 0
+                || playersById.Values.Any(p => p.Connected || clock.GetUtcNow() - p.LastSeenUtc < idle)) return false;
+            persist();
+            host.Dispose();
+            host = null;
+            return true;
+        }
+    }
+    public bool StorageFailed { get; internal set; }
+
+    public StrategyRoomSnapshot CaptureSnapshot()
+    {
+        lock (sync)
+        {
+            var save = Host.CaptureSave();
+            if (!save.IsSuccess) throw new InvalidOperationException("World capture failed");
+            return new(1, RoomId, RoomName, ScenarioId, MaxPlayers, WorldVersion, TurnNumber, hasStarted,
+                Forces, playersById.Values.OrderBy(p => p.PlayerId, StringComparer.Ordinal).ToArray(),
+                processedCommandOrder.ToArray(), save.Value);
+        }
+    }
+
+    public void RestoreSession(StrategyRoomSnapshot snapshot)
+    {
+        lock (sync)
+        {
+            foreach (var player in snapshot.Players)
+            {
+                if (string.IsNullOrWhiteSpace(player.PlayerId) || string.IsNullOrWhiteSpace(player.PlayerToken)
+                    || !Forces.Any(f => f.ForceId == player.ForceId)
+                    || playersById.Values.Any(p => p.ForceId == player.ForceId))
+                    throw new InvalidOperationException("Invalid player snapshot");
+                player.Connected = false;
+                player.Ready = false;
+                playersById.Add(player.PlayerId, player);
+                playersByToken.Add(player.PlayerToken, player);
+            }
+            worldVersion = snapshot.WorldVersion;
+            turnNumber = snapshot.TurnNumber;
+            hasStarted = snapshot.HasStarted;
+            foreach (var command in snapshot.ProcessedCommands) TryReserveCommandId(command);
+        }
+    }
 
     public StrategyMultiplayerRoomSession(
         string roomId,
@@ -184,15 +335,19 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
         int maxPlayers,
         StrategySimulationHost host,
         IReadOnlyList<StrategyMultiplayerForceDefinition> forces,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        TimeSpan? connectionLease = null)
     {
         RoomId = roomId;
         RoomName = roomName;
         ScenarioId = scenarioId;
         MaxPlayers = maxPlayers;
-        Host = host;
+        this.host = host;
         Forces = forces;
         this.clock = clock ?? TimeProvider.System;
+        this.connectionLease = connectionLease ?? TimeSpan.FromSeconds(90);
+        if (this.connectionLease <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(connectionLease));
     }
 
     public string RoomId { get; }
@@ -203,7 +358,19 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
 
     public int MaxPlayers { get; }
 
-    public StrategySimulationHost Host { get; }
+    public StrategySimulationHost Host
+    {
+        get
+        {
+            lock (sync)
+            {
+                if (closed) throw new StrategyMultiplayerException("RoomNotFound");
+                if (host is not null) return host;
+                try { return host = wakeFactory!(); }
+                catch { StorageFailed = true; throw new StrategyMultiplayerException("RoomStorageFailed"); }
+            }
+        }
+    }
 
     public IReadOnlyList<StrategyMultiplayerForceDefinition> Forces { get; }
 
@@ -224,6 +391,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
 
     public StrategyMultiplayerPlayer AddPlayer(string playerName, int forceId, bool isHost = false)
     {
+        if (StorageFailed) throw new StrategyMultiplayerException("RoomStorageFailed");
         lock (sync)
         {
             if (closed)
@@ -250,6 +418,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
 
     public bool TryAuthenticate(string playerToken, out StrategyMultiplayerPlayer player)
     {
+        if (StorageFailed) throw new StrategyMultiplayerException("RoomStorageFailed");
         lock (sync)
         {
             player = null!;
@@ -259,6 +428,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
 
     public bool TryReconnect(string playerId, string playerToken, out StrategyMultiplayerPlayer player)
     {
+        if (StorageFailed) throw new StrategyMultiplayerException("RoomStorageFailed");
         lock (sync)
         {
             if (closed || !playersById.TryGetValue(playerId, out player!)
@@ -393,7 +563,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
                 RoomId = RoomId,
                 RoomName = RoomName,
                 ScenarioId = ScenarioId,
-                Status = hasStarted ? "Running" : "Waiting",
+                Status = StorageFailed ? "StorageError" : hasStarted ? "Running" : "Waiting",
                 MaxPlayers = MaxPlayers,
                 PlayerCount = playersById.Count,
                 WorldVersion = WorldVersion,
@@ -421,7 +591,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
         var now = clock.GetUtcNow();
         foreach (var player in playersById.Values)
         {
-            if (player.Connected && now - player.LastSeenUtc > ConnectionLease)
+            if (player.Connected && now - player.LastSeenUtc > connectionLease)
             {
                 player.Connected = false;
                 player.Ready = false;
@@ -437,8 +607,9 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
             closed = true;
             playersById.Clear();
             playersByToken.Clear();
+            host?.Dispose();
+            host = null;
         }
-        Host.Dispose();
         // Gate has no unmanaged resource unless AvailableWaitHandle is accessed.
         // Retain it for already queued requests; GC reclaims it with the room.
     }

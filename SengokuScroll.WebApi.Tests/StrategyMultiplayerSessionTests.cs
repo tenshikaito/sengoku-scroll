@@ -29,7 +29,7 @@ public sealed class StrategyMultiplayerSessionTests
         var first = room.AddPlayer("first", 1);
         var second = room.AddPlayer("second", 2);
         room.SetReady(first, true);
-        clock.Advance(TimeSpan.FromSeconds(13));
+        clock.Advance(TimeSpan.FromSeconds(91));
         room.MarkConnected(second);
         room.SetReady(second, true);
         Assert.True(room.AreAllConnectedPlayersReady());
@@ -56,6 +56,32 @@ public sealed class StrategyMultiplayerSessionTests
             Assert.Throws<StrategyMultiplayerException>(() => room.AddPlayer("late", 2));
         }
         finally { room.Gate.Release(); }
+    }
+
+    [Fact]
+    public void DefaultLease_ToleratesOneMinuteBackgroundTimerThrottling()
+    {
+        var clock = new TestClock();
+        using var room = Create(clock);
+        var player = room.AddPlayer("background", 1);
+        room.SetReady(player, true);
+        clock.Advance(TimeSpan.FromSeconds(60));
+        Assert.True(Assert.Single(room.ToDto().Players).Connected);
+        Assert.True(player.Ready);
+    }
+
+    [Fact]
+    public void CustomLease_IsUsedInsteadOfDefault()
+    {
+        var clock = new TestClock();
+        using var room = new StrategyMultiplayerRoomSession("test", "test", "mini_kanto", 1,
+            new StrategySimulationHost(), [new(1, "one", "Military")], clock,
+            TimeSpan.FromMinutes(3));
+        room.AddPlayer("background", 1);
+        clock.Advance(TimeSpan.FromMinutes(2));
+        Assert.True(Assert.Single(room.ToDto().Players).Connected);
+        clock.Advance(TimeSpan.FromSeconds(61));
+        Assert.False(Assert.Single(room.ToDto().Players).Connected);
     }
 
     private sealed class TestClock : TimeProvider

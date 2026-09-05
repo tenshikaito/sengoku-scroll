@@ -108,7 +108,8 @@ public class StrategyAISystem(
                     gameData,
                     scenarioMeta,
                     pathfinding,
-                    worldContext))
+                    worldContext,
+                    visibilityLedger))
             {
                 dayDebugLog.LogLine(
                     "AI",

@@ -31,6 +31,31 @@ public sealed class StrategySimulationHost : IDisposable
     private StrategySimulationScope? simulation;
     private readonly StrategyTimeController timeController = new();
     private readonly object sync = new();
+    private readonly Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory;
+    private readonly StrategyDayDebugOptions? dayDebugOptions;
+    private readonly StrategyAiTraceOptions? aiTraceOptions;
+
+    public StrategySimulationHost(
+        Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory = null,
+        Microsoft.Extensions.Options.IOptions<StrategyDayDebugOptions>? dayDebugOptions = null,
+        Microsoft.Extensions.Options.IOptions<StrategyAiTraceOptions>? aiTraceOptions = null)
+    {
+        this.loggerFactory = loggerFactory;
+        this.aiTraceOptions = aiTraceOptions?.Value;
+        if (dayDebugOptions is { Value: var options })
+        {
+            this.dayDebugOptions = new StrategyDayDebugOptions
+            {
+                Enabled = options.Enabled,
+                WriteToFile = options.WriteToFile,
+                MaxInMemoryEntries = options.MaxInMemoryEntries,
+                // Independent room loggers must not append to the same file.
+                OutputDirectory = options.WriteToFile
+                    ? Path.Combine(options.OutputDirectory, "sessions", Guid.NewGuid().ToString("N"))
+                    : options.OutputDirectory
+            };
+        }
+    }
 
     /// <summary>当前已加载的剧本 Id；未加载时为 null。</summary>
     public string? LoadedScenarioId { get; private set; }
@@ -59,23 +84,47 @@ public sealed class StrategySimulationHost : IDisposable
             if (path is null)
                 return GameError.DataNotFound;
 
-            simulation?.Dispose();
-            var loaded = StrategyScenarioLoader.LoadFromFile(path);
-            var meta = StrategyScenarioLoader.ApplyLoadOptions(loaded.Meta, loadOptions);
-            simulation = StrategySimulationBootstrap.CreateScope(loaded.World, meta);
-            StrongholdCityActorBootstrapHelper.EnsureCityActors(
-                simulation.World.GameData,
-                simulation.Services.GetRequiredService<StrategyForceLordRegistry>());
-            StrategyAiBootstrapHelper.BootstrapAggressiveDirectives(simulation.World, meta);
-            IntelEntityBootstrapHelper.BootstrapGameWorld(simulation.World, meta);
-            simulation.MovementTrace.Clear();
-            simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
-            LoadedScenarioId = scenarioId;
-            timeController.Pause();
+            var previousSimulation = simulation;
+            var previousScenarioId = LoadedScenarioId;
+            var committed = false;
+            simulation = null;
+            try
+            {
+                var loaded = StrategyScenarioLoader.LoadFromFile(path);
+                var meta = StrategyScenarioLoader.ApplyLoadOptions(loaded.Meta, loadOptions);
+                simulation = StrategySimulationBootstrap.CreateScope(loaded.World, meta,
+                    dayDebugOptions, aiTraceOptions, loggerFactory);
+                StrongholdCityActorBootstrapHelper.EnsureCityActors(
+                    simulation.World.GameData,
+                    simulation.Services.GetRequiredService<StrategyForceLordRegistry>());
+                StrategyAiBootstrapHelper.BootstrapAggressiveDirectives(simulation.World, meta);
+                IntelEntityBootstrapHelper.BootstrapGameWorld(simulation.World, meta);
+                simulation.MovementTrace.Clear();
+                simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
+                LoadedScenarioId = scenarioId;
+                RunMonthStartOnLoadIfNeeded(simulation);
 
-            RunMonthStartOnLoadIfNeeded(simulation);
-
-            return BuildStateResult();
+                var result = BuildStateResult();
+                if (!result.IsSuccess) return result;
+                timeController.Pause();
+                committed = true;
+                previousSimulation?.Dispose();
+                return result;
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException
+                or ArgumentException or InvalidOperationException or NullReferenceException or KeyNotFoundException)
+            {
+                return GameError.DataNotFound;
+            }
+            finally
+            {
+                if (!committed)
+                {
+                    simulation?.Dispose();
+                    simulation = previousSimulation;
+                    LoadedScenarioId = previousScenarioId;
+                }
+            }
         }
     }
 
@@ -1337,6 +1386,16 @@ public sealed class StrategySimulationHost : IDisposable
     }
 
     /// <summary>捕获当前仿真为 JSON 存档。</summary>
+    public StrategyPrivateEventLedger.Batch ReadPrivateEvents(int forceId)
+    {
+        lock (sync) return simulation!.Services.GetRequiredService<StrategyPrivateEventLedger>().Read(forceId);
+    }
+
+    public bool AcknowledgePrivateEvents(int forceId, long sequence)
+    {
+        lock (sync) return simulation!.Services.GetRequiredService<StrategyPrivateEventLedger>().Acknowledge(forceId, sequence);
+    }
+
     public GameResult<StrategySaveDocument> CaptureSave()
     {
         lock (sync)
@@ -1379,7 +1438,7 @@ public sealed class StrategySimulationHost : IDisposable
                     out var savedDifficulty)
                     ? savedDifficulty
                     : (StrategyDifficulty?)null;
-                var loadOptions = difficulty is null && save.AllForcesAiControlled is null
+                var loadOptions = difficulty is null && save.AllForcesAiControlled is null && !save.IsMultiplayer
                     ? null
                     : new StrategyLoadOptions
                     {
@@ -1388,6 +1447,7 @@ public sealed class StrategySimulationHost : IDisposable
                             ? GameStartOptionsMapper.FromDto(save.StartOptions)
                             : null,
                         AllForcesAiControlled = save.AllForcesAiControlled ?? false,
+                        IsMultiplayer = save.IsMultiplayer,
                     };
 
                 var loadResult = LoadScenario(save.ScenarioId, loadOptions);
@@ -1401,7 +1461,8 @@ public sealed class StrategySimulationHost : IDisposable
                 if (!simulation.World.GameData.Forces.ContainsKey(save.PlayerForceId))
                     return GameError.DataNotFound;
                 simulation.ScenarioMeta.PlayerForceId = save.PlayerForceId;
-                StrategyRuntimeServicesSaveService.TryRestore(save.RuntimeServices, simulation.Services);
+                if (!StrategyRuntimeServicesSaveService.TryRestore(save.RuntimeServices, simulation.Services)
+                    && save.IsMultiplayer) return GameError.DataNotFound;
                 simulation.MovementTrace.Clear();
                 simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
 

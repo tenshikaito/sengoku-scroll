@@ -66,6 +66,28 @@ public sealed class AuditRegressionTests
         Assert.Equal(before, StrategySimulationHost.SerializeSave(host.CaptureSave().Value!));
     }
 
+    [Theory]
+    [InlineData("{broken json")]
+    [InlineData("{\"scenario\":null}")]
+    public void MalformedScenario_DoesNotDisposeOrReplaceCurrentGame(string contents)
+    {
+        using var host = new StrategySimulationHost();
+        Assert.True(host.LoadScenario("mini_kanto").IsSuccess);
+        Assert.True(host.AdvanceDay().IsSuccess);
+        var before = StrategySimulationHost.SerializeSave(host.CaptureSave().Value!);
+        var name = "audit-malformed-" + Guid.NewGuid().ToString("N");
+        var path = Path.Combine(AppContext.BaseDirectory, "Maps", name + ".json");
+        try
+        {
+            File.WriteAllText(path, contents);
+            Assert.False(host.LoadScenario(name).IsSuccess);
+            Assert.Equal("mini_kanto", host.LoadedScenarioId);
+            Assert.Equal(before, StrategySimulationHost.SerializeSave(host.CaptureSave().Value!));
+            Assert.True(host.AdvanceDay().IsSuccess);
+        }
+        finally { File.Delete(path); }
+    }
+
     [Fact]
     public void NestedParallelRegions_CompleteInStableOrderAndRecoverAfterException()
     {

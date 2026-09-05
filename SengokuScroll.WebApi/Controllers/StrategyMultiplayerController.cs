@@ -25,7 +25,7 @@ public sealed class StrategyMultiplayerController(
         }
         catch (StrategyMultiplayerException ex)
         {
-            return BadRequest(new ApiErrorResponse(ex.Code));
+            return StatusCode(ex.Code == "RoomStorageFailed" ? 503 : 400, new ApiErrorResponse(ex.Code));
         }
     }
 
@@ -38,7 +38,7 @@ public sealed class StrategyMultiplayerController(
         }
         catch (StrategyMultiplayerException ex)
         {
-            return BadRequest(new ApiErrorResponse(ex.Code));
+            return StatusCode(ex.Code == "RoomStorageFailed" ? 503 : 400, new ApiErrorResponse(ex.Code));
         }
     }
 
@@ -61,6 +61,7 @@ public sealed class StrategyMultiplayerController(
         {
             var player = room.AddPlayer(request.PlayerName, request.ForceId);
             room.RefreshHumanControlledForces();
+            roomManager.Persist(room);
             var response = new StrategyMultiplayerRoomResponse
             {
                 Room = room.ToDto(),
@@ -71,7 +72,7 @@ public sealed class StrategyMultiplayerController(
         }
         catch (StrategyMultiplayerException ex)
         {
-            return BadRequest(new ApiErrorResponse(ex.Code));
+            return StatusCode(ex.Code == "RoomStorageFailed" ? 503 : 400, new ApiErrorResponse(ex.Code));
         }
         finally
         {
@@ -112,6 +113,7 @@ public sealed class StrategyMultiplayerController(
                 return Unauthorized(new ApiErrorResponse("InvalidRoomCredentials"));
 
             room.RefreshHumanControlledForces();
+            roomManager.Persist(room);
             await BroadcastRoomChanged(room, "PlayerReconnected");
             return Ok(new StrategyMultiplayerRoomResponse
             {
@@ -142,9 +144,10 @@ public sealed class StrategyMultiplayerController(
             room.RemovePlayer(player);
             room.RefreshHumanControlledForces();
             var snapshot = room.ToDto();
-            await BroadcastRoomChanged(room, "PlayerDisconnected");
+            roomManager.Persist(room);
             if (room.PlayerCount == 0)
                 roomManager.TryRemoveRoom(room.RoomId);
+            await BroadcastRoomChanged(room, "PlayerDisconnected");
             return Ok(snapshot);
         }
         finally
@@ -187,37 +190,36 @@ public sealed class StrategyMultiplayerController(
             room.SetReady(player, request.Ready);
             room.RefreshHumanControlledForces();
 
+            // Simulation is independent of the last ready player's viewing perspective.
+            var shouldAdvance = request.Ready && room.AreAllConnectedPlayersReady();
+            if (shouldAdvance)
+            {
+                var result = room.Host.AdvanceDay();
+                if (!result.IsSuccess)
+                    return BadRequest(new ApiErrorResponse(result.Error?.Code ?? "AdvanceFailed"));
+                room.ResetReady();
+                room.MarkWorldChanged(started: true);
+            }
+            commandSucceeded = true; // A storage failure must never reopen a committed command ID.
+            roomManager.Persist(room);
+
             var playerContext = room.Host.UsePlayerForce(player.ForceId);
             if (!playerContext.IsSuccess)
                 return BadRequest(new ApiErrorResponse(playerContext.Error?.Code ?? "ForceContextFailed"));
 
             using (playerContext.Value)
             {
-                var shouldAdvance = request.Ready && room.AreAllConnectedPlayersReady();
-                StrategyAdvanceDayResponseDto advance;
-                if (shouldAdvance)
-                {
-                    var result = room.Host.AdvanceDay();
-                    if (!result.IsSuccess)
-                        return BadRequest(new ApiErrorResponse(result.Error?.Code ?? "AdvanceFailed"));
-                    advance = result.Value;
-                    room.ResetReady();
-                    room.MarkWorldChanged(started: true);
-                }
-                else
-                {
                     var state = room.Host.GetState();
                     if (!state.IsSuccess)
                         return BadRequest(new ApiErrorResponse(state.Error?.Code ?? "StateFailed"));
-                    advance = new StrategyAdvanceDayResponseDto
+                    var advance = new StrategyAdvanceDayResponseDto
                     {
                         State = state.Value,
                         ResolvedBattles = [],
                         Events = [],
-                        DaysAdvanced = 0,
+                        DaysAdvanced = shouldAdvance ? 1 : 0,
                         DayDebugEntryCount = 0
                     };
-                }
 
                 commandSucceeded = true;
                 await BroadcastRoomChanged(room, shouldAdvance ? "WorldAdvanced" : "ReadyChanged");
@@ -236,6 +238,39 @@ public sealed class StrategyMultiplayerController(
                 room.ReleaseCommandId(commandId);
             room.Gate.Release();
         }
+    }
+
+    [HttpGet("{roomId}/events")]
+    public async Task<IActionResult> Events(string roomId)
+    {
+        if (!roomManager.TryGetRoom(roomId, out var room)) return NotFound(new ApiErrorResponse("RoomNotFound"));
+        if (!TryReadPlayerToken(out var token)) return Unauthorized(new ApiErrorResponse("MissingPlayerToken"));
+        await room.Gate.WaitAsync(HttpContext.RequestAborted);
+        try
+        {
+            if (!room.TryAuthenticate(token, out var player)) return Unauthorized(new ApiErrorResponse("InvalidRoomCredentials"));
+            Response.Headers.CacheControl = "no-store";
+            return Ok(room.Host.ReadPrivateEvents(player.ForceId));
+        }
+        finally { room.Gate.Release(); }
+    }
+
+    public sealed record EventAcknowledgement(long Sequence);
+    [HttpPost("{roomId}/events/ack")]
+    public async Task<IActionResult> AcknowledgeEvents(string roomId, [FromBody] EventAcknowledgement request)
+    {
+        if (!roomManager.TryGetRoom(roomId, out var room)) return NotFound(new ApiErrorResponse("RoomNotFound"));
+        if (!TryReadPlayerToken(out var token)) return Unauthorized(new ApiErrorResponse("MissingPlayerToken"));
+        await room.Gate.WaitAsync(HttpContext.RequestAborted);
+        try
+        {
+            if (!room.TryAuthenticate(token, out var player)) return Unauthorized(new ApiErrorResponse("InvalidRoomCredentials"));
+            if (!room.Host.AcknowledgePrivateEvents(player.ForceId, request.Sequence))
+                return BadRequest(new ApiErrorResponse("InvalidEventSequence"));
+            roomManager.Persist(room);
+            return Ok(new { acknowledgedSequence = request.Sequence });
+        }
+        finally { room.Gate.Release(); }
     }
 
     private bool TryReadPlayerToken(out string token)

@@ -35,7 +35,7 @@ public sealed class MerchantTaxLedger
         => accrued.GetValueOrDefault((strongholdId, merchantActorId));
 
     public IReadOnlyList<Accrual> Snapshot()
-        => [.. accrued.Select(x => new Accrual(x.Key.StrongholdId, x.Key.MerchantActorId, x.Value))];
+        => [.. accrued.OrderBy(x => x.Key.StrongholdId).ThenBy(x => x.Key.MerchantActorId).Select(x => new Accrual(x.Key.StrongholdId, x.Key.MerchantActorId, x.Value))];
 
     public void Restore(IEnumerable<Accrual> restored)
     {

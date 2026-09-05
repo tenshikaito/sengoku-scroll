@@ -22,7 +22,8 @@ public interface IStrategyTimeSystem : IGameSystem
 public class StrategyTimeSystem(
     IGameContext context,
     StrategyMovementTrace trace,
-    ILogger<StrategyTimeSystem> logger) : IStrategyTimeSystem
+    ILogger<StrategyTimeSystem> logger,
+    TariffTaxLedger tariffTaxLedger) : IStrategyTimeSystem
 {
     /// <summary>日循环最先执行。</summary>
     public int Order { get; } = 0;
@@ -30,6 +31,7 @@ public class StrategyTimeSystem(
     /// <inheritdoc />
     public void Update()
     {
+        tariffTaxLedger.PruneRemovedConvoys(context.GameWorldContext.GameWorld.GameData);
         var recovery = context.GameRuleConfig.NextTurnApRecovery;
 
         // 阶段1：恢复军事单位行动力，并根据路径修正移动/待机状态
@@ -64,7 +66,7 @@ public class StrategyTimeSystem(
                 var detail =
                     $"AP {apBefore}->{unit.Ap} status {statusBefore}->{unit.Status} route={routeCount} peek={PeekRoute(unit)}";
                 trace.Log("DayStart", "日初单位状态", unit.Id, unit.Location, detail: detail);
-                logger.LogInformation(
+                logger.LogDebug(
                     "[StrategyMove] DayStart Unit {Id} at {Loc} {Detail}",
                     unit.Id, unit.Location, detail);
             }

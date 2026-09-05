@@ -25,6 +25,21 @@ public sealed class StrategyParallelWorkTests
     }
 
     [Fact]
+    public void SingleBatch_StaysOnCallerThreadInsteadOfFanningOut()
+    {
+        var callerThread = Environment.CurrentManagedThreadId;
+        var input = Enumerable.Range(0, 63).ToArray();
+        var output = StrategyParallelWork.MapOrdered(input, value =>
+        {
+            Assert.Equal(callerThread, Environment.CurrentManagedThreadId);
+            return value;
+        }, minimumParallelCount: 32);
+        Assert.Equal(input, output);
+        StrategyParallelWork.ForEachIndex(63,
+            _ => Assert.Equal(callerThread, Environment.CurrentManagedThreadId), 32);
+    }
+
+    [Fact]
     public void SameSeed_TwoLongRuns_ProduceIdenticalWorldSave()
     {
         var first = RunAndCapture(days: 365);
@@ -33,6 +48,29 @@ public sealed class StrategyParallelWorkTests
         Assert.Equal(
             JsonSerializer.Serialize(first),
             JsonSerializer.Serialize(second));
+    }
+
+    [Fact]
+    public async Task ConcurrentWorlds_MatchSequentialSaveIncludingRuntimeServices()
+    {
+        static string Run()
+        {
+            using var host = new SengokuScroll.Strategy.Hosting.StrategySimulationHost();
+            Assert.True(host.LoadScenario("mini_kanto", new SengokuScroll.Strategy.Models.StrategyLoadOptions
+            { AllForcesAiControlled = true }).IsSuccess);
+            Assert.True(host.AdvanceDays(31).IsSuccess);
+            return SengokuScroll.Strategy.Hosting.StrategySimulationHost.SerializeSave(host.CaptureSave().Value!);
+        }
+
+        var expected = Run();
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runs = Enumerable.Range(0, 4).Select(_ => Task.Run(async () =>
+        {
+            await start.Task;
+            return Run();
+        }, TestContext.Current.CancellationToken)).ToArray();
+        start.SetResult();
+        foreach (var actual in await Task.WhenAll(runs)) Assert.Equal(expected, actual);
     }
 
     private static StrategySaveDocument RunAndCapture(int days)

@@ -13,6 +13,12 @@ public sealed class StrategyPendingBattleReportStore
     public StrategyBattleResultDto? Take(int messengerId)
         => byMessengerId.Remove(messengerId, out var result) ? result : null;
 
+    public void PruneMissingCarriers(SengokuScroll.Domain.GameData data)
+    {
+        foreach (var id in byMessengerId.Keys.Where(id => !data.MessageCarriers.ContainsKey(id)).ToArray())
+            byMessengerId.Remove(id);
+    }
+
     public IReadOnlyDictionary<int, StrategyBattleResultDto> Snapshot()
         => new Dictionary<int, StrategyBattleResultDto>(byMessengerId);
 

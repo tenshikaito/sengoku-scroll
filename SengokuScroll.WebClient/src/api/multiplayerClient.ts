@@ -3,6 +3,7 @@ import { normalizeStrategyWorldState } from "@/utils/normalizeStrategyWorldState
 import { normalizeBattleResult } from "@/utils/battleResult";
 import { normalizeStrategyEvent } from "@/utils/normalizeStrategyEvent";
 import { createCommandId } from "@/utils/commandId";
+import { withRequestTimeout } from "@/utils/requestTimeout";
 
 const SESSION_KEY = "sengoku_scroll_multiplayer_session_v1";
 
@@ -125,22 +126,25 @@ async function multiplayerFetch<T>(
     }
   }
 
-  const response = await fetch(path, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!response.ok) {
-    let code = response.statusText;
-    try {
-      const error = (await response.json()) as { errorCode?: string };
-      code = error.errorCode ?? code;
-    } catch {
-      // Keep the HTTP status text when the server did not return JSON.
+  return withRequestTimeout(async (signal) => {
+    const response = await fetch(path, {
+      method,
+      headers,
+      signal,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!response.ok) {
+      let code = response.statusText;
+      try {
+        const error = (await response.json()) as { errorCode?: string };
+        code = error.errorCode ?? code;
+      } catch {
+        // Keep the HTTP status text when the server did not return JSON.
+      }
+      throw new MultiplayerRequestError(response.status, code);
     }
-    throw new MultiplayerRequestError(response.status, code);
-  }
-  return (await response.json()) as T;
+    return (await response.json()) as T;
+  }, method === "GET" || method === "HEAD" ? 15_000 : 120_000);
 }
 
 export const listMultiplayerRooms = () =>
@@ -149,6 +153,21 @@ export const listMultiplayerRooms = () =>
 export function heartbeatMultiplayerRoom(session: MultiplayerSession): Promise<MultiplayerRoom> {
   return multiplayerFetch<MultiplayerRoom>("GET",
     `/api/multiplayer/rooms/${encodeURIComponent(session.roomId)}/heartbeat`, undefined, session);
+}
+
+export async function getMultiplayerEvents(session: MultiplayerSession) {
+  const batch = await multiplayerFetch<{
+    acknowledgedSequence: number; lastSequence: number; historyTruncated: boolean;
+    entries: { sequence: number; event: unknown }[];
+  }>("GET", `/api/multiplayer/rooms/${encodeURIComponent(session.roomId)}/events`, undefined, session);
+  return { ...batch, entries: batch.entries.map(entry => ({
+    sequence: entry.sequence, event: normalizeStrategyEvent(entry.event),
+  })) };
+}
+
+export function acknowledgeMultiplayerEvents(session: MultiplayerSession, sequence: number) {
+  return multiplayerFetch("POST", `/api/multiplayer/rooms/${encodeURIComponent(session.roomId)}/events/ack`,
+    { sequence }, session);
 }
 
 export const listMultiplayerScenarioForces = (scenarioId = "mini_kanto") =>

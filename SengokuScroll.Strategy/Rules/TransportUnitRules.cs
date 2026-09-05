@@ -54,7 +54,7 @@ public static class TransportUnitRules
 
     /// <summary>遍历全部有效运输 Unit。</summary>
     public static IEnumerable<Unit> EnumerateActiveTransportUnits(GameData gameData)
-        => gameData.Units.Values.Where(IsActiveTransport);
+        => gameData.Units.Values.Where(IsActiveTransport).OrderBy(unit => unit.Id);
 
     /// <summary>目标军事单位是否已有在途或返程运输任务。</summary>
     public static bool HasActiveConvoyForUnit(GameData gameData, int unitId)

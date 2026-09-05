@@ -34,7 +34,8 @@ public sealed class BattleReportDeliveryHelper(
         IReadOnlyList<int>? attackerParticipantIds = null,
         IReadOnlyList<int>? defenderParticipantIds = null)
     {
-        if (!BattleReportDispatchRules.ShouldDispatchBattleReport(
+        if (!StrategyForcePerspective.ReceivesReports(scenarioMeta, forceId)) return;
+        if (!scenarioMeta.HasHumanControlConfiguration && !BattleReportDispatchRules.ShouldDispatchBattleReport(
                 forceId,
                 outcome,
                 attacker,
@@ -46,7 +47,8 @@ public sealed class BattleReportDeliveryHelper(
             return;
 
         var destinations = BattleReportRoutingHelper.ResolveDestinations(
-            forceId, scenarioMeta, gameData, attacker, defender);
+            forceId, forceId == scenarioMeta.PlayerForceId ? scenarioMeta
+                : StrategyForcePerspective.Create(scenarioMeta, gameData, forceId), gameData, attacker, defender);
 
         foreach (var destination in destinations)
             DeliverBattleReportToDestination(forceId, origin, gameData, battleResult, destination);
@@ -60,10 +62,6 @@ public sealed class BattleReportDeliveryHelper(
         GameData gameData,
         Unit? defenderUnit = null)
     {
-        var playerForceId = scenarioMeta.PlayerForceId;
-        if (attacker.ForceId != playerForceId && target.ForceId != playerForceId)
-            return;
-
         var modeLabel = mode == UnitSiegeMode.Assault ? "强攻" : "包围";
         var reportEvent = new StrategyEventDto
         {
@@ -79,11 +77,8 @@ public sealed class BattleReportDeliveryHelper(
             DetailCategory = mode == UnitSiegeMode.Assault ? "SiegeAssault" : "SiegeEncircle"
         };
 
-        DeliverPlayerStrategicReport(
-            playerForceId,
-            attacker.Location,
-            gameData,
-            reportEvent);
+        foreach (var forceId in new[] { attacker.ForceId, target.ForceId }.Distinct().Order())
+            DeliverPlayerStrategicReport(forceId, attacker.Location, gameData, reportEvent);
     }
 
     /// <summary>向玩家势力派送战略情报（溃灭、占城等），须经信使抵达后方可展示。</summary>
@@ -93,16 +88,19 @@ public sealed class BattleReportDeliveryHelper(
         GameData gameData,
         StrategyEventDto reportEvent)
     {
-        if (forceId != scenarioMeta.PlayerForceId)
+        if (!StrategyForcePerspective.ReceivesReports(scenarioMeta, forceId))
             return;
 
-        var lordLocation = StrategyLordHelper.ResolveLocation(gameData, scenarioMeta);
-        var strongholdId = StrategyLordHelper.ResolveSourceStrongholdId(gameData, scenarioMeta, lordLocation);
-        var label = ResolveArrivalLabel(lordLocation, gameData);
+        var perspective = forceId == scenarioMeta.PlayerForceId ? scenarioMeta
+            : StrategyForcePerspective.Create(scenarioMeta, gameData, forceId);
+        var lordLocation = StrategyLordHelper.ResolveLocation(gameData, perspective);
+        var strongholdId = StrategyLordHelper.ResolveSourceStrongholdId(gameData, perspective, lordLocation);
+        var label = ResolveArrivalLabel(lordLocation, gameData, forceId);
         DeliverStrategicReportToDestination(
             forceId,
             origin,
-            reportEvent,
+            reportEvent with { RecipientForceId = forceId,
+                OccurrenceKey = reportEvent.OccurrenceKey ?? $"{gameData.GameDate.TotalPhases}:{origin.X}:{origin.Y}" },
             new BattleReportRoutingHelper.BattleReportDestination(lordLocation, strongholdId, label));
     }
 
@@ -113,10 +111,10 @@ public sealed class BattleReportDeliveryHelper(
         StrategyBattleResultDto battleResult,
         BattleReportRoutingHelper.BattleReportDestination destination)
     {
-        if (forceId != scenarioMeta.PlayerForceId)
+        if (!StrategyForcePerspective.ReceivesReports(scenarioMeta, forceId))
             return;
 
-        MaybePushInstantBattleSummary(battleResult);
+        MaybePushInstantBattleSummary(battleResult, forceId);
 
         var messengerId = MessageCarrierDispatchHelper.DispatchBattleReport(
             origin,
@@ -134,7 +132,7 @@ public sealed class BattleReportDeliveryHelper(
             battleResult,
             destination,
             sameTile: false,
-            deliveryFailed: true);
+            deliveryFailed: true, recipientForceId: forceId);
     }
 
     private void DeliverStrategicReportToDestination(
@@ -143,7 +141,7 @@ public sealed class BattleReportDeliveryHelper(
         StrategyEventDto reportEvent,
         BattleReportRoutingHelper.BattleReportDestination destination)
     {
-        if (forceId != scenarioMeta.PlayerForceId)
+        if (!StrategyForcePerspective.ReceivesReports(scenarioMeta, forceId))
             return;
 
         MaybePushInstantStrategicSummary(reportEvent);
@@ -169,9 +167,15 @@ public sealed class BattleReportDeliveryHelper(
         BattleReportRoutingHelper.BattleReportDestination destination,
         bool sameTile,
         bool immediateDelivery = false,
-        bool deliveryFailed = false)
+        bool deliveryFailed = false, int? recipientForceId = null)
     {
-        var battleKey = BuildBattleKey(battleResult);
+        var forceId = recipientForceId ?? scenarioMeta.PlayerForceId;
+        var battleKey = $"{forceId}:{BuildBattleKey(battleResult)}";
+        if (deliveryFailed)
+        {
+            NotifyDeliveryFailed($"battle:{battleKey}", forceId);
+            return;
+        }
         if (!playerNotifiedBattleKeys.Add(battleKey))
             return;
 
@@ -183,6 +187,7 @@ public sealed class BattleReportDeliveryHelper(
         dayOutcomeBuffer.AddEvent(new StrategyEventDto
         {
             Category = "BattleReportArrived",
+            RecipientForceId = forceId,
             Message = message,
             Brief = brief,
             BattleResult = battleResult
@@ -195,7 +200,12 @@ public sealed class BattleReportDeliveryHelper(
         BattleReportRoutingHelper.BattleReportDestination destination,
         bool deliveryFailed = false)
     {
-        var eventKey = $"{reportEvent.Category}:{reportEvent.Brief}:{destination.Location.X}:{destination.Location.Y}";
+        var eventKey = $"{reportEvent.RecipientForceId ?? scenarioMeta.PlayerForceId}:{reportEvent.OccurrenceKey}:{reportEvent.Category}:{reportEvent.Message}:{destination.Location.X}:{destination.Location.Y}";
+        if (deliveryFailed)
+        {
+            NotifyDeliveryFailed($"event:{eventKey}", reportEvent.RecipientForceId ?? scenarioMeta.PlayerForceId);
+            return;
+        }
         if (!playerNotifiedEventKeys.Add(eventKey))
             return;
 
@@ -207,6 +217,7 @@ public sealed class BattleReportDeliveryHelper(
         dayOutcomeBuffer.AddEvent(new StrategyEventDto
         {
             Category = "StrategicReportArrived",
+            RecipientForceId = reportEvent.RecipientForceId,
             Message = message,
             Brief = brief,
             DetailCategory = reportEvent.Category,
@@ -218,14 +229,15 @@ public sealed class BattleReportDeliveryHelper(
     public void NotifyPlayerBattleReportArrivedFromMessenger(
         StrategyBattleResultDto battleResult,
         Point3 arrivalLocation,
-        GameData gameData)
+        GameData gameData, int? recipientForceId = null)
     {
-        var label = ResolveArrivalLabel(arrivalLocation, gameData);
-        var strongholdId = StrategyLordHelper.ResolveSourceStrongholdId(gameData, scenarioMeta, arrivalLocation);
+        var label = ResolveArrivalLabel(arrivalLocation, gameData, recipientForceId);
+        var perspective = StrategyForcePerspective.Create(scenarioMeta, gameData, recipientForceId ?? scenarioMeta.PlayerForceId);
+        var strongholdId = StrategyLordHelper.ResolveSourceStrongholdId(gameData, perspective, arrivalLocation);
         NotifyPlayerBattleReportArrived(
             battleResult,
             new BattleReportRoutingHelper.BattleReportDestination(arrivalLocation, strongholdId, label),
-            sameTile: false);
+            sameTile: false, recipientForceId: recipientForceId);
     }
 
     /// <summary>战略情报信使抵达当主所在格。</summary>
@@ -234,33 +246,36 @@ public sealed class BattleReportDeliveryHelper(
         Point3 arrivalLocation,
         GameData gameData)
     {
-        var label = ResolveArrivalLabel(arrivalLocation, gameData);
-        var strongholdId = StrategyLordHelper.ResolveSourceStrongholdId(gameData, scenarioMeta, arrivalLocation);
+        var label = ResolveArrivalLabel(arrivalLocation, gameData, reportEvent.RecipientForceId);
+        var perspective = StrategyForcePerspective.Create(scenarioMeta, gameData, reportEvent.RecipientForceId ?? scenarioMeta.PlayerForceId);
+        var strongholdId = StrategyLordHelper.ResolveSourceStrongholdId(gameData, perspective, arrivalLocation);
         NotifyPlayerStrategicReportArrived(
             reportEvent,
             new BattleReportRoutingHelper.BattleReportDestination(arrivalLocation, strongholdId, label));
     }
 
-    private string ResolveArrivalLabel(Point3 location, GameData gameData)
+    private string ResolveArrivalLabel(Point3 location, GameData gameData, int? forceId = null)
     {
+        var perspective = forceId is null || forceId == scenarioMeta.PlayerForceId ? scenarioMeta
+            : StrategyForcePerspective.Create(scenarioMeta, gameData, forceId.Value);
         var atStronghold = gameData.Strongholds.Values.FirstOrDefault(s =>
-            s.ForceId == scenarioMeta.PlayerForceId
+            s.ForceId == perspective.PlayerForceId
             && s.Location.X == location.X
             && s.Location.Y == location.Y);
 
         if (atStronghold is not null)
         {
             var residenceId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
-                scenarioMeta.PlayerForceId, gameData, scenarioMeta);
+                perspective.PlayerForceId, gameData, perspective);
             if (atStronghold.Id == residenceId)
                 return "居城";
 
             return atStronghold.Name;
         }
 
-        var lordLocation = StrategyLordHelper.ResolveLocation(gameData, scenarioMeta);
+        var lordLocation = StrategyLordHelper.ResolveLocation(gameData, perspective);
         if (lordLocation.X == location.X && lordLocation.Y == location.Y)
-            return scenarioMeta.LordName;
+            return perspective.LordName;
 
         return "当主";
     }
@@ -286,14 +301,14 @@ public sealed class BattleReportDeliveryHelper(
         return $"{main}（驰援：{string.Join("、", extras)}）";
     }
 
-    private void MaybePushInstantBattleSummary(StrategyBattleResultDto battleResult)
+    private void MaybePushInstantBattleSummary(StrategyBattleResultDto battleResult, int forceId)
     {
         if (!StrategyDifficultyRules.InstantEventMessages(
                 scenarioMeta.Difficulty,
                 scenarioMeta.StartOptions))
             return;
 
-        var key = $"instant-battle:{BuildBattleKey(battleResult)}";
+        var key = $"{forceId}:instant-battle:{BuildBattleKey(battleResult)}";
         if (!playerNotifiedEventKeys.Add(key))
             return;
 
@@ -302,7 +317,8 @@ public sealed class BattleReportDeliveryHelper(
         {
             Category = "InstantEventSummary",
             Brief = brief,
-            Message = $"⚡ 前线急报（待证实）：{brief}"
+            Message = $"⚡ 前线急报（待证实）：{brief}",
+            RecipientForceId = forceId
         });
     }
 
@@ -314,7 +330,7 @@ public sealed class BattleReportDeliveryHelper(
             return;
 
         var brief = reportEvent.Brief?.Trim() ?? reportEvent.Message;
-        var key = $"instant-event:{reportEvent.Category}:{brief}";
+        var key = $"{reportEvent.RecipientForceId ?? scenarioMeta.PlayerForceId}:{reportEvent.OccurrenceKey}:instant-event:{reportEvent.Category}:{reportEvent.Message}";
         if (!playerNotifiedEventKeys.Add(key))
             return;
 
@@ -323,7 +339,28 @@ public sealed class BattleReportDeliveryHelper(
             Category = "InstantEventSummary",
             Brief = brief,
             Message = $"⚡ {brief}（待证实）",
-            DetailCategory = reportEvent.Category
+            DetailCategory = reportEvent.Category,
+            RecipientForceId = reportEvent.RecipientForceId
         });
+    }
+
+    private void NotifyDeliveryFailed(string key, int forceId)
+    {
+        // 独立命名空间随现有去重状态存档；失败不能消费成功回执，也不能暴露未送达内容。
+        if (!playerNotifiedEventKeys.Add($"delivery-failed:{key}")) return;
+        dayOutcomeBuffer.AddEvent(new StrategyEventDto
+        {
+            Category = "ReportDeliveryFailed", RecipientForceId = forceId,
+            Message = "⚠ 信使无法派出（道路不通），尚未收到情报内容。"
+        });
+    }
+
+    public sealed record DeliveryState(IReadOnlyList<string> BattleKeys, IReadOnlyList<string> EventKeys);
+    public DeliveryState Snapshot() => new(playerNotifiedBattleKeys.Order(StringComparer.Ordinal).ToArray(),
+        playerNotifiedEventKeys.Order(StringComparer.Ordinal).ToArray());
+    public void Restore(DeliveryState state)
+    {
+        playerNotifiedBattleKeys.Clear(); playerNotifiedBattleKeys.UnionWith(state.BattleKeys);
+        playerNotifiedEventKeys.Clear(); playerNotifiedEventKeys.UnionWith(state.EventKeys);
     }
 }

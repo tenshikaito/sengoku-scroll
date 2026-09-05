@@ -278,8 +278,10 @@ public class CharacterDefinition : GameModelBase
 
     public sealed class ProficiencyStats
     {
+        [System.Text.Json.Serialization.JsonInclude]
         public byte Level;
 
+        [System.Text.Json.Serialization.JsonInclude]
         public byte Exp;
 
         public static implicit operator ProficiencyStats(byte level) => new() { Level = level };

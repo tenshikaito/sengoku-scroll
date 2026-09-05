@@ -145,12 +145,13 @@ public class SupplyConvoyDispatchHelper(
 
             created++;
 
-            if (TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData)
-                == scenarioMeta.PlayerForceId)
+            var recipient = TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData);
+            if (StrategyForcePerspective.ReceivesReports(scenarioMeta, recipient))
             {
                 dayOutcomeBuffer.AddEvent(new StrategyEventDto
                 {
                     Category = "LordTributeDispatched",
+                    RecipientForceId = recipient,
                     Brief = $"💰 钱纳队自 {origin.Name} 出发",
                     Message =
                         $"💰 钱纳运输队自 {origin.Name} 出发，向 {destination.Name} 运送税赋 " +
@@ -200,12 +201,13 @@ public class SupplyConvoyDispatchHelper(
         if (!TryCreateTributeConvoy(origin, destination, gameData, foodCargo, 0, TransportPurpose.Tribute))
             return false;
 
-        if (TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData)
-            == scenarioMeta.PlayerForceId)
+        var recipient = TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData);
+        if (StrategyForcePerspective.ReceivesReports(scenarioMeta, recipient))
         {
             dayOutcomeBuffer.AddEvent(new StrategyEventDto
             {
                 Category = "LordTributeDispatched",
+                RecipientForceId = recipient,
                 Brief = $"🌾 贡粮队自 {origin.Name} 出发",
                 Message =
                     $"🌾 贡粮运输队自 {origin.Name} 出发，向 {destination.Name} 运送 🌾{foodCargo:N0}"
@@ -245,11 +247,12 @@ public class SupplyConvoyDispatchHelper(
                     created++;
 
                     // 业务：玩家封地内商户出队时给玩家一条摘要
-                    if (origin.ForceId == scenarioMeta.PlayerForceId)
+                    if (StrategyForcePerspective.ReceivesReports(scenarioMeta, origin.ForceId))
                     {
                         dayOutcomeBuffer.AddEvent(new StrategyEventDto
                         {
                             Category = "TradeConvoyDispatched",
+                            RecipientForceId = origin.ForceId,
                             Brief = $"📦 贸易队 {merchant.Name} {origin.Name}→{destination.Name}",
                             Message =
                                 $"📦 {merchant.Name}贸易队自 {origin.Name} 出发，向 {destination.Name} 运送 🌾{cargo:N0}"
@@ -367,11 +370,12 @@ public class SupplyConvoyDispatchHelper(
                             destination,
                             gameData);
 
-                        if (tradeOrigin.ForceId == scenarioMeta.PlayerForceId && revenue > 0)
+                        if (StrategyForcePerspective.ReceivesReports(scenarioMeta, tradeOrigin.ForceId) && revenue > 0)
                         {
                             dayOutcomeBuffer.AddEvent(new StrategyEventDto
                             {
                                 Category = "TradeConvoyArrived",
+                                RecipientForceId = tradeOrigin.ForceId,
                                 Brief = $"📦 贸易队抵达 {destination.Name}",
                                 Message =
                                     $"📦 贸易队 {transport.Name} 抵达 {destination.Name}，" +
@@ -391,24 +395,26 @@ public class SupplyConvoyDispatchHelper(
                     if (gameData.Strongholds.TryGetValue(transport.TransportOriginStrongholdId, out var origin))
                     {
                         var playerCapitalId = StrategyLordHelper.ResolveLordResidenceStrongholdId(
-                            scenarioMeta.PlayerForceId,
+                            destination.ForceId,
                             gameData,
                             scenarioMeta);
 
                         if (destination.Id == playerCapitalId
-                            && TributeRoutingHelper.ResolveRealmRootForceId(origin.ForceId, gameData)
-                            == scenarioMeta.PlayerForceId)
+                            && transport.TransportPurpose is TransportPurpose.Tribute or TransportPurpose.TaxMoney
+                            && StrategyForcePerspective.ReceivesReports(scenarioMeta, destination.ForceId)
+                            && TributeRoutingHelper.ResolveTributeDestinationStrongholdId(origin, gameData, scenarioMeta) == destination.Id)
                         {
                             tributeLedger.RecordArrival(
                                 gameData.GameDate.Year,
                                 origin.Id,
                                 origin.Name,
                                 deliveredFood,
-                                deliveredMoney);
+                                deliveredMoney, destination.ForceId);
 
                             dayOutcomeBuffer.AddEvent(new StrategyEventDto
                             {
                                 Category = "LordTributeArrived",
+                                RecipientForceId = destination.ForceId,
                                 Brief = $"🌾 {origin.Name} 贡纳抵达 {destination.Name}",
                                 Message =
                                     $"🌾 贡纳运输队自 {origin.Name} 抵达 {destination.Name}，" +
@@ -439,11 +445,12 @@ public class SupplyConvoyDispatchHelper(
             var foodDelivered = transport.Food;
             TransportUnitActions.DeliverCargoToUnit(transport, unit);
 
-            if (unit.ForceId == scenarioMeta.PlayerForceId)
+            if (StrategyForcePerspective.ReceivesReports(scenarioMeta, unit.ForceId))
             {
                 dayOutcomeBuffer.AddEvent(new StrategyEventDto
                 {
                     Category = "SupplyConvoyArrived",
+                    RecipientForceId = unit.ForceId,
                     Brief = $"🌾 补给抵达 {unit.Name}",
                     Message =
                         $"🌾 运输队 {transport.Name} 向 {unit.Name} 卸粮 🌾{foodDelivered:N0}"

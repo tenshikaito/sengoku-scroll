@@ -24,12 +24,17 @@ public static class StrategySimulationBootstrap
         GameWorld world,
         StrategyScenarioMeta scenarioMeta,
         StrategyDayDebugOptions? dayDebugOptions = null,
-        StrategyAiTraceOptions? aiTraceOptions = null)
+        StrategyAiTraceOptions? aiTraceOptions = null,
+        ILoggerFactory? loggerFactory = null)
     {
         var services = new ServiceCollection();
         var worldContext = new GameWorldContext(world);
 
-        services.AddLogging(b => b.AddConsole());
+        // Each world must not create its own console logger/queue. The application
+        // owns logging configuration; standalone simulation is silent by default.
+        services.AddLogging();
+        services.AddSingleton<ILoggerFactory>(loggerFactory
+            ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
         services.AddSengokuLocalization();
         services.AddSingleton(Options.Create(dayDebugOptions ?? new StrategyDayDebugOptions
         {
@@ -54,19 +59,27 @@ public static class StrategySimulationBootstrap
 
         var root = services.BuildServiceProvider();
         var scope = root.CreateScope();
-        var sp = scope.ServiceProvider;
+        try
+        {
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<StrategyForceLordRegistry>().Initialize(scenarioMeta);
+            sp.GetRequiredService<StrategyVisibilityLedger>().Initialize(world, scenarioMeta);
 
-        sp.GetRequiredService<StrategyForceLordRegistry>().Initialize(scenarioMeta);
-        sp.GetRequiredService<StrategyVisibilityLedger>().Initialize(world, scenarioMeta);
-
-        return new StrategySimulationScope(
-            root,
-            scope,
-            world,
-            scenarioMeta,
-            sp.GetRequiredKeyedService<IGameEngine>(ServiceConstants.StrategyGameEngine),
-            sp.GetRequiredService<IGameContext>(),
-            sp.GetRequiredService<StrategyMovementTrace>());
+            return new StrategySimulationScope(
+                root,
+                scope,
+                world,
+                scenarioMeta,
+                sp.GetRequiredKeyedService<IGameEngine>(ServiceConstants.StrategyGameEngine),
+                sp.GetRequiredService<IGameContext>(),
+                sp.GetRequiredService<StrategyMovementTrace>());
+        }
+        catch
+        {
+            scope.Dispose();
+            root.Dispose();
+            throw;
+        }
     }
 }
 

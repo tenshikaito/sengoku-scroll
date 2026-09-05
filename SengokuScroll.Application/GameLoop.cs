@@ -15,13 +15,17 @@ public interface IGameLoop : IEngineLoop
     Action? AfterNextTime { get; set; }
 }
 
-/// <summary>后台定时循环基类；暂停时阻塞在 <see cref="ManualResetEventSlim"/>。</summary>
+/// <summary>后台定时循环基类；暂停时异步等待，不占用线程池工作线程。</summary>
 public abstract class GameLoopBase : IGameLoop
 {
     private CancellationTokenSource? cts;
     private Task? task;
 
-    private readonly ManualResetEventSlim pauseEvent = new(true);
+    private readonly object lifecycleSync = new();
+    private TaskCompletionSource resumeSignal = CreateResumeSignal();
+
+    private static TaskCompletionSource CreateResumeSignal()
+        => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     protected abstract int NextTurnIntervalMiliseconds { get; }
 
@@ -34,74 +38,99 @@ public abstract class GameLoopBase : IGameLoop
     /// <summary>启动后台循环；<paramref name="isPause"/> 为 true 时保持暂停态。</summary>
     public void Start(bool isPause = false)
     {
-        if (task != null)
-            return;
-
-        if (isPause)
-            pauseEvent.Reset();
-        else
-            pauseEvent.Set();
-
-        cts = new CancellationTokenSource();
-        var token = cts.Token;
-
-        task = Task.Run(async () =>
+        lock (lifecycleSync)
         {
-            var interval = TimeSpan.FromMilliseconds(NextTurnIntervalMiliseconds);
+            if (task != null)
+                return;
 
-            while (!token.IsCancellationRequested)
+            resumeSignal = CreateResumeSignal();
+            if (!isPause) resumeSignal.TrySetResult();
+
+            cts = new CancellationTokenSource();
+            var token = cts.Token;
+
+            task = Task.Run(async () =>
             {
-                pauseEvent.Wait(token);
+                var interval = TimeSpan.FromMilliseconds(NextTurnIntervalMiliseconds);
 
-                var start = DateTime.UtcNow;
-
-                if (CanNextTime())
+                while (!token.IsCancellationRequested)
                 {
-                    // 日推进三阶段：前处理 → 引擎结算 → 后处理
-                    BeforeNextTime?.Invoke();
+                    Task resume;
+                    lock (lifecycleSync) resume = resumeSignal.Task;
+                    await resume.WaitAsync(token);
+                    token.ThrowIfCancellationRequested();
 
-                    NextTime?.Invoke();
+                    var start = System.Diagnostics.Stopwatch.GetTimestamp();
 
-                    AfterNextTime?.Invoke();
+                    if (CanNextTime())
+                    {
+                        // 日推进三阶段：前处理 → 引擎结算 → 后处理
+                        BeforeNextTime?.Invoke();
+
+                        NextTime?.Invoke();
+
+                        AfterNextTime?.Invoke();
+                    }
+
+                    var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(start);
+                    var delay = interval - elapsed;
+
+                    if (delay > TimeSpan.Zero)
+                        await Task.Delay(delay, token);
                 }
-
-                var elapsed = DateTime.UtcNow - start;
-                var delay = interval - elapsed;
-
-                if (delay > TimeSpan.Zero)
-                    await Task.Delay(delay, token);
-            }
-        }, token);
+            }, token);
+        }
     }
 
     protected abstract bool CanNextTime();
 
-    /// <summary>阻塞日/回合推进（循环在 pauseEvent 上等待）。</summary>
-    public void Pause() => pauseEvent.Reset();
+    /// <summary>暂停下一次日/回合推进；已经开始的一次结算会正常完成。</summary>
+    public void Pause()
+    {
+        lock (lifecycleSync)
+            if (resumeSignal.Task.IsCompleted) resumeSignal = CreateResumeSignal();
+    }
 
     /// <summary>解除暂停，继续推进。</summary>
-    public void Resume() => pauseEvent.Set();
+    public void Resume()
+    {
+        lock (lifecycleSync) resumeSignal.TrySetResult();
+    }
 
     /// <summary>取消循环并等待后台任务结束。</summary>
     public async Task StopAsync()
     {
-        if (cts == null)
-            return;
-
-        cts.Cancel();
+        CancellationTokenSource stoppingCts;
+        Task stoppingTask;
+        lock (lifecycleSync)
+        {
+            if (cts is null || task is null) return;
+            stoppingCts = cts;
+            stoppingTask = task;
+            stoppingCts.Cancel();
+        }
 
         try
         {
-            if (task != null)
-                await task;
+            await stoppingTask;
         }
         catch (OperationCanceledException)
         {
         }
 
-        cts.Dispose();
-        cts = null;
-        task = null;
+        finally
+        {
+            lock (lifecycleSync)
+            {
+                // Another StopAsync caller must not clear a subsequently restarted loop.
+                if (ReferenceEquals(task, stoppingTask))
+                {
+                    stoppingCts.Dispose();
+                    cts = null;
+                    task = null;
+                }
+            }
+        }
     }
 }
 

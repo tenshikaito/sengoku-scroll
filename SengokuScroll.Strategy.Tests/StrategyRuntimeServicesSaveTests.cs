@@ -86,7 +86,8 @@ public sealed class StrategyRuntimeServicesSaveTests
         var json = JsonSerializer.Serialize(captured);
         var roundTripped = JsonSerializer.Deserialize<JsonElement>(json);
 
-        using var target = StrategyTestWorldFactory.Create();
+        var reloaded = StrategyScenarioLoader.LoadFromFile(path);
+        using var target = StrategyTestWorldFactory.CreateFromWorld(reloaded.World, reloaded.Meta);
         Assert.True(StrategyRuntimeServicesSaveService.TryRestore(roundTripped, target.Services));
 
         var price = target.Services.GetRequiredService<StrategyIntelligenceLedger>()
@@ -109,7 +110,7 @@ public sealed class StrategyRuntimeServicesSaveTests
             .ConsumeMoneyTributeObligation(1) > 0);
 
         var monthly = target.Services.GetRequiredService<StrategyTributeLedger>()
-            .ConsumeMonthlySettlement(2, 4);
+            .ConsumeMonthlySettlement(2, 4, reloaded.Meta.PlayerForceId);
         Assert.Equal(2_000, monthly.TotalFood);
         Assert.Equal(300, monthly.TotalMoney);
         Assert.False(target.Services.GetRequiredService<StrategyMessageLedger>().TryAccept("report:701"));

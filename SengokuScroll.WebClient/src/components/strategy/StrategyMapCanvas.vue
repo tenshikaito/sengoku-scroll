@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Application, Container, Graphics, Text } from "pixi.js";
+import { destroyLayerChildren } from "@/utils/destroyLayerChildren";
 import type { StrategyWorldState, StrategyMapMasterState } from "@/api/strategy";
 import type { MapRouteOverlay, MapMoveRelayMarker } from "./mapRouteStyles";
 import { MOVE_RELAY_MARKER_STYLES, ROUTE_STYLES } from "./mapRouteStyles";
@@ -500,7 +501,7 @@ function fitMapToView() {
 function drawMap() {
   if (!mapLayer || !props.worldState?.map || !props.mapMaster) return;
 
-  mapLayer.removeChildren();
+  destroyLayerChildren(mapLayer);
 
   const { width, height } = props.worldState.map;
   const master = props.mapMaster;
@@ -655,7 +656,7 @@ function entityMapColor(forceId: number): number {
 function drawEntities() {
   if (!entityLayer || !props.worldState) return;
 
-  entityLayer.removeChildren();
+  destroyLayerChildren(entityLayer);
   const bounds = getVisibleCellBounds();
 
   for (const stronghold of props.worldState.strongholds) {
@@ -893,7 +894,7 @@ function drawEntities() {
 function drawRoutes() {
   if (!pathLayer) return;
 
-  pathLayer.removeChildren();
+  destroyLayerChildren(pathLayer);
   const bounds = getVisibleCellBounds();
 
   for (const route of props.routeOverlays ?? []) {
@@ -928,7 +929,7 @@ function drawRoutes() {
 function drawHighlights() {
   if (!highlightLayer) return;
 
-  highlightLayer.removeChildren();
+  destroyLayerChildren(highlightLayer);
   const bounds = getVisibleCellBounds();
 
   const relayAtSelected =
@@ -1184,12 +1185,19 @@ function scheduleInitialViewportFit() {
 async function initPixi() {
   if (!hostRef.value) return;
 
-  app = new Application();
-  await app.init({
+  const initializingApp = new Application();
+  const generation = pixiGeneration;
+  await initializingApp.init({
     background: "#1a1a2e",
     resizeTo: hostRef.value,
     antialias: true,
   });
+
+  if (generation !== pixiGeneration || !hostRef.value) {
+    initializingApp.destroy(true, { children: true });
+    return;
+  }
+  app = initializingApp;
 
   hostRef.value.appendChild(app.canvas);
 
@@ -1214,7 +1222,9 @@ async function initPixi() {
   scheduleInitialViewportFit();
 }
 
+let pixiGeneration = 0;
 function destroyPixi() {
+  pixiGeneration++;
   stopEdgeScroll();
   if (app?.canvas) {
     app.canvas.removeEventListener("wheel", onWheel);
