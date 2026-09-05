@@ -12,6 +12,6 @@ public enum EffectDurationKind : byte
     /// <summary>长期生效（无固定到期日，事件/和约等可移除）；ExpiresOn 通常为空。</summary>
     LongTerm = 1,
 
-    /// <summary>临时生效；须设置 ExpiresOn，日推进后到期移除（待 System 实装）。</summary>
+    /// <summary>临时生效；须设置 ExpiresOn，到期日当天日初移除；缺少到期日视为无效。</summary>
     Temporary = 2,
 }

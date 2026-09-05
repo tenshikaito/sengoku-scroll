@@ -37,7 +37,7 @@ internal static class StrategyScenarioCharacterFactory
             Birth = BirtyType.Landlord,
             CultureId = definition.CultureId ?? 1,
             RegligionId = definition.ReligionId ?? 1,
-            Personality = DefaultPersonality(),
+            Personality = ResolvePersonality(definition.Personality),
             Proficiency = DefaultProficiency(),
             Leadership = (byte)Math.Clamp(definition.Leadership ?? 70, 0, 100),
             Power = (byte)Math.Clamp(definition.Power ?? 70, 0, 100),
@@ -80,20 +80,20 @@ internal static class StrategyScenarioCharacterFactory
             unitLocation,
             CharacterLocationType.Unit);
 
-    private static PersonalityData DefaultPersonality()
-        => new()
+    private static PersonalityData ResolvePersonality(StrategyPersonalityDefinition? source)
+    {
+        source ??= new();
+        static byte Value(int value) => value is >= 0 and <= 100 ? (byte)value
+            : throw new ArgumentException("性格数值必须在 0–100 之间。");
+        return new()
         {
-            Temper = 50,
-            Courage = 50,
-            Principle = 50,
-            Action = 50,
-            Friendship = 50,
-            Ambition = 50,
-            Hobby = 50,
-            Desire = 50,
-            Drinking = 50,
-            Fortune = 50
+            Temper = Value(source.Temper), Courage = Value(source.Courage),
+            Principle = Value(source.Principle), Action = Value(source.Action),
+            Friendship = Value(source.Friendship), Ambition = Value(source.Ambition),
+            Hobby = Value(source.Hobby), Desire = Value(source.Desire),
+            Drinking = Value(source.Drinking), Fortune = Value(source.Fortune)
         };
+    }
 
     private static ProficiencyData DefaultProficiency()
     {

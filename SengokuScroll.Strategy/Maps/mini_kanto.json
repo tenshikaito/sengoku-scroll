@@ -5683,6 +5683,7 @@
       {
         "id": 1,
         "name": "织田信长",
+        "personality": { "courage": 72, "action": 38, "ambition": 88 },
         "forceId": 1,
         "strongholdId": 1,
         "leadership": 96,
@@ -5693,6 +5694,7 @@
       {
         "id": 2,
         "name": "柴田胜家",
+        "personality": { "courage": 82, "action": 42, "friendship": 72 },
         "forceId": 1,
         "leadership": 91,
         "power": 88,
@@ -5702,6 +5704,7 @@
       {
         "id": 3,
         "name": "今川氏真",
+        "personality": { "courage": 40, "action": 68, "principle": 65 },
         "forceId": 2,
         "strongholdId": 6,
         "leadership": 68,
@@ -5712,6 +5715,7 @@
       {
         "id": 4,
         "name": "林秀贞",
+        "personality": { "courage": 45, "action": 75, "principle": 60 },
         "forceId": 1,
         "strongholdId": 1,
         "leadership": 72,
@@ -5722,6 +5726,7 @@
       {
         "id": 5,
         "name": "北条氏康",
+        "personality": { "courage": 68, "action": 72, "ambition": 64 },
         "forceId": 2,
         "strongholdId": 4,
         "leadership": 88,
@@ -5732,6 +5737,7 @@
       {
         "id": 6,
         "name": "酒井忠次",
+        "personality": { "courage": 65, "action": 70, "friendship": 75 },
         "forceId": 3,
         "strongholdId": 2,
         "leadership": 85,
@@ -5742,6 +5748,7 @@
       {
         "id": 7,
         "name": "北条纲成",
+        "personality": { "courage": 80, "action": 48, "ambition": 60 },
         "forceId": 4,
         "strongholdId": 5,
         "leadership": 78,
@@ -5751,6 +5758,7 @@
       {
         "id": 8,
         "name": "里见义弘",
+        "personality": { "courage": 62, "action": 56, "ambition": 65 },
         "forceId": 5,
         "strongholdId": 11,
         "leadership": 74,
@@ -5760,6 +5768,7 @@
       {
         "id": 9,
         "name": "德川家康",
+        "personality": { "courage": 58, "action": 85, "ambition": 76 },
         "forceId": 6,
         "strongholdId": 12,
         "leadership": 90,
@@ -5771,6 +5780,7 @@
       {
         "id": 10,
         "name": "前田利家",
+        "personality": { "courage": 76, "action": 44, "friendship": 70 },
         "forceId": 1,
         "strongholdId": 1,
         "leadership": 85,
@@ -5781,6 +5791,7 @@
       {
         "id": 11,
         "name": "丹羽长秀",
+        "personality": { "courage": 57, "action": 76, "principle": 70 },
         "forceId": 1,
         "strongholdId": 1,
         "leadership": 82,

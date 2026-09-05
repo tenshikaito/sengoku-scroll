@@ -331,6 +331,7 @@ public sealed class StrategyStrongholdDefinition
 /// <summary>剧本角色（M3-b：指挥官/领主/代官等）。</summary>
 public sealed class StrategyCharacterDefinition
 {
+    public StrategyPersonalityDefinition? Personality { get; init; }
     public required int Id { get; init; }
 
     public required string Name { get; init; }
@@ -377,6 +378,21 @@ public sealed class StrategyCharacterDefinition
     public int? Strategy { get; init; }
 
     public int? Charm { get; init; }
+}
+
+/// <summary>游戏性格设定，非历史评价。缺省维度保持 50；Action 越高越慎重。</summary>
+public sealed class StrategyPersonalityDefinition
+{
+    public int Temper { get; init; } = 50;
+    public int Courage { get; init; } = 50;
+    public int Principle { get; init; } = 50;
+    public int Action { get; init; } = 50;
+    public int Friendship { get; init; } = 50;
+    public int Ambition { get; init; } = 50;
+    public int Hobby { get; init; } = 50;
+    public int Desire { get; init; } = 50;
+    public int Drinking { get; init; } = 50;
+    public int Fortune { get; init; } = 50;
 }
 
 /// <summary>军事单位开局配置。</summary>

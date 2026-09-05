@@ -26,7 +26,8 @@ public class StrategyCharacterAISystem(
     IGameContext context,
     StrategyScenarioMeta scenarioMeta,
     IPathfindingService pathfinding,
-    ILogger<StrategyCharacterAISystem> logger) : IStrategyCharacterAISystem
+    ILogger<StrategyCharacterAISystem> logger,
+    SengokuScroll.Strategy.Diagnostics.StrategyDayOutcomeBuffer events) : IStrategyCharacterAISystem
 {
     /// <summary>军事 AI 之前决策角色行动。</summary>
     public int Order { get; } = 17;
@@ -36,6 +37,7 @@ public class StrategyCharacterAISystem(
         var worldContext = context.GameWorldContext;
         var gameData = worldContext.GameWorld.GameData;
         var gameDate = gameData.GameDate;
+        SengokuScroll.Strategy.Actions.CharacterSocietyActions.AdvanceDay(gameData, scenarioMeta, events);
         foreach (var character in worldContext.EachCharacter())
         {
             if (character.ActionStatus == CharacterActionStatus.Resting)

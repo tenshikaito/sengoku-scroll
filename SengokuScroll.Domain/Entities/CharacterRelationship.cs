@@ -17,6 +17,9 @@ public sealed class CharacterRelationship
 
     /// <summary>信任度（-100 不信任 ~ 100 完全信任）。</summary>
     public sbyte Trust { get; set; }
+    public int? LastTalkDay { get; set; }
+    public int? LastGiftDay { get; set; }
+    public int? LastMarriageProposalDay { get; set; }
 
     /// <summary>持有方对该对象的看法条目（影响 Tab 子集；仅作用于私人亲疏/信赖/观感）。</summary>
     public List<EntityEffect> ViewEffects { get; set; } = [];
