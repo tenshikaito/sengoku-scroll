@@ -6,7 +6,11 @@ namespace SengokuScroll.Strategy.Helpers;
 /// </summary>
 public static class StrategyParallelWork
 {
-    /// <summary>为系统与前端保留一个逻辑处理器，避免长局计算占满线程池。</summary>
+    // Only one region fans out at a time. Other rooms (and nested regions) do
+    // useful sequential work instead of blocking or multiplying worker budgets.
+    private static readonly SemaphoreSlim ParallelRegion = new(1, 1);
+
+    /// <summary>单个并行区域的上限；这是并发度限制，不代表操作系统保留 CPU 核心。</summary>
     public static int MaxDegreeOfParallelism
         => Math.Max(1, Environment.ProcessorCount - 1);
 
@@ -22,18 +26,26 @@ public static class StrategyParallelWork
         if (source.Count == 0)
             return results;
 
-        if (source.Count < minimumParallelCount || MaxDegreeOfParallelism <= 1)
+        if (source.Count < minimumParallelCount || MaxDegreeOfParallelism <= 1
+            || !ParallelRegion.Wait(0))
         {
             for (var index = 0; index < source.Count; index++)
                 results[index] = selector(source[index]);
             return results;
         }
 
-        Parallel.For(
-            0,
-            source.Count,
-            new ParallelOptions { MaxDegreeOfParallelism = MaxDegreeOfParallelism },
-            index => results[index] = selector(source[index]));
+        try
+        {
+            Parallel.For(
+                0,
+                source.Count,
+                new ParallelOptions { MaxDegreeOfParallelism = MaxDegreeOfParallelism },
+                index => results[index] = selector(source[index]));
+        }
+        finally
+        {
+            ParallelRegion.Release();
+        }
         return results;
     }
 
@@ -42,17 +54,25 @@ public static class StrategyParallelWork
         ArgumentOutOfRangeException.ThrowIfNegative(count);
         ArgumentNullException.ThrowIfNull(action);
 
-        if (count < minimumParallelCount || MaxDegreeOfParallelism <= 1)
+        if (count < minimumParallelCount || MaxDegreeOfParallelism <= 1
+            || !ParallelRegion.Wait(0))
         {
             for (var index = 0; index < count; index++)
                 action(index);
             return;
         }
 
-        Parallel.For(
-            0,
-            count,
-            new ParallelOptions { MaxDegreeOfParallelism = MaxDegreeOfParallelism },
-            action);
+        try
+        {
+            Parallel.For(
+                0,
+                count,
+                new ParallelOptions { MaxDegreeOfParallelism = MaxDegreeOfParallelism },
+                action);
+        }
+        finally
+        {
+            ParallelRegion.Release();
+        }
     }
 }

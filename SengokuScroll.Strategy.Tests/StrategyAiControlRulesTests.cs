@@ -6,6 +6,13 @@ namespace SengokuScroll.Strategy.Tests;
 public sealed class StrategyAiControlRulesTests
 {
     [Fact]
+    public void Multiplayer_NoConnectedPlayers_DoesNotFallBackToSinglePlayer()
+    {
+        var meta = new StrategyScenarioMeta { HasHumanControlConfiguration = true };
+        Assert.True(StrategyAiControlRules.IsForceAiControlled(meta, meta.PlayerForceId));
+    }
+
+    [Fact]
     public void Multiplayer_HumanForcesAreNotAiControlled()
     {
         var meta = new StrategyScenarioMeta

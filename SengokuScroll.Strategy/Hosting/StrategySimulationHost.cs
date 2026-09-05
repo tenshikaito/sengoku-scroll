@@ -1265,6 +1265,7 @@ public sealed class StrategySimulationHost : IDisposable
                 return GameError.ForceError.ForceNotFound;
 
             simulation.ScenarioMeta.HumanControlledForceIds = normalized;
+            simulation.ScenarioMeta.HasHumanControlConfiguration = true;
             return GameResult.Ok();
         }
     }
@@ -1359,52 +1360,84 @@ public sealed class StrategySimulationHost : IDisposable
     {
         lock (sync)
         {
-            if (string.IsNullOrWhiteSpace(save.ScenarioId))
+            if (save is null || string.IsNullOrWhiteSpace(save.ScenarioId)
+                || save.Date is null || save.Forces is null || save.Units is null
+                || save.Strongholds is null || save.FormatVersion is < 1 or > 2)
                 return GameError.DataNotFound;
 
-            var difficulty = Enum.TryParse<StrategyDifficulty>(
-                save.Difficulty,
-                ignoreCase: true,
-                out var savedDifficulty)
-                ? savedDifficulty
-                : (StrategyDifficulty?)null;
-            var loadOptions = difficulty is null && save.AllForcesAiControlled is null
-                ? null
-                : new StrategyLoadOptions
-                {
-                    Difficulty = difficulty,
-                    CustomStartOptions = difficulty == StrategyDifficulty.Custom && save.StartOptions is not null
-                        ? GameStartOptionsMapper.FromDto(save.StartOptions)
-                        : null,
-                    AllForcesAiControlled = save.AllForcesAiControlled ?? false,
-                };
-
-            var loadResult = LoadScenario(save.ScenarioId, loadOptions);
-            if (!loadResult.IsSuccess)
-                return loadResult.Error!;
-
-            if (simulation is null)
-                return GameError.DataNotFound;
-
-            StrategyWorldSaveService.Apply(save, simulation.World);
-            StrategyRuntimeServicesSaveService.TryRestore(save.RuntimeServices, simulation.Services);
-            simulation.MovementTrace.Clear();
-            simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
-
-            var ledger = simulation.Services.GetRequiredService<StrategyVisibilityLedger>();
-            if (save.Visibility is not null)
+            // Build/validate the replacement while retaining the old scope. A bad
+            // file must never erase the game that was open before loading it.
+            var previousSimulation = simulation;
+            var previousScenarioId = LoadedScenarioId;
+            var committed = false;
+            simulation = null;
+            try
             {
-                var tileMap = simulation.World.GameMapMasterData.TileMap;
-                ledger.ApplySave(
-                    save.PlayerForceId,
-                    save.Visibility,
-                    tileMap.Width,
-                    tileMap.Height);
+                var difficulty = Enum.TryParse<StrategyDifficulty>(
+                    save.Difficulty,
+                    ignoreCase: true,
+                    out var savedDifficulty)
+                    ? savedDifficulty
+                    : (StrategyDifficulty?)null;
+                var loadOptions = difficulty is null && save.AllForcesAiControlled is null
+                    ? null
+                    : new StrategyLoadOptions
+                    {
+                        Difficulty = difficulty,
+                        CustomStartOptions = difficulty == StrategyDifficulty.Custom && save.StartOptions is not null
+                            ? GameStartOptionsMapper.FromDto(save.StartOptions)
+                            : null,
+                        AllForcesAiControlled = save.AllForcesAiControlled ?? false,
+                    };
+
+                var loadResult = LoadScenario(save.ScenarioId, loadOptions);
+                if (!loadResult.IsSuccess)
+                    return loadResult.Error!;
+
+                if (simulation is null)
+                    return GameError.DataNotFound;
+
+                StrategyWorldSaveService.Apply(save, simulation.World);
+                if (!simulation.World.GameData.Forces.ContainsKey(save.PlayerForceId))
+                    return GameError.DataNotFound;
+                simulation.ScenarioMeta.PlayerForceId = save.PlayerForceId;
+                StrategyRuntimeServicesSaveService.TryRestore(save.RuntimeServices, simulation.Services);
+                simulation.MovementTrace.Clear();
+                simulation.Services.GetRequiredService<StrategyAiDecisionTrace>().Clear();
+
+                var ledger = simulation.Services.GetRequiredService<StrategyVisibilityLedger>();
+                if (save.Visibility is not null)
+                {
+                    var tileMap = simulation.World.GameMapMasterData.TileMap;
+                    ledger.ApplySave(
+                        save.PlayerForceId,
+                        save.Visibility,
+                        tileMap.Width,
+                        tileMap.Height);
+                }
+
+                ledger.Recompute(simulation.World, simulation.ScenarioMeta);
+
+                var result = BuildStateResult();
+                if (!result.IsSuccess) return result;
+                committed = true;
+                previousSimulation?.Dispose();
+                return result;
             }
-
-            ledger.Recompute(simulation.World, simulation.ScenarioMeta);
-
-            return BuildStateResult();
+            catch (Exception ex) when (ex is JsonException or ArgumentException
+                or InvalidOperationException or NullReferenceException or KeyNotFoundException)
+            {
+                return GameError.DataNotFound;
+            }
+            finally
+            {
+                if (!committed)
+                {
+                    simulation?.Dispose();
+                    simulation = previousSimulation;
+                    LoadedScenarioId = previousScenarioId;
+                }
+            }
         }
     }
 
@@ -2339,6 +2372,11 @@ public sealed class StrategySimulationHost : IDisposable
 
     private static string? ResolveScenarioPath(string scenarioId)
     {
+        // Scenario IDs are filenames, not arbitrary client-supplied paths.
+        if (string.IsNullOrWhiteSpace(scenarioId) || scenarioId.Length > 100
+            || scenarioId.Contains('/') || scenarioId.Contains('\\')
+            || scenarioId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            return null;
         var fileName = scenarioId.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
             ? scenarioId
             : $"{scenarioId}.json";

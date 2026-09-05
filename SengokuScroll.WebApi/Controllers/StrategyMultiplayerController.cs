@@ -10,7 +10,8 @@ namespace SengokuScroll.WebApi.Controllers;
 [Route("api/multiplayer/rooms")]
 public sealed class StrategyMultiplayerController(
     StrategyMultiplayerRoomManager roomManager,
-    IHubContext<StrategyRoomHub> hub) : ControllerBase
+    IHubContext<StrategyRoomHub> hub,
+    ILogger<StrategyMultiplayerController> logger) : ControllerBase
 {
     [HttpGet]
     public IActionResult ListRooms() => Ok(roomManager.ListRooms());
@@ -78,6 +79,24 @@ public sealed class StrategyMultiplayerController(
         }
     }
 
+    [HttpGet("{roomId}/heartbeat")]
+    public async Task<IActionResult> Heartbeat(string roomId)
+    {
+        if (!roomManager.TryGetRoom(roomId, out var room))
+            return NotFound(new ApiErrorResponse("RoomNotFound"));
+        if (!TryReadPlayerToken(out var token))
+            return Unauthorized(new ApiErrorResponse("MissingPlayerToken"));
+        await room.Gate.WaitAsync(HttpContext.RequestAborted);
+        try
+        {
+            if (!room.TryAuthenticate(token, out var player))
+                return Unauthorized(new ApiErrorResponse("InvalidRoomCredentials"));
+            room.MarkConnected(player);
+            return Ok(room.ToDto());
+        }
+        finally { room.Gate.Release(); }
+    }
+
     [HttpPost("{roomId}/reconnect")]
     public async Task<IActionResult> Reconnect(
         string roomId,
@@ -115,7 +134,6 @@ public sealed class StrategyMultiplayerController(
             return Unauthorized(new ApiErrorResponse("MissingPlayerToken"));
 
         await room.Gate.WaitAsync(HttpContext.RequestAborted);
-        var removeEmptyRoom = false;
         try
         {
             if (!room.TryAuthenticate(token, out var player))
@@ -125,14 +143,13 @@ public sealed class StrategyMultiplayerController(
             room.RefreshHumanControlledForces();
             var snapshot = room.ToDto();
             await BroadcastRoomChanged(room, "PlayerDisconnected");
-            removeEmptyRoom = room.PlayerCount == 0;
+            if (room.PlayerCount == 0)
+                roomManager.TryRemoveRoom(room.RoomId);
             return Ok(snapshot);
         }
         finally
         {
             room.Gate.Release();
-            if (removeEmptyRoom)
-                roomManager.TryRemoveRoom(room.RoomId);
         }
     }
 
@@ -155,9 +172,13 @@ public sealed class StrategyMultiplayerController(
             if (!room.TryAuthenticate(token, out var player))
                 return Unauthorized(new ApiErrorResponse("InvalidRoomCredentials"));
 
+            if (request.ExpectedTurn is null || request.ExpectedTurn != room.TurnNumber)
+                return Conflict(new ApiErrorResponse("StaleTurn"));
+
             commandId = Request.Headers[StrategyMultiplayerHeaders.CommandId].FirstOrDefault()?.Trim();
             if (string.IsNullOrWhiteSpace(commandId) || commandId.Length > 100)
                 return BadRequest(new ApiErrorResponse("MissingOrInvalidCommandId"));
+            commandId = player.PlayerId + ":" + commandId;
             if (!room.TryReserveCommandId(commandId))
                 return Conflict(new ApiErrorResponse("DuplicateCommand"));
             commandReserved = true;
@@ -198,9 +219,9 @@ public sealed class StrategyMultiplayerController(
                     };
                 }
 
+                commandSucceeded = true;
                 await BroadcastRoomChanged(room, shouldAdvance ? "WorldAdvanced" : "ReadyChanged");
                 Response.Headers[StrategyMultiplayerHeaders.WorldVersion] = room.WorldVersion.ToString();
-                commandSucceeded = true;
                 return Ok(new StrategyMultiplayerReadyResponse
                 {
                     Room = room.ToDto(),
@@ -223,8 +244,12 @@ public sealed class StrategyMultiplayerController(
         return token.Length > 0;
     }
 
-    private Task BroadcastRoomChanged(StrategyMultiplayerRoomSession room, string reason)
-        => hub.Clients.Group(StrategyRoomHub.GroupName(room.RoomId)).SendAsync(
+    private async Task BroadcastRoomChanged(StrategyMultiplayerRoomSession room, string reason)
+    {
+        try
+        {
+            using var notificationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await hub.Clients.Group(StrategyRoomHub.GroupName(room.RoomId)).SendAsync(
             "WorldChanged",
             new
             {
@@ -232,5 +257,13 @@ public sealed class StrategyMultiplayerController(
                 worldVersion = room.WorldVersion,
                 reason
             },
-            HttpContext.RequestAborted);
+                notificationTimeout.Token);
+        }
+        catch (Exception ex)
+        {
+            // A notification failure must not undo command deduplication after commit.
+            // The polling client can recover the committed state.
+            logger.LogWarning(ex, "Room notification failed for {RoomId}", room.RoomId);
+        }
+    }
 }

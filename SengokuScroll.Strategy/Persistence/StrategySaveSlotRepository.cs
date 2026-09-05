@@ -16,6 +16,7 @@ public sealed class StrategySaveSlotRepository
     };
 
     private readonly string saveDirectory;
+    private readonly object[] slotLocks = Enumerable.Range(0, MaxSlots).Select(_ => new object()).ToArray();
 
     public StrategySaveSlotRepository(string saveDirectory)
     {
@@ -50,16 +51,29 @@ public sealed class StrategySaveSlotRepository
     public StrategySaveSlotEnvelope? ReadEnvelope(int slot)
     {
         ValidateSlot(slot);
+        lock (slotLocks[slot - 1])
+            return ReadEnvelopeCore(slot);
+    }
+
+    private StrategySaveSlotEnvelope? ReadEnvelopeCore(int slot)
+    {
+        ValidateSlot(slot);
         var path = SlotPath(slot);
         if (!File.Exists(path))
             return null;
 
         try
         {
-            var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<StrategySaveSlotEnvelope>(json, JsonOptions);
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            var envelope = JsonSerializer.Deserialize<StrategySaveSlotEnvelope>(stream, JsonOptions);
+            return envelope?.Save?.Date is null ? null : envelope;
         }
         catch (JsonException)
+        {
+            return null;
+        }
+        catch (FileNotFoundException)
         {
             return null;
         }
@@ -68,8 +82,35 @@ public sealed class StrategySaveSlotRepository
     public StrategySaveSlotSummary WriteSlot(int slot, StrategySaveSlotEnvelope envelope)
     {
         ValidateSlot(slot);
+        lock (slotLocks[slot - 1])
+            return WriteSlotCore(slot, envelope);
+    }
+
+    private StrategySaveSlotSummary WriteSlotCore(int slot, StrategySaveSlotEnvelope envelope)
+    {
+        ValidateSlot(slot);
+        ArgumentNullException.ThrowIfNull(envelope);
+        ArgumentNullException.ThrowIfNull(envelope.Save);
+        ArgumentNullException.ThrowIfNull(envelope.Save.Date);
         var json = JsonSerializer.Serialize(envelope, JsonOptions);
-        File.WriteAllText(SlotPath(slot), json);
+        var destination = SlotPath(slot);
+        var temporary = Path.Combine(saveDirectory, $"slot-{slot:D2}-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+                stream.Write(bytes);
+                stream.Flush(flushToDisk: true);
+            }
+            // Same-directory rename publishes a complete file without truncating
+            // the previous save. Readers can keep their old file handle open.
+            File.Move(temporary, destination, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
         return ToSummary(slot, envelope);
     }
 

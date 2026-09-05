@@ -57,7 +57,7 @@ import {
   type MapPoint,
   type StrategyPeaceTermsPayload,
 } from "@/api/strategy";
-import { leaveMultiplayerRoom, readMultiplayerSession } from "@/api/multiplayerClient";
+import { heartbeatMultiplayerRoom, leaveMultiplayerRoom, readMultiplayerSession } from "@/api/multiplayerClient";
 import StrategyMapCanvas from "@/components/strategy/StrategyMapCanvas.vue";
 import StrategyMapCellEntityPicker from "@/components/strategy/StrategyMapCellEntityPicker.vue";
 import StrategyMapLoadingScene, {
@@ -939,6 +939,8 @@ const AUTO_DAY_BASE_MS = 2000;
 
 let autoAdvanceTimer: ReturnType<typeof setTimeout> | null = null;
 let multiplayerPollTimer: ReturnType<typeof setInterval> | null = null;
+let multiplayerPollPending = false;
+let multiplayerPollGeneration = 0;
 let autoAdvanceGeneration = 0;
 
 function clearAutoAdvanceTimer() {
@@ -3159,7 +3161,7 @@ async function executeMove(target: StrategyMoveTarget, via: MapPoint[] = []) {
 }
 
 async function refreshMovementTrace() {
-  if (apiMode.value === "mock") return;
+  if (apiMode.value === "mock" || multiplayerSession.value) return;
   try {
     movementTrace.value = await getMovementTrace();
   } catch {
@@ -3268,16 +3270,30 @@ async function resumeExistingGame() {
 
 function startMultiplayerPolling() {
   if (multiplayerPollTimer) clearInterval(multiplayerPollTimer);
+  const generation = ++multiplayerPollGeneration;
+  let lastWorldVersion = -1;
   if (!multiplayerSession.value) return;
 
   multiplayerPollTimer = setInterval(async () => {
-    if (loading.value || initialLoading.value || !multiplayerSession.value) return;
+    if (multiplayerPollPending || loading.value || initialLoading.value || !multiplayerSession.value) return;
+    const originalState = state.value;
+    const session = multiplayerSession.value;
+    multiplayerPollPending = true;
     try {
+      const room = await heartbeatMultiplayerRoom(session);
+      if (generation !== multiplayerPollGeneration || multiplayerSession.value !== session) return;
+      if (room.worldVersion === lastWorldVersion) return;
       const next = await getStrategyState();
       await ensureMapMaster(next);
+      // A command, a session change or unmount may have occurred during fetch.
+      if (generation !== multiplayerPollGeneration || multiplayerSession.value !== session
+          || loading.value || state.value !== originalState) return;
       state.value = next;
+      lastWorldVersion = room.worldVersion;
     } catch {
       // 短暂掉线由下一次轮询恢复；主动操作仍会显示明确错误。
+    } finally {
+      multiplayerPollPending = false;
     }
   }, 2500);
 }
@@ -3317,6 +3333,7 @@ async function exitMultiplayerRoom() {
       type: "warning",
     });
     await leaveMultiplayerRoom();
+    multiplayerPollGeneration++;
     multiplayerSession.value = null;
     if (multiplayerPollTimer) clearInterval(multiplayerPollTimer);
     multiplayerPollTimer = null;
@@ -3644,6 +3661,7 @@ defineExpose({
 });
 
 onBeforeUnmount(() => {
+  multiplayerPollGeneration++;
   window.removeEventListener("keydown", handleStrategyKeydown);
   window.removeEventListener("pointerdown", handleGlobalPointerDown, true);
   window.removeEventListener("resize", updateHoverIntelPosition);

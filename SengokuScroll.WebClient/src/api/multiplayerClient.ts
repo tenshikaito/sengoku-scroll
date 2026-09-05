@@ -2,6 +2,7 @@ import type { StrategyAdvanceDayResponse } from "./strategyTypes";
 import { normalizeStrategyWorldState } from "@/utils/normalizeStrategyWorldState";
 import { normalizeBattleResult } from "@/utils/battleResult";
 import { normalizeStrategyEvent } from "@/utils/normalizeStrategyEvent";
+import { createCommandId } from "@/utils/commandId";
 
 const SESSION_KEY = "sengoku_scroll_multiplayer_session_v1";
 
@@ -39,6 +40,7 @@ export interface MultiplayerRoom {
   maxPlayers: number;
   playerCount: number;
   worldVersion: number;
+  turnNumber: number;
   players: MultiplayerPlayer[];
   forces: MultiplayerForce[];
 }
@@ -55,6 +57,12 @@ interface RoomJoinResponse {
   credentials: RoomCredentials;
 }
 
+export class MultiplayerRequestError extends Error {
+  constructor(public readonly status: number, public readonly code: string) {
+    super(`联机请求失败：${code}`);
+  }
+}
+
 export interface MultiplayerReadyResult {
   room: MultiplayerRoom;
   advance: StrategyAdvanceDayResponse;
@@ -63,7 +71,13 @@ export interface MultiplayerReadyResult {
 
 export function readMultiplayerSession(): MultiplayerSession | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    // Migrate an existing session once; separate tabs can then play distinct forces.
+    const legacy = localStorage.getItem(SESSION_KEY);
+    if (!sessionStorage.getItem(SESSION_KEY) && legacy) {
+      sessionStorage.setItem(SESSION_KEY, legacy);
+      localStorage.removeItem(SESSION_KEY);
+    }
+    const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const value = JSON.parse(raw) as Partial<MultiplayerSession>;
     if (!value.roomId || !value.playerId || !value.playerToken || !value.forceId) return null;
@@ -78,6 +92,7 @@ export function isMultiplayerSessionActive(): boolean {
 }
 
 export function clearMultiplayerSession(): void {
+  sessionStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(SESSION_KEY);
 }
 
@@ -91,7 +106,7 @@ function saveSession(response: RoomJoinResponse, playerName: string): Multiplaye
     forceId: response.credentials.forceId,
     isHost: response.credentials.isHost,
   };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
 }
 
@@ -106,7 +121,7 @@ async function multiplayerFetch<T>(
     headers["X-Sengoku-Room-Id"] = session.roomId;
     headers["X-Sengoku-Player-Token"] = session.playerToken;
     if (method !== "GET" && method !== "HEAD") {
-      headers["X-Sengoku-Command-Id"] = crypto.randomUUID();
+      headers["X-Sengoku-Command-Id"] = createCommandId();
     }
   }
 
@@ -123,13 +138,18 @@ async function multiplayerFetch<T>(
     } catch {
       // Keep the HTTP status text when the server did not return JSON.
     }
-    throw new Error(`联机请求失败：${code}`);
+    throw new MultiplayerRequestError(response.status, code);
   }
   return (await response.json()) as T;
 }
 
 export const listMultiplayerRooms = () =>
   multiplayerFetch<MultiplayerRoom[]>("GET", "/api/multiplayer/rooms", undefined, null);
+
+export function heartbeatMultiplayerRoom(session: MultiplayerSession): Promise<MultiplayerRoom> {
+  return multiplayerFetch<MultiplayerRoom>("GET",
+    `/api/multiplayer/rooms/${encodeURIComponent(session.roomId)}/heartbeat`, undefined, session);
+}
 
 export const listMultiplayerScenarioForces = (scenarioId = "mini_kanto") =>
   multiplayerFetch<MultiplayerForce[]>(
@@ -189,18 +209,25 @@ export async function reconnectMultiplayerSession(): Promise<MultiplayerRoom | n
 export async function leaveMultiplayerRoom(): Promise<void> {
   const session = readMultiplayerSession();
   if (!session) return;
-  await multiplayerFetch(
-    "POST",
-    `/api/multiplayer/rooms/${encodeURIComponent(session.roomId)}/leave`,
-    {},
-    session,
-  );
+  try {
+    await multiplayerFetch(
+      "POST",
+      `/api/multiplayer/rooms/${encodeURIComponent(session.roomId)}/leave`,
+      {},
+      session,
+    );
+  } catch (error) {
+    if (!(error instanceof MultiplayerRequestError) || ![401, 404].includes(error.status)) throw error;
+  }
   clearMultiplayerSession();
 }
 
 export async function setMultiplayerReady(ready = true): Promise<MultiplayerReadyResult> {
   const session = readMultiplayerSession();
   if (!session) throw new Error("没有有效的联机房间会话");
+  const room = await multiplayerFetch<MultiplayerRoom>(
+    "GET", `/api/multiplayer/rooms/${encodeURIComponent(session.roomId)}`, undefined, session,
+  );
   const response = await multiplayerFetch<{
     room: MultiplayerRoom;
     advance: Record<string, unknown>;
@@ -208,7 +235,7 @@ export async function setMultiplayerReady(ready = true): Promise<MultiplayerRead
   }>(
     "POST",
     `/api/multiplayer/rooms/${encodeURIComponent(session.roomId)}/ready`,
-    { ready },
+    { ready, expectedTurn: room.turnNumber },
     session,
   );
   const rawAdvance = response.advance;

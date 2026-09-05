@@ -11,7 +11,7 @@ public static class StrategyAiControlRules
     /// </summary>
     public static bool IsForceAiControlled(StrategyScenarioMeta meta, int forceId)
         => meta.AllForcesAiControlled
-           || (meta.HumanControlledForceIds.Count > 0
+           || (meta.HasHumanControlConfiguration || meta.HumanControlledForceIds.Count > 0
                ? !meta.HumanControlledForceIds.Contains(forceId)
                : forceId != meta.PlayerForceId);
 }

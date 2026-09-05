@@ -70,8 +70,8 @@ public class StrategyController : ControllerBase, IAsyncActionFilter
             return;
         }
 
-        var path = Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
-        if (IsBlockedMultiplayerPath(path))
+        var action = context.ActionDescriptor.RouteValues["action"] ?? string.Empty;
+        if (IsBlockedMultiplayerAction(action))
         {
             context.Result = StatusCode(
                 StatusCodes.Status403Forbidden,
@@ -93,7 +93,9 @@ public class StrategyController : ControllerBase, IAsyncActionFilter
 
             room.MarkConnected(player);
             room.RefreshHumanControlledForces();
-            var isMutation = IsMutatingRequest(Request.Method, path);
+            var isMutation = !HttpMethods.IsGet(Request.Method)
+                && !HttpMethods.IsHead(Request.Method)
+                && !action.StartsWith("Preview", StringComparison.Ordinal);
             if (isMutation)
             {
                 reservedCommandId = Request.Headers[StrategyMultiplayerHeaders.CommandId]
@@ -104,6 +106,7 @@ public class StrategyController : ControllerBase, IAsyncActionFilter
                     return;
                 }
 
+                reservedCommandId = player.PlayerId + ":" + reservedCommandId;
                 if (!room.TryReserveCommandId(reservedCommandId))
                 {
                     context.Result = Conflict(new ApiErrorResponse("DuplicateCommand"));
@@ -127,7 +130,10 @@ public class StrategyController : ControllerBase, IAsyncActionFilter
                 if (isMutation && commandSucceeded)
                 {
                     room.MarkWorldChanged();
-                    await roomHub.Clients.Group(StrategyRoomHub.GroupName(room.RoomId)).SendAsync(
+                    try
+                    {
+                        using var notificationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                        await roomHub.Clients.Group(StrategyRoomHub.GroupName(room.RoomId)).SendAsync(
                         "WorldChanged",
                         new
                         {
@@ -135,7 +141,12 @@ public class StrategyController : ControllerBase, IAsyncActionFilter
                             worldVersion = room.WorldVersion,
                             reason = "CommandCommitted"
                         },
-                        CancellationToken.None);
+                            notificationTimeout.Token);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Room notification failed for {RoomId}", room.RoomId);
+                    }
                 }
             }
 
@@ -150,19 +161,14 @@ public class StrategyController : ControllerBase, IAsyncActionFilter
         }
     }
 
-    private static bool IsBlockedMultiplayerPath(string path)
-        => path.EndsWith("/load", StringComparison.Ordinal)
-           || path.Contains("/advance-day", StringComparison.Ordinal)
-           || path.Contains("/advance-days", StringComparison.Ordinal)
-           || path.Contains("/restore-save", StringComparison.Ordinal)
-           || path.Contains("/save-slots", StringComparison.Ordinal)
-           || path.EndsWith("/save", StringComparison.Ordinal)
-           || path.Contains("/instant-battle", StringComparison.Ordinal);
-
-    private static bool IsMutatingRequest(string method, string path)
-        => !HttpMethods.IsGet(method)
-           && !HttpMethods.IsHead(method)
-           && !path.Contains("/preview", StringComparison.Ordinal);
+    // Match resolved actions, not raw URL suffixes (a trailing slash is equivalent
+    // in routing). Debug data and arbitrary intel injection bypass fog of war.
+    private static bool IsBlockedMultiplayerAction(string action)
+        => action is nameof(Load) or nameof(AdvanceDay) or nameof(AdvanceDays)
+            or nameof(RestoreSave) or nameof(ExportSave) or nameof(ListSaveSlots)
+            or nameof(SaveToSlot) or nameof(LoadFromSlot) or nameof(InstantBattle)
+            or nameof(GetMovementTrace) or nameof(GetAiDecisionTrace)
+            or nameof(GetDayDebugLog) or nameof(RecordEspionageIntel);
 
     private static bool IsSuccessfulResult(IActionResult? result)
     {

@@ -12,6 +12,8 @@ public sealed class StrategyScenarioMeta
     /// 该集合只影响 AI 接管，不改变当前请求的观察者身份。
     /// </summary>
     public IReadOnlySet<int> HumanControlledForceIds { get; set; } = new HashSet<int>();
+    /// <summary>区分单机默认空集合与联机全部玩家离线。</summary>
+    public bool HasHumanControlConfiguration { get; set; }
 
     /// <summary>全势力军事由 AI 接管（仿真/观战；玩家势力亦按 AI 逻辑行动）。</summary>
     public bool AllForcesAiControlled { get; init; }

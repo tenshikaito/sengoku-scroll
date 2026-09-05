@@ -57,4 +57,43 @@ public class StrategySaveSlotRepositoryTests : IDisposable
         if (Directory.Exists(tempRoot))
             Directory.Delete(tempRoot, recursive: true);
     }
+
+    [Fact]
+    public async Task ConcurrentSaves_ReadersAlwaysSeeCompleteEnvelope()
+    {
+        StrategySaveSlotEnvelope Create(int day) => new()
+        {
+            SavedAtUtc = DateTime.UtcNow,
+            LordName = "test",
+            Save = new StrategySaveDocument
+            {
+                ScenarioId = "mini_kanto",
+                PlayerForceId = 1,
+                Date = new() { Year = 1560, Month = 1, Day = day },
+                Forces = [],
+                Strongholds = [],
+                Units = []
+            }
+        };
+        repository.WriteSlot(1, Create(1));
+        var workers = Enumerable.Range(1, 8).Select(worker => Task.Run(() =>
+        {
+            for (var iteration = 0; iteration < 10; iteration++)
+            {
+                repository.WriteSlot(1, Create(worker));
+                Assert.NotNull(repository.ReadEnvelope(1));
+                Assert.True(repository.ReadSummary(1).Occupied);
+            }
+        }, TestContext.Current.CancellationToken));
+        await Task.WhenAll(workers);
+        Assert.Empty(Directory.GetFiles(Path.Combine(tempRoot, "strategy-saves"), "*.tmp"));
+    }
+
+    [Fact]
+    public void NullSavePayload_IsTreatedAsUnreadableInsteadOfCrashingSlotList()
+    {
+        File.WriteAllText(Path.Combine(tempRoot, "strategy-saves", "slot-01.json"),
+            "{\"savedAtUtc\":\"2026-01-01T00:00:00Z\",\"lordName\":\"test\",\"save\":null}");
+        Assert.False(repository.ReadSummary(1).Occupied);
+    }
 }

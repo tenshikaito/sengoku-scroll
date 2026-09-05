@@ -68,8 +68,7 @@ public static class MerchantBootstrapHelper
         string? leaderName = null)
     {
         if (stronghold.MerchantActors.Any(m =>
-                string.Equals(m.Name, houseName, StringComparison.Ordinal)
-                && m.ForceId == OrganizationForceHelper.ResolveForceId(houseName)))
+                string.Equals(m.Name, houseName, StringComparison.Ordinal)))
         {
             return;
         }

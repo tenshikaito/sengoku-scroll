@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from "vue";
+import { ElMessage } from "element-plus";
 import StrategyPanel from "@/views/Strategy.vue";
 import StrategyGameStartDialog from "@/components/strategy/StrategyGameStartDialog.vue";
 import StrategyMultiplayerLobbyDialog from "@/components/strategy/StrategyMultiplayerLobbyDialog.vue";
@@ -9,6 +10,7 @@ import {
   clearMultiplayerSession,
   readMultiplayerSession,
   reconnectMultiplayerSession,
+  MultiplayerRequestError,
   type MultiplayerSession,
 } from "@/api/multiplayerClient";
 
@@ -54,8 +56,12 @@ onMounted(async () => {
     gameActive.value = true;
     await nextTick();
     await strategyRef.value?.resumeMultiplayerGame();
-  } catch {
-    clearMultiplayerSession();
+  } catch (error) {
+    if (error instanceof MultiplayerRequestError && [401, 404].includes(error.status)) {
+      clearMultiplayerSession();
+    } else {
+      ElMessage.warning("暂时无法重连房间，已保留会话；网络恢复后刷新页面重试。");
+    }
   }
 });
 </script>

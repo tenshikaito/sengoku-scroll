@@ -36,6 +36,7 @@ public sealed record StrategyMultiplayerReconnectRequest
 public sealed record StrategyMultiplayerReadyRequest
 {
     public bool Ready { get; init; } = true;
+    public long? ExpectedTurn { get; init; }
 }
 
 public sealed record StrategyMultiplayerRoomResponse
@@ -80,6 +81,7 @@ public sealed record StrategyMultiplayerRoomDto
     public required int PlayerCount { get; init; }
 
     public required long WorldVersion { get; init; }
+    public long TurnNumber { get; init; }
 
     public required IReadOnlyList<StrategyMultiplayerPlayerDto> Players { get; init; }
 

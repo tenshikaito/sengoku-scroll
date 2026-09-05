@@ -38,6 +38,8 @@ public abstract class GameLoopBase : IGameLoop
             return;
 
         if (isPause)
+            pauseEvent.Reset();
+        else
             pauseEvent.Set();
 
         cts = new CancellationTokenSource();

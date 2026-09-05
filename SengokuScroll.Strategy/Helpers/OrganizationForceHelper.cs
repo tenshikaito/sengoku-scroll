@@ -24,7 +24,7 @@ public static class OrganizationForceHelper
             "今井屋" => KnownIds.Imai,
             "南蛮商会" => KnownIds.Nanban,
             "证愿寺" => KnownIds.Shoganji,
-            _ => 10_100 + Math.Abs(StringComparer.Ordinal.GetHashCode(organizationName) % 8_900),
+            _ => 10_100 + DeterministicHash.Combine(organizationName) % 8_900,
         };
 
     public static bool IsOrganizationForce(Force force)
@@ -38,9 +38,18 @@ public static class OrganizationForceHelper
         string name,
         ForceCategory category)
     {
-        var id = ResolveForceId(name);
-        if (gameData.Forces.TryGetValue(id, out var existing))
+        // Preserve existing IDs in old saves, including pre-stable-hash IDs.
+        var existing = gameData.Forces.Values
+            .Where(force => force.Name == name && force.Category == category)
+            .OrderBy(force => force.Id)
+            .FirstOrDefault();
+        if (existing is not null)
             return existing;
+
+        var id = ResolveForceId(name);
+        // Hash collisions must never silently merge two distinct organizations.
+        while (gameData.Forces.ContainsKey(id))
+            id = checked(id + 1);
 
         var force = new Force
         {

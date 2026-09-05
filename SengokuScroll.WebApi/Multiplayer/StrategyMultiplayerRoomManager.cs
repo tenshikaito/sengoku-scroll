@@ -13,6 +13,7 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
 
     private readonly ConcurrentDictionary<string, StrategyMultiplayerRoomSession> rooms =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly object creationSync = new();
 
     public IReadOnlyList<StrategyMultiplayerRoomDto> ListRooms()
         => rooms.Values
@@ -28,6 +29,8 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
     {
         if (!rooms.TryRemove(NormalizeRoomId(roomId), out var room))
             return false;
+        // Called with the room gate held: waiters must be allowed to acquire it
+        // and observe the closed state rather than race SemaphoreSlim.Dispose.
         room.Dispose();
         return true;
     }
@@ -55,6 +58,12 @@ public sealed class StrategyMultiplayerRoomManager : IDisposable
     }
 
     public StrategyMultiplayerRoomResponse CreateRoom(StrategyMultiplayerCreateRoomRequest request)
+    {
+        lock (creationSync)
+            return CreateRoomCore(request);
+    }
+
+    private StrategyMultiplayerRoomResponse CreateRoomCore(StrategyMultiplayerCreateRoomRequest request)
     {
         if (rooms.Count >= MaximumRoomCount)
             throw new StrategyMultiplayerException("RoomLimitReached");
@@ -160,10 +169,13 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, StrategyMultiplayerPlayer> playersByToken =
         new(StringComparer.Ordinal);
-    private readonly HashSet<string> processedCommandIds = new(StringComparer.Ordinal);
-    private readonly Queue<string> processedCommandOrder = new();
+    private readonly Dictionary<string, LinkedListNode<string>> processedCommandIds = new(StringComparer.Ordinal);
+    private readonly LinkedList<string> processedCommandOrder = new();
+    private readonly TimeProvider clock;
     private long worldVersion = 1;
+    private long turnNumber;
     private bool hasStarted;
+    private bool closed;
 
     public StrategyMultiplayerRoomSession(
         string roomId,
@@ -171,7 +183,8 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
         string scenarioId,
         int maxPlayers,
         StrategySimulationHost host,
-        IReadOnlyList<StrategyMultiplayerForceDefinition> forces)
+        IReadOnlyList<StrategyMultiplayerForceDefinition> forces,
+        TimeProvider? clock = null)
     {
         RoomId = roomId;
         RoomName = roomName;
@@ -179,6 +192,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
         MaxPlayers = maxPlayers;
         Host = host;
         Forces = forces;
+        this.clock = clock ?? TimeProvider.System;
     }
 
     public string RoomId { get; }
@@ -196,6 +210,8 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
     public SemaphoreSlim Gate { get; } = new(1, 1);
 
     public long WorldVersion => Interlocked.Read(ref worldVersion);
+    public long TurnNumber => Interlocked.Read(ref turnNumber);
+    public bool IsClosed { get { lock (sync) return closed; } }
 
     public int PlayerCount
     {
@@ -210,6 +226,8 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
     {
         lock (sync)
         {
+            if (closed)
+                throw new StrategyMultiplayerException("RoomNotFound");
             if (playersById.Count >= MaxPlayers)
                 throw new StrategyMultiplayerException("RoomFull");
             if (!Forces.Any(force => force.ForceId == forceId))
@@ -223,6 +241,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
                 StrategyMultiplayerRoomManager.NormalizeDisplayName(playerName, "玩家", 24),
                 forceId,
                 isHost);
+            player.LastSeenUtc = clock.GetUtcNow();
             playersById.Add(player.PlayerId, player);
             playersByToken.Add(player.PlayerToken, player);
             return player;
@@ -232,14 +251,17 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
     public bool TryAuthenticate(string playerToken, out StrategyMultiplayerPlayer player)
     {
         lock (sync)
-            return playersByToken.TryGetValue(playerToken, out player!);
+        {
+            player = null!;
+            return !closed && playersByToken.TryGetValue(playerToken, out player!);
+        }
     }
 
     public bool TryReconnect(string playerId, string playerToken, out StrategyMultiplayerPlayer player)
     {
         lock (sync)
         {
-            if (!playersById.TryGetValue(playerId, out player!)
+            if (closed || !playersById.TryGetValue(playerId, out player!)
                 || !string.Equals(player.PlayerToken, playerToken, StringComparison.Ordinal))
             {
                 player = null!;
@@ -247,7 +269,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
             }
 
             player.Connected = true;
-            player.LastSeenUtc = DateTimeOffset.UtcNow;
+            player.LastSeenUtc = clock.GetUtcNow();
             return true;
         }
     }
@@ -257,7 +279,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
         lock (sync)
         {
             player.Connected = true;
-            player.LastSeenUtc = DateTimeOffset.UtcNow;
+            player.LastSeenUtc = clock.GetUtcNow();
         }
     }
 
@@ -327,12 +349,15 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
     {
         lock (sync)
         {
-            if (!processedCommandIds.Add(commandId))
+            if (processedCommandIds.ContainsKey(commandId))
                 return false;
 
-            processedCommandOrder.Enqueue(commandId);
+            processedCommandIds.Add(commandId, processedCommandOrder.AddLast(commandId));
             while (processedCommandOrder.Count > ProcessedCommandCapacity)
-                processedCommandIds.Remove(processedCommandOrder.Dequeue());
+            {
+                processedCommandIds.Remove(processedCommandOrder.First!.Value);
+                processedCommandOrder.RemoveFirst();
+            }
             return true;
         }
     }
@@ -340,7 +365,10 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
     public void ReleaseCommandId(string commandId)
     {
         lock (sync)
-            processedCommandIds.Remove(commandId);
+        {
+            if (processedCommandIds.Remove(commandId, out var node))
+                processedCommandOrder.Remove(node);
+        }
     }
 
     public long MarkWorldChanged(bool started = false)
@@ -349,6 +377,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
         {
             lock (sync)
                 hasStarted = true;
+            Interlocked.Increment(ref turnNumber);
         }
         return Interlocked.Increment(ref worldVersion);
     }
@@ -368,6 +397,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
                 MaxPlayers = MaxPlayers,
                 PlayerCount = playersById.Count,
                 WorldVersion = WorldVersion,
+                TurnNumber = TurnNumber,
                 Players = playersById.Values
                     .OrderByDescending(player => player.IsHost)
                     .ThenBy(player => player.PlayerName, StringComparer.OrdinalIgnoreCase)
@@ -388,7 +418,7 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
 
     private void RefreshConnectionStatesNoLock()
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = clock.GetUtcNow();
         foreach (var player in playersById.Values)
         {
             if (player.Connected && now - player.LastSeenUtc > ConnectionLease)
@@ -401,8 +431,16 @@ public sealed class StrategyMultiplayerRoomSession : IDisposable
 
     public void Dispose()
     {
+        lock (sync)
+        {
+            if (closed) return;
+            closed = true;
+            playersById.Clear();
+            playersByToken.Clear();
+        }
         Host.Dispose();
-        Gate.Dispose();
+        // Gate has no unmanaged resource unless AvailableWaitHandle is accessed.
+        // Retain it for already queued requests; GC reclaims it with the room.
     }
 }
 

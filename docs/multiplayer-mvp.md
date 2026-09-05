@@ -7,12 +7,12 @@
 - 势力独占：同一势力同时只能由一名玩家占用。
 - 请求身份：房间号与 192-bit 随机玩家令牌。
 - 服务器权威：客户端沿用现有战略 API，但服务端在房间锁内切换观察/行动势力并执行全部规则校验。
-- 命令去重：联机写请求要求唯一 `X-Sengoku-Command-Id`，最近保留 2048 个命令号。
+- 命令去重：联机写请求要求唯一 `X-Sengoku-Command-Id`，按玩家隔离，房间最近保留 2048 个命令号。失败命令的缓存节点完整移除；通知失败不回滚已提交指令的去重记录。
 - 统一时钟：所有在线玩家准备后只推进一天，随后清空准备状态。
-- 断线容错：客户端轮询会续订在线状态；SignalR 断连或约 12 秒无活动后不再阻塞准备，重连时恢复原凭据和势力。
+- 断线容错：认证 HTTP 心跳或操作续订在线状态，约 12 秒无活动后不再阻塞准备。单个 SignalR socket 断开不立即踢掉仍有其他连接的玩家。
 - AI 托管：无人占用的势力由 AI 控制；真人势力的当主不被人物 AI 接管。
 - 独立情报：世界状态在映射前切换到请求者势力，迷雾、外交和谍报不会跨玩家泄漏。
-- 同步：服务端提供 SignalR 房间组和 `WorldChanged` 通知；当前内置网页客户端同时使用 2.5 秒轮询作为可靠回退。
+- 同步：服务端提供 SignalR 房间组和 `WorldChanged` 通知；内置网页每 2.5 秒发送轻量心跳，只在世界版本变化时拉取完整状态，不重叠轮询，也不覆盖请求期间已经更新的状态。
 - 重新加入：浏览器保存房间凭据，刷新页面后调用 reconnect 恢复会话。
 
 ## 请求约定
@@ -22,10 +22,10 @@
 ```http
 X-Sengoku-Room-Id: 10位房间代码
 X-Sengoku-Player-Token: 玩家私有令牌
-X-Sengoku-Command-Id: 每个写命令唯一 UUID
+X-Sengoku-Command-Id: 每个写命令唯一随机字符串（1–100 字符）
 ```
 
-响应包含当前 `X-Sengoku-World-Version`。直接加载剧本、直接推进日期、即时战斗、单机存档导出/恢复和存档槽接口在房间上下文中返回 403，防止客户端绕开房间规则。
+响应包含当前 `X-Sengoku-World-Version`。`ready` 请求必须提交 `{ "ready": true, "expectedTurn": 房间当前turnNumber }`，过期或缺失回合号返回 409。直接加载剧本、推进日期、即时战斗、单机存档、全局诊断与任意谍报注入接口在房间上下文中返回 403；规则按路由解析后的动作判定，尾斜杠不能绕过限制。
 
 大厅 API：
 
@@ -34,6 +34,7 @@ X-Sengoku-Command-Id: 每个写命令唯一 UUID
 | GET | `/api/multiplayer/rooms` | 房间列表 |
 | POST | `/api/multiplayer/rooms` | 创建房间并返回房主凭据 |
 | GET | `/api/multiplayer/rooms/{roomId}` | 房间与玩家准备状态 |
+| GET | `/api/multiplayer/rooms/{roomId}/heartbeat` | 认证并续订在线状态，返回版本与房间信息，不构造完整世界 |
 | POST | `/api/multiplayer/rooms/{roomId}/join` | 占用未被选择的势力 |
 | POST | `/api/multiplayer/rooms/{roomId}/reconnect` | 使用原玩家 ID 和令牌重连 |
 | POST | `/api/multiplayer/rooms/{roomId}/ready` | 设置准备；全员准备时推进一天 |
@@ -47,6 +48,7 @@ SignalR Hub：`/hubs/strategy`。客户端连接后调用 `JoinRoom(roomId, play
 - 不同房间可以由 ASP.NET Core 线程池并行处理，天然利用多核。
 - 单个房间使用 `SemaphoreSlim` 串行化命令、准备推进和玩家状态修改。
 - 房间内部继续使用 `StrategyParallelWork` 处理只读视野、AI 感知、DTO 和地图投影。
+- 进程内同一时刻只有一个区域展开并行；争用时其他区域直接顺序计算，避免嵌套等待和重复扩张线程预算。
 - 世界写操作仍固定顺序提交，保持同种子回放确定性。
 
 不要把一个房间内的两个玩家命令并行写进 `GameWorld`。扩展到多进程时，应按 `RoomId` 将整个房间固定路由到一个 actor/节点。
@@ -58,6 +60,8 @@ SignalR Hub：`/hubs/strategy`。客户端连接后调用 `JoinRoom(roomId, play
 ```powershell
 dotnet run --project .\SengokuScroll.WebApi\SengokuScroll.WebApi.csproj --launch-profile lan
 ```
+
+开发环境另开终端在 `SengokuScroll.WebClient` 运行 `npm run dev`，玩家访问主机 5173 端口。5100 在 Development 下不托管网页。
 
 发行版默认监听 `http://0.0.0.0:5100`。主机自己访问 `http://127.0.0.1:5100/`，其他设备访问 `http://主机局域网IP:5100/`。只应在可信局域网和 Windows“专用网络”防火墙范围内开放端口。
 

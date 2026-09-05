@@ -23,6 +23,8 @@ import {
 } from "./strategyDiagnostics";
 import { getAcceptLanguageHeader } from "@/i18n/localePreference";
 import { readMultiplayerSession, setMultiplayerReady } from "./multiplayerClient";
+import { createCommandId } from "@/utils/commandId";
+import { canUseInitialMockFallback, LiveRequestError } from "./apiFallbackPolicy";
 import {
   mockAdvanceDay,
   mockExecuteInstantBattle,
@@ -39,6 +41,7 @@ const STRATEGY_SAVE_STORAGE_KEY = "sengoku_scroll_strategy_save_v1";
 const STRATEGY_SAVE_SLOT_KEY_PREFIX = "sengoku_scroll_strategy_save_slot_";
 const STRATEGY_SAVE_SLOT_META_PREFIX = "sengoku_scroll_strategy_save_slot_meta_";
 const SAVE_SLOT_COUNT = 10;
+let hasLiveSession = false;
 
 async function fetchLive<T>(
   method: string,
@@ -59,7 +62,7 @@ async function fetchLive<T>(
     headers["X-Sengoku-Room-Id"] = multiplayer.roomId;
     headers["X-Sengoku-Player-Token"] = multiplayer.playerToken;
     if (method !== "GET" && method !== "HEAD") {
-      headers["X-Sengoku-Command-Id"] = crypto.randomUUID();
+      headers["X-Sengoku-Command-Id"] = createCommandId();
     }
   }
 
@@ -80,7 +83,7 @@ async function fetchLive<T>(
       ok: false,
       error: message,
     });
-    throw new Error(`网络错误 [${method} ${fullUrl}]：${message}`);
+    throw new LiveRequestError(`网络错误 [${method} ${fullUrl}]：${message}`, null);
   }
 
   if (!response.ok) {
@@ -107,10 +110,11 @@ async function fetchLive<T>(
       status: response.status,
       error: detail,
     });
-    throw new Error(`HTTP ${response.status} [${method} ${fullUrl}]：${detail}`);
+    throw new LiveRequestError(`HTTP ${response.status} [${method} ${fullUrl}]：${detail}`, response.status);
   }
 
   const data = (await response.json()) as T;
+  hasLiveSession = true;
   recordDiagnostic({
     method,
     path,
@@ -240,10 +244,12 @@ async function request<T>(
     return live();
   }
 
-  // auto：先连真实 API，失败则回退 Mock
+  // Auto only allows an initial read fallback. Never mask a rejected command or
+  // replace an established live game with unrelated demo state after a disconnect.
   try {
     return await live();
-  } catch {
+  } catch (error) {
+    if (!canUseInitialMockFallback(method, pathSuffix, error, hasLiveSession)) throw error;
     console.warn(`[Strategy API] Live 失败，回退 Mock：${method} ${STRATEGY_API_PREFIX}${pathSuffix}`);
     return runMock(method, pathSuffix, mock);
   }

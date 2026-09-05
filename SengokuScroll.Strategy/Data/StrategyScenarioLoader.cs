@@ -103,6 +103,7 @@ public static class StrategyScenarioLoader
         {
             PlayerForceId = meta.PlayerForceId,
             HumanControlledForceIds = meta.HumanControlledForceIds,
+            HasHumanControlConfiguration = meta.HasHumanControlConfiguration,
             AllForcesAiControlled = loadOptions.AllForcesAiControlled || meta.AllForcesAiControlled,
             Difficulty = difficulty,
             StartOptions = startOptions,

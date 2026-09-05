@@ -27,8 +27,7 @@ public static class StrongholdShopActions
             ? MerchantBootstrapHelper.ResolvePrimaryHouseName(stronghold.Id)
             : houseName.Trim();
 
-        var organizationId = OrganizationForceHelper.ResolveForceId(resolvedName);
-        if (stronghold.MerchantActors.Any(m => m.ForceId == organizationId))
+        if (stronghold.MerchantActors.Any(m => string.Equals(m.Name, resolvedName, StringComparison.Ordinal)))
             return GameError.DataNotFound;
 
         MerchantBootstrapHelper.EnsureMerchantShop(

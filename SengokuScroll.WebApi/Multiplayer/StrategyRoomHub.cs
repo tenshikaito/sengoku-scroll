@@ -8,8 +8,7 @@ public sealed class StrategyRoomHub(StrategyMultiplayerRoomManager roomManager) 
 
     public async Task JoinRoom(string roomId, string playerToken)
     {
-        if (!roomManager.TryGetRoom(roomId, out var room)
-            || !room.TryAuthenticate(playerToken, out var player))
+        if (!roomManager.TryGetRoom(roomId, out var room))
         {
             throw new HubException("InvalidRoomCredentials");
         }
@@ -17,6 +16,8 @@ public sealed class StrategyRoomHub(StrategyMultiplayerRoomManager roomManager) 
         await room.Gate.WaitAsync(Context.ConnectionAborted);
         try
         {
+            if (!room.TryAuthenticate(playerToken, out var player))
+                throw new HubException("InvalidRoomCredentials");
             room.MarkConnected(player);
             room.RefreshHumanControlledForces();
         }
@@ -26,33 +27,12 @@ public sealed class StrategyRoomHub(StrategyMultiplayerRoomManager roomManager) 
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(room.RoomId));
-        Context.Items[nameof(StrategyMultiplayerRoomSession)] = room;
-        Context.Items[nameof(StrategyMultiplayerPlayer)] = player;
         await Clients.Caller.SendAsync(
             "RoomJoined",
             new { roomId = room.RoomId, worldVersion = room.WorldVersion },
             Context.ConnectionAborted);
     }
 
-    public override async Task OnDisconnectedAsync(Exception? exception)
-    {
-        if (Context.Items.TryGetValue(nameof(StrategyMultiplayerRoomSession), out var roomValue)
-            && roomValue is StrategyMultiplayerRoomSession room
-            && Context.Items.TryGetValue(nameof(StrategyMultiplayerPlayer), out var playerValue)
-            && playerValue is StrategyMultiplayerPlayer player)
-        {
-            await room.Gate.WaitAsync();
-            try
-            {
-                room.MarkDisconnected(player);
-                room.RefreshHumanControlledForces();
-            }
-            finally
-            {
-                room.Gate.Release();
-            }
-        }
-
-        await base.OnDisconnectedAsync(exception);
-    }
+    // Presence is renewed by authenticated HTTP activity. A single socket closing
+    // must not disconnect a player whose other tab/connection is still active.
 }

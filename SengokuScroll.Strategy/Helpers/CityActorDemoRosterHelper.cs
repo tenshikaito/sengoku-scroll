@@ -42,7 +42,7 @@ public static class CityActorDemoRosterHelper
 
     private static void EnsureDemoStaffCharacters(GameData gameData, Stronghold stronghold)
     {
-        var atsutaId = OrganizationForceHelper.ResolveForceId("热田神宫");
+        var atsutaId = OrganizationForceHelper.GetOrCreate(gameData, "热田神宫", ForceCategory.Religion).Id;
         EnsureCharacter(gameData, stronghold, 90_011, "三井高利", OrganizationForceHelper.KnownIds.Mitsui);
         EnsureCharacter(gameData, stronghold, 90_014, "三井与一", OrganizationForceHelper.KnownIds.Mitsui);
         EnsureCharacter(gameData, stronghold, 90_012, "今井宗久", OrganizationForceHelper.KnownIds.Imai);
@@ -103,7 +103,7 @@ public static class CityActorDemoRosterHelper
 
     private static void EnsureDemoReligions(GameData gameData, Stronghold stronghold)
     {
-        var atsutaId = OrganizationForceHelper.ResolveForceId("热田神宫");
+        var atsutaId = OrganizationForceHelper.GetOrCreate(gameData, "热田神宫", ForceCategory.Religion).Id;
         var primary = stronghold.ReligionActors.FirstOrDefault(r => r.Id == stronghold.Id * 1000 + 8);
         if (primary != null)
         {

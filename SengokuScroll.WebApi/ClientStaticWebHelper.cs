@@ -16,7 +16,10 @@ internal static class ClientStaticWebHelper
         if (embedded.GetFileInfo("index.html").Exists)
             return embedded;
 
-        var diskIndex = Path.Combine(environment.WebRootPath, "index.html");
+        var webRoot = environment.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot))
+            return null;
+        var diskIndex = Path.Combine(webRoot, "index.html");
         if (File.Exists(diskIndex))
             return environment.WebRootFileProvider;
 

@@ -12,7 +12,7 @@
 | 内置剧本 | `mini_kanto` |
 | 后端 | .NET 10 / ASP.NET Core |
 | 前端 | Vue 3 / TypeScript / Vite / PixiJS / ECharts / Element Plus |
-| 自动化测试 | 402 项，覆盖应用层、策略仿真、多人房间与 Web API |
+| 自动化测试 | 424 项 .NET 测试 + 5 项前端回归测试 |
 | 存档 | V2 完整世界与运行时服务状态；10 个本地槽位；兼容旧存档 |
 | 确定性 | 固定种子、稳定哈希、并行有序输出、双局 365 日存档一致性测试 |
 | 发行方式 | Windows `win-x64` 自包含单文件包 |
@@ -113,7 +113,8 @@ API 同时挂载在 `/strategy` 和 `/api/strategy`。主要端点分组如下�
 
 统一调度入口为 `StrategyParallelWork`：
 
-- 最大并行度为 `Environment.ProcessorCount - 1`，最少 1，为系统、Web 和渲染线程保留一个逻辑处理器。
+- 单个并行区域最大并行度为 `Environment.ProcessorCount - 1`，最少 1；这不代表操作系统会保留一个核心。
+- 同一进程只允许一个计算区域展开并行；其他房间与嵌套计算继续顺序执行，避免各自重复申请整机并行度。
 - 小集合自动走顺序路径，避免线程调度成本超过收益。
 - `MapOrdered` 按输入索引写入结果；任务完成顺序不会改变输出顺序。
 - 并行阶段禁止直接修改共享世界，计算结果回到稳定顺序后再提交。
@@ -215,7 +216,7 @@ npm run build
 npm audit --omit=dev
 ```
 
-当前基线为 402/402 项 .NET 测试通过，解决方案构建 0 warning / 0 error，前端类型检查和生产构建通过，生产依赖审计无已知漏洞。关键回归还包括：
+当前基线为 424/424 项 .NET 测试通过，另有 5 项前端命令 ID 与失败回退回归测试；前端类型检查和生产构建通过。审查范围、修复与保留问题见 [项目复审](docs/project-review-2026-09-05.md)。关键回归还包括：
 
 - 全势力 AI 100 日与 365 日长稳仿真；
 - 两局同种子 365 日存档完全一致；
@@ -259,7 +260,7 @@ npm run dev
 dotnet run --project .\SengokuScroll.WebApi\SengokuScroll.WebApi.csproj --launch-profile lan
 ```
 
-其他设备随后访问 `http://主机局域网IP:5100/`。不要在没有 TLS、正式账号和限流的情况下把当前 MVP 直接暴露到公网。
+开发时还需启动前端 `npm run dev`，其他设备访问 `http://主机局域网IP:5173/`，由 Vite 转发 API。`lan` 配置使用 Development，5100 端口只提供后端；发行包才在 5100 同时提供网页。不要在没有 TLS、正式账号和限流的情况下把当前 MVP 直接暴露到公网。
 
 ## Windows 发行包
 
@@ -272,15 +273,24 @@ dotnet run --project .\SengokuScroll.WebApi\SengokuScroll.WebApi.csproj --launch
 脚本会构建前端，将静态资源嵌入 ASP.NET Core，并发布 `win-x64` 自包含单文件版本：
 
 ```text
-build/
+build/release-<随机编号>/
 ├─ SengokuScrollGame.exe
 ├─ LaunchGame.cmd
 └─ README.txt
 ```
 
-运行后访问 `http://127.0.0.1:5100/`。发行时还要把运行所需的 `Maps` 与可写的 `App_Data` 放在程序可访问的位置。`build/`、`App_Data/`、存档和本机日志不得提交到 Git。
+每次打包创建新目录，保留旧发行版和存档，不强制结束运行中的游戏。前端直接从 `dist` 嵌入，不删除开发目录中的 `wwwroot`。运行后访问 `http://127.0.0.1:5100/`；`Maps` 由发布复制，`App_Data` 存档需自行备份并迁移到新发行目录。`build/`、存档和本机日志不得提交到 Git。
 
 ## 版本更新目录
+
+### 2026-09-05 · 项目复审与可靠性修复
+
+- 修复联机 URL 限制绕过、调试情报暴露、去重淘汰、房间关闭竞态、过期准备请求与通知失败重试问题。
+- 修复 LAN HTTP 命令 ID、多标签页会话串用、轮询覆盖较新状态和瞬断时丢失重连凭据。
+- 增加轻量心跳；世界版本未变化时不再请求完整状态。
+- 存档采用每槽锁、临时文件刷盘与完整文件替换；恢复失败保留原局。
+- 修复暂停启动、组织 ID 跨进程漂移与碰撞、剧本路径越界；协调多房间并行预算。
+- 打包输出新目录，保留已有发行版、存档、运行中游戏和开发静态文件。
 
 仓库目前尚未建立正式语义化版本和 Release 标签。以下目录按本轮开发里程碑记录；仓库所有者验收后，建议把当前状态标记为 `v0.1.0-alpha`。
 

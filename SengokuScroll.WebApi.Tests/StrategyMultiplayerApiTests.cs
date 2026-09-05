@@ -72,35 +72,23 @@ public sealed class StrategyMultiplayerApiTests : IClassFixture<StrategyWebAppli
         Assert.Equal(HttpStatusCode.Unauthorized, missingToken.StatusCode);
 
         var state = await GetState(host.Room.RoomId, host.Credentials.PlayerToken);
-        var target = state.Strongholds.First(stronghold => stronghold.ForceId != host.Credentials.ForceId);
+        var target = state.Units.First(unit => unit.ForceId == host.Credentials.ForceId);
         var commandId = Guid.NewGuid().ToString("N");
         var first = await SendRoomJson(
             HttpMethod.Post,
-            "/api/strategy/espionage-intel",
+            $"/api/strategy/units/{target.Id}/directive",
             host.Room.RoomId,
             host.Credentials.PlayerToken,
-            new RecordEspionageIntelRequest
-            {
-                TargetKind = "Stronghold",
-                TargetId = target.Id,
-                Scope = "Military",
-                Precision = "Fuzzy"
-            },
+            new SetUnitDirectiveRequest { Directive = "Retreat" },
             commandId);
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
 
         var duplicate = await SendRoomJson(
             HttpMethod.Post,
-            "/api/strategy/espionage-intel",
+            $"/api/strategy/units/{target.Id}/directive",
             host.Room.RoomId,
             host.Credentials.PlayerToken,
-            new RecordEspionageIntelRequest
-            {
-                TargetKind = "Stronghold",
-                TargetId = target.Id,
-                Scope = "Military",
-                Precision = "Fuzzy"
-            },
+            new SetUnitDirectiveRequest { Directive = "Retreat" },
             commandId);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
     }
@@ -175,6 +163,79 @@ public sealed class StrategyMultiplayerApiTests : IClassFixture<StrategyWebAppli
         Assert.Equal(HttpStatusCode.Forbidden, saveResponse.StatusCode);
     }
 
+    [Theory]
+    [InlineData("GET", "/api/strategy/save/")]
+    [InlineData("POST", "/api/strategy/load/")]
+    [InlineData("GET", "/api/strategy/debug/movement-trace")]
+    [InlineData("GET", "/strategy/debug/ai-decision-trace/")]
+    [InlineData("GET", "/api/strategy/debug/day-log")]
+    [InlineData("POST", "/api/strategy/espionage-intel")]
+    public async Task RestrictedActions_CannotBypassRoomPolicy(string method, string path)
+    {
+        var host = await CreateRoom();
+        var response = await SendRoomJson(new HttpMethod(method), path, host.Room.RoomId,
+            host.Credentials.PlayerToken,
+            new
+            {
+                scenarioId = "mini_kanto",
+                targetKind = "Stronghold",
+                targetId = 2,
+                scope = "Military",
+                precision = "Exact"
+            }, Guid.NewGuid().ToString("N"));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Ready_RejectsDelayedPreviousTurnEvenWithNewCommandId()
+    {
+        var host = await CreateRoom();
+        var first = await Ready(host.Room.RoomId, host.Credentials.PlayerToken);
+        Assert.True(first.Advanced);
+        var delayed = await SendRoomJson(HttpMethod.Post,
+            $"/api/multiplayer/rooms/{host.Room.RoomId}/ready", host.Room.RoomId,
+            host.Credentials.PlayerToken,
+            new StrategyMultiplayerReadyRequest { ExpectedTurn = 0 }, Guid.NewGuid().ToString("N"));
+        Assert.Equal(HttpStatusCode.Conflict, delayed.StatusCode);
+        var room = await client.GetFromJsonAsync<StrategyMultiplayerRoomDto>(
+            $"/api/multiplayer/rooms/{host.Room.RoomId}", TestContext.Current.CancellationToken);
+        Assert.Equal(1, room!.TurnNumber);
+    }
+
+    [Fact]
+    public async Task Rooms_AdvanceIndependentlyAndCloseAfterLastLeave()
+    {
+        var first = await CreateRoom();
+        var second = await CreateRoom();
+        var before = await GetState(second.Room.RoomId, second.Credentials.PlayerToken);
+        await Ready(first.Room.RoomId, first.Credentials.PlayerToken);
+        var after = await GetState(second.Room.RoomId, second.Credentials.PlayerToken);
+        Assert.Equal(before.Date.Day, after.Date.Day);
+        var leave = await SendRoomJson(HttpMethod.Post,
+            $"/api/multiplayer/rooms/{first.Room.RoomId}/leave", first.Room.RoomId,
+            first.Credentials.PlayerToken, new { }, Guid.NewGuid().ToString("N"));
+        Assert.Equal(HttpStatusCode.OK, leave.StatusCode);
+        var missing = await client.GetAsync($"/api/multiplayer/rooms/{first.Room.RoomId}",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
+    public async Task Heartbeat_RequiresCredentialsAndDoesNotAdvanceWorldVersion()
+    {
+        var host = await CreateRoom();
+        var path = $"/api/multiplayer/rooms/{host.Room.RoomId}/heartbeat";
+        var anonymous = await client.GetAsync(path, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        var response = await SendRoomJson(HttpMethod.Get, path, host.Room.RoomId,
+            host.Credentials.PlayerToken, new { }, Guid.NewGuid().ToString("N"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var room = await response.Content.ReadFromJsonAsync<StrategyMultiplayerRoomDto>(
+            TestContext.Current.CancellationToken);
+        Assert.Equal(host.Room.WorldVersion, room!.WorldVersion);
+        Assert.All(room.Players, player => Assert.True(player.Connected));
+    }
+
     private async Task<StrategyMultiplayerRoomResponse> CreateRoom()
     {
         var response = await client.PostAsJsonAsync(
@@ -209,12 +270,14 @@ public sealed class StrategyMultiplayerApiTests : IClassFixture<StrategyWebAppli
 
     private async Task<StrategyMultiplayerReadyResponse> Ready(string roomId, string token)
     {
+        var room = await client.GetFromJsonAsync<StrategyMultiplayerRoomDto>(
+            $"/api/multiplayer/rooms/{roomId}", TestContext.Current.CancellationToken);
         var response = await SendRoomJson(
             HttpMethod.Post,
             $"/api/multiplayer/rooms/{roomId}/ready",
             roomId,
             token,
-            new StrategyMultiplayerReadyRequest { Ready = true },
+            new StrategyMultiplayerReadyRequest { Ready = true, ExpectedTurn = room!.TurnNumber },
             Guid.NewGuid().ToString("N"));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var payload = await response.Content.ReadFromJsonAsync<StrategyMultiplayerReadyResponse>(

@@ -11,10 +11,19 @@
     <DisableStaticWebAssets>true</DisableStaticWebAssets>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(EmbedWebClient)' == 'true'">
+  <ItemGroup Condition="'$(EmbedWebClient)' == 'true' and '$(WebClientDist)' == ''">
     <EmbeddedResource Include="wwwroot\**\*" />
     <Content Remove="wwwroot\**\*" />
     <None Remove="wwwroot\**\*" />
+  </ItemGroup>
+
+  <!-- Publish directly from dist: never delete/replace a developer's wwwroot. -->
+  <ItemGroup Condition="'$(EmbedWebClient)' == 'true' and '$(WebClientDist)' != ''">
+    <Content Remove="wwwroot\**\*" />
+    <None Remove="wwwroot\**\*" />
+    <EmbeddedResource Include="$(WebClientDist)\**\*">
+      <Link>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
