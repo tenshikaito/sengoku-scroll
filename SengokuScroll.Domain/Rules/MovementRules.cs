@@ -139,7 +139,8 @@ public class MovementRules(IGameContext context)
                 // 业务：援防行军不得进入敌军格（即便进攻方针允许同格开战）
                 if (movable is Unit supportUnit
                     && supportUnit.Directive == UnitDirective.Support
-                    && AreHostileForces(myForce.Id, tf.Id, gameData))
+                    && AreHostileForces(myForce.Id, tf.Id, gameData)
+                    && !IsReliefBattleDestination(supportUnit, location, gameData))
                     return MovementError.CannotMoveToTile;
 
                 // 业务：敌对（战争对立或外交敌对）允许进入同格以创建战场
@@ -156,6 +157,17 @@ public class MovementRules(IGameContext context)
 
         return GameResult.Ok();
     }
+
+    // Only a specifically selected relief battle may enter an enemy tile.
+    // Transit through enemy formations remains blocked by pathfinding.
+    private static bool IsReliefBattleDestination(Unit unit, Point2 location, GameData data)
+        => data.Strongholds.TryGetValue(unit.ActionTarget.StrongholdId, out var castle)
+           && castle.ForceId == unit.ForceId
+           && data.Units.TryGetValue(unit.ActionTarget.UnitId, out var enemy)
+           && enemy.IsMilitary && enemy.Soldier > 0 && !enemy.InStronghold
+           && AreHostileForces(unit.ForceId, enemy.ForceId, data)
+           && enemy.Location.X == location.X && enemy.Location.Y == location.Y
+           && Math.Abs(location.X - castle.Location.X) + Math.Abs(location.Y - castle.Location.Y) <= 1;
 
     /// <summary>寻路途经格：敌对/不可叠军事挡路（目的格敌对由 CheckMoveToUnit 放行开战）。</summary>
     public bool IsPathTileBlockedByMilitary(IMovable movable, Point2 location)

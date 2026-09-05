@@ -245,7 +245,8 @@ public static class StrategyUnitAIRules
         {
             // fall through to directive handling (攻城/待命)
         }
-        else if (unit.Status == UnitStatus.Moving && unit.ActionTarget.RoutePoints.Count > 0)
+        else if (unit.Directive != UnitDirective.Support
+            && unit.Status == UnitStatus.Moving && unit.ActionTarget.RoutePoints.Count > 0)
         {
             thought.Add("已有移动路径，本日继续执行");
             return StrategyAiDecision.Ok("ContinueRoute", "继续既有路径", thought);
@@ -257,7 +258,7 @@ public static class StrategyUnitAIRules
             UnitDirective.Move =>
                 StrategyAiDecision.Fail("Hold", $"方针 {unit.Directive}：待机不规划路径", thought),
             UnitDirective.Support => ExecuteSupportRelief(
-                unit, gameData, pathfinding, worldContext, meta, thought, hostileUnits),
+                unit, gameData, pathfinding, worldContext, meta, thought, hostileUnits, mapMaster),
             UnitDirective.Occupy or UnitDirective.Raid => AggressiveAction(
                 unit, gameData, hostileUnits, hostileStrongholds, pathfinding, worldContext, rules, mapMaster, meta, thought),
             _ => StrategyAiDecision.Fail("UnknownDirective", $"未知方针 {unit.Directive}", thought)
@@ -677,8 +678,14 @@ public static class StrategyUnitAIRules
         IGameWorldContext? worldContext,
         StrategyScenarioMeta? meta,
         StrategyAiThought thought,
-        IReadOnlyList<Unit> observedEnemies)
+        IReadOnlyList<Unit> observedEnemies,
+        GameMapMasterData? mapMaster)
     {
+        // Re-evaluate support routes daily: besiegers can move or disappear.
+        unit.ActionTarget.RoutePoints.Clear();
+        unit.ActionTarget.UnitId = 0;
+        if (unit.Status == UnitStatus.Moving)
+            unit.Status = UnitStatus.Waiting;
         // 业务：编制同调——挂目标单位且可叠时跟随其位置/路径
         if (unit.DirectiveTargetId > 0
             && gameData.Units.TryGetValue(unit.DirectiveTargetId, out var followTarget)
@@ -716,6 +723,10 @@ public static class StrategyUnitAIRules
         }
 
         var threatened = ResolveThreatenedFriendlyStrongholds(unit, gameData, observedEnemies);
+        // Finish the assigned relief journey even after the besiegers are gone.
+        if (gameData.Strongholds.TryGetValue(unit.ActionTarget.StrongholdId, out var assigned)
+            && assigned.ForceId == unit.ForceId)
+            threatened = new[] { assigned }.Concat(threatened.Where(s => s.Id != assigned.Id)).ToArray();
         thought.Add("受威胁友城数={0}", threatened.Count);
 
         if (threatened.Count == 0)
@@ -723,6 +734,39 @@ public static class StrategyUnitAIRules
 
         foreach (var target in threatened)
         {
+            var besiegers = observedEnemies.Where(e => e.IsMilitary && e.Soldier > 0
+                && !e.InStronghold
+                && Manhattan((Point2)e.Location, (Point2)target.Location) <= 1)
+                .OrderBy(e => e.Soldier).ThenBy(e => e.Id).ToArray();
+            if (besiegers.Length > 0)
+            {
+                unit.ActionTarget.StrongholdId = target.Id;
+                foreach (var enemy in besiegers)
+                {
+                    var winRate = BattleEngagementScorer.ScoreCommitWinRate(unit, enemy, gameData, mapMaster);
+                    thought.Add("解围评估 {0}：胜率={1}%", enemy.Name, winRate);
+                    if (!BattleFactorEvaluator.CanUnitEngage(unit)
+                        || unit.Soldier < besiegers.Where(e => e.Location.IsSameTile(enemy.Location)).Sum(e => (long)e.Soldier) * OccupyEngageMinStrengthRatio
+                        || winRate < BattleConstants.AiRetreatCommitWinRateThreshold)
+                        continue;
+
+                    unit.ActionTarget.UnitId = enemy.Id;
+                    if (unit.Location.IsSameTile(enemy.Location))
+                    {
+                        UnitBattleActions.QueueAttack(unit, enemy.Id);
+                        return StrategyAiDecision.Ok("ReliefEngage", $"解围接敌 {enemy.Name}", thought, targetUnitId: enemy.Id);
+                    }
+                    var reliefPath = pathfinding.CalculatePath(unit, (Point2)enemy.Location);
+                    if (reliefPath is null || reliefPath.Count < 2
+                        || worldContext is not null && !ReliefPathRules.IsTransitPathClear(unit, reliefPath, worldContext))
+                        continue;
+                    return QueuePath(unit, pathfinding, (Point2)enemy.Location, thought,
+                        "MarchReliefBattle", $"向围城军 {enemy.Name} 行军解围", targetStrongholdId: target.Id);
+                }
+                unit.ActionTarget.UnitId = 0;
+                return StrategyAiDecision.Fail("ReliefWaiting", "解围兵力/胜率不足或路径被阻，等待增援", thought);
+            }
+
             if (unit.Location.IsSameTile(target.Location))
             {
                 unit.ActionTarget.StrongholdId = target.Id;
