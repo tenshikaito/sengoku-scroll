@@ -22,6 +22,7 @@ public static class CharacterSocialActions
         out string message)
     {
         message = string.Empty;
+        interaction ??= string.Empty;
         if (!gameData.Characters.TryGetValue(actorId, out var actor)
             || !gameData.Characters.TryGetValue(targetId, out var target)
             || actor.IsDead
@@ -41,16 +42,45 @@ public static class CharacterSocialActions
         if (!AreCoLocated(actor, target))
             return GameError.DomesticError.CharacterNotAtStronghold;
 
+        if (actor.ForceStatus == CharacterForceStatus.Prisoner || target.ForceStatus == CharacterForceStatus.Prisoner)
+            return new GameError("SocialPrisonerUnavailable");
+
+        if (interaction.Equals("Marry", StringComparison.OrdinalIgnoreCase))
+            return CharacterMarriageActions.ProposeOrAccept(gameData, actor, target, out message);
+        if (interaction.Equals("DeclineMarriage", StringComparison.OrdinalIgnoreCase))
+            return CharacterMarriageActions.Decline(gameData, actor, target, out message);
+
+        return PerformMeeting(gameData, actor, target, interaction, out message);
+    }
+
+    // Internal shared rules used by validated player commands and daily NPC decisions.
+    internal static GameResult PerformMeeting(GameData gameData, Character actor, Character target,
+        string interaction, out string message)
+    {
+        message = string.Empty;
+        if (!AreCoLocated(actor, target) || actor.IsDead || target.IsDead || actor.Id == target.Id
+            || actor.ForceStatus == CharacterForceStatus.Prisoner || target.ForceStatus == CharacterForceStatus.Prisoner)
+            return new GameError("SocialUnavailable");
+
         var normalized = interaction.Trim();
         var isGift = normalized.Equals("Gift", StringComparison.OrdinalIgnoreCase);
         if (!isGift && !normalized.Equals("Talk", StringComparison.OrdinalIgnoreCase))
             return GameError.DataNotFound;
+
+        var today = gameData.GameDate.TotalDays;
+        var existing = actor.Relationships.FirstOrDefault(r => r.TargetCharacterId == target.Id);
+        var reverse = target.Relationships.FirstOrDefault(r => r.TargetCharacterId == actor.Id);
+        var cooldown = isGift ? 7 : 1;
+        if (new[] { existing, reverse }.Any(r => (isGift ? r?.LastGiftDay : r?.LastTalkDay) is int last
+            && today - last < cooldown)) return new GameError("SocialCooldown", cooldown);
 
         var apCost = isGift ? GiftApCost : TalkApCost;
         if (actor.Ap < apCost)
             return GameError.ApNotEnough;
         if (isGift && actor.Money < GiftMoneyCost)
             return GameError.MarketError.TradeNotFilled;
+        if (isGift && target.Money > int.MaxValue - GiftMoneyCost)
+            return new GameError("SocialRecipientTreasuryFull");
 
         actor.Ap -= apCost;
         if (isGift)
@@ -61,13 +91,21 @@ public static class CharacterSocialActions
 
         var charmBonus = Math.Clamp((actor.Charm - 50) / 20, -1, 2);
         var hostilePenalty = actor.EnemyIds.Contains(target.Id) || target.EnemyIds.Contains(actor.Id) ? 3 : 0;
+        var giftPreference = isGift ? (target.Personality.Desire - 50) / 25 : 0;
         var forwardRelationship = Math.Max(1, (isGift ? 8 : 4) + charmBonus - hostilePenalty);
-        var reverseRelationship = Math.Max(1, (isGift ? 5 : 3) + charmBonus - hostilePenalty);
+        var reverseRelationship = Math.Max(1, (isGift ? 5 : 3) + charmBonus + giftPreference - hostilePenalty);
         var forwardTrust = Math.Max(1, (isGift ? 5 : 2) - hostilePenalty);
         var reverseTrust = Math.Max(1, (isGift ? 3 : 1) - hostilePenalty);
 
+        if (existing?.Relationship >= 75) { forwardRelationship = 1; forwardTrust = 1; }
+        if (reverse?.Relationship >= 75) { reverseRelationship = 1; reverseTrust = 1; }
         ApplyRelationship(actor, target.Id, forwardRelationship, forwardTrust);
         ApplyRelationship(target, actor.Id, reverseRelationship, reverseTrust);
+        foreach (var entry in new[] { actor.Relationships.First(r => r.TargetCharacterId == target.Id),
+            target.Relationships.First(r => r.TargetCharacterId == actor.Id) })
+        { if (isGift) entry.LastGiftDay = today; else entry.LastTalkDay = today; }
+        CharacterSocialHistory.Record(actor, target.Id, today, isGift ? "GiftSent" : "Talk", isGift ? "赠送金钱礼物" : "交谈");
+        CharacterSocialHistory.Record(target, actor.Id, today, isGift ? "GiftReceived" : "Talk", isGift ? "收到金钱礼物" : "交谈");
         actor.Emotion = Math.Clamp(actor.Emotion + 1, -100, 100);
         target.Emotion = Math.Clamp(target.Emotion + (isGift ? 3 : 1), -100, 100);
 
@@ -77,7 +115,7 @@ public static class CharacterSocialActions
         return GameResult.Ok();
     }
 
-    private static bool AreCoLocated(Character actor, Character target)
+    internal static bool AreCoLocated(Character actor, Character target)
     {
         if (actor.LocationType != target.LocationType)
             return false;
@@ -99,7 +137,7 @@ public static class CharacterSocialActions
             ? character.LocationStrongholdId
             : character.StrongholdId;
 
-    private static void ApplyRelationship(Character owner, int targetId, int relationshipDelta, int trustDelta)
+    internal static void ApplyRelationship(Character owner, int targetId, int relationshipDelta, int trustDelta)
     {
         var relationship = owner.Relationships.FirstOrDefault(entry => entry.TargetCharacterId == targetId);
         if (relationship is null)

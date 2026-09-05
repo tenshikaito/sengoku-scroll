@@ -249,11 +249,11 @@ Entity（抽象基类）
 | `Temper` | byte | 0-100 | 性情：0=急躁，100=温和 |
 | `Courage` | byte | 0-100 | 勇气：0=胆小，100=钢胆 |
 | `Principle` | byte | 0-100 | 主义：0=现实，100=理想 |
-| `Action` | byte | 0-100 | 行动：0=谨慎，100=果断 |
-| `Loyalty` | byte | 0-100 | 情义：0=薄情，100=重义 |
+| `Action` | byte | 0-100 | 慎重：0=轻率，100=慎重；保留 Action 名称兼容存档 |
+| `Friendship` | byte | 0-100 | 情义：0=薄情，100=重义；不是 Character.Loyalty |
 | `Ambition` | byte | 0-100 | 野心：0=知足，100=野心勃勃 |
-| `Preference` | byte | 0-100 | 喜好：0=武艺，100=文学 |
-| `Materialism` | byte | 0-100 | 物欲：0=清廉，100=贪婪 |
+| `Hobby` | byte | 0-100 | 喜好标量；五分类尚非独立玩法属性 |
+| `Desire` | byte | 0-100 | 物欲：0=清廉，100=贪婪 |
 | `Drinking` | byte | 0-100 | 饮酒：0=禁酒，100=嗜酒 |
 | `Fortune` | byte | 0-100 | 运势：0=厄运，100=幸运 |
 
@@ -286,7 +286,7 @@ Entity（抽象基类）
 | `Ap` | int | 行动力 |
 | `Hp` | int | 体力 |
 | `Money` | int | 个人金钱 |
-| `Emotion` | byte | 心情（0-100） |
+| `Emotion` | int | 心情（-100～100） |
 | `ForceId` | int | 所属势力ID |
 | `StrongholdId` | int | 所在据点ID |
 | `PositionId` | int | 职位ID |

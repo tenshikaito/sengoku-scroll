@@ -797,137 +797,6 @@ export interface IntelStanceEffectRow {
   description: string;
 }
 
-const FORCE_OUR_VIEW_EFFECTS: Record<number, IntelStanceEffectRow[]> = {
-  2: [
-    {
-      id: 1,
-      name: "桶狭间之战",
-      effectTarget: "外交关系",
-      magnitude: "长期 = -35",
-      description: "今川义元于桶狭间败死，双方怨怼深重。",
-    },
-    {
-      id: 2,
-      name: "骏河侵攻",
-      effectTarget: "外交关系",
-      magnitude: "临时 = -15",
-      description: "织田军曾多次威胁骏河边境。",
-    },
-  ],
-  5: [
-    {
-      id: 1,
-      name: "相模对峙",
-      effectTarget: "外交关系",
-      magnitude: "长期 = -20",
-      description: "北条与织田在关东利益上长期摩擦。",
-    },
-  ],
-  6: [
-    {
-      id: 1,
-      name: "三河经略",
-      effectTarget: "外交关系",
-      magnitude: "长期 = -10",
-      description: "德川脱离今川后，酒井家夹在两大势力之间。",
-    },
-  ],
-};
-
-const FORCE_THEIR_VIEW_EFFECTS: Record<number, IntelStanceEffectRow[]> = {
-  2: [
-    {
-      id: 1,
-      name: "杀害本家当主",
-      effectTarget: "外交关系",
-      magnitude: "永久 = -100",
-      description: "杀害本家当主是世仇，不共戴天。",
-    },
-    {
-      id: 2,
-      name: "尾张扩张",
-      effectTarget: "外交关系",
-      magnitude: "长期 = -25",
-      description: "织田据尾张步步紧逼，威胁今川霸权。",
-    },
-  ],
-  5: [
-    {
-      id: 1,
-      name: "关东介入",
-      effectTarget: "外交关系",
-      magnitude: "长期 = -18",
-      description: "织田势力东进，北条视为心腹大患。",
-    },
-  ],
-};
-
-const PERSON_OUR_VIEW_EFFECTS: Record<number, IntelStanceEffectRow[]> = {
-  3: [
-    {
-      id: 1,
-      name: "骏河继承之争",
-      effectTarget: "个人观感",
-      magnitude: "长期 = -20",
-      description: "今川氏真能力不足，难服骏河众臣。",
-    },
-  ],
-  5: [
-    {
-      id: 1,
-      name: "相模强藩",
-      effectTarget: "个人观感",
-      magnitude: "长期 = -15",
-      description: "北条氏康老练多谋，是关东劲敌。",
-    },
-  ],
-  9: [
-    {
-      id: 1,
-      name: "三河自立",
-      effectTarget: "个人观感",
-      magnitude: "长期 = +10",
-      description: "德川家康脱离今川后展现独立手腕，值得留意。",
-    },
-  ],
-};
-
-const PERSON_THEIR_VIEW_EFFECTS: Record<number, IntelStanceEffectRow[]> = {
-  3: [
-    {
-      id: 1,
-      name: "杀害本家当主",
-      effectTarget: "亲疏",
-      magnitude: "永久 = -100",
-      description: "杀害本家当主是世仇，今川氏真绝难释怀。",
-    },
-    {
-      id: 2,
-      name: "清洲威胁",
-      effectTarget: "个人观感",
-      magnitude: "长期 = -22",
-      description: "织田据清洲，对骏河形成直接压力。",
-    },
-  ],
-  6: [
-    {
-      id: 1,
-      name: "主君效忠",
-      effectTarget: "个人观感",
-      magnitude: "长期 = +25",
-      description: "酒井忠次对德川家康忠心耿耿，视织田为潜在威胁。",
-    },
-  ],
-  9: [
-    {
-      id: 1,
-      name: "尾张霸权",
-      effectTarget: "个人观感",
-      magnitude: "长期 = -28",
-      description: "德川家康视织田扩张为最大隐忧，私下保持距离。",
-    },
-  ],
-};
 
 /** 势力详情 · 本家对该势力的看法（外交 ViewEffects；内藩走 isInnerVassal 行）。 */
 export function forceOurViewEffectRows(
@@ -938,7 +807,7 @@ export function forceOurViewEffectRows(
   if (!dip) return [];
   const mapped = mapDtoEntityEffects(dip.ourViewEffects);
   if (mapped.length > 0) return mapped;
-  return FORCE_OUR_VIEW_EFFECTS[forceId] ?? [];
+  return [];
 }
 
 /** 势力详情 · 该势力对本家的看法（theirViewEffects）。 */
@@ -950,7 +819,7 @@ export function forceTheirViewEffectRows(
   if (!dip) return [];
   const mapped = mapDtoEntityEffects(dip.theirViewEffects);
   if (mapped.length > 0) return mapped;
-  return FORCE_THEIR_VIEW_EFFECTS[forceId] ?? [];
+  return [];
 }
 
 /** 势力详情是否展示本家/对方看法 Tab（仅本家根势力隐藏）。 */
@@ -975,7 +844,7 @@ export function personViewOfCharacterRows(
     const mapped = mapCharacterViewEntityEffects(rel?.viewEffects);
     if (mapped.length > 0) return mapped;
   }
-  return PERSON_OUR_VIEW_EFFECTS[personId] ?? [];
+  return [];
 }
 
 /** 人物详情 · 该角色对当主的看法（反向 viewEffects）。 */
@@ -991,7 +860,7 @@ export function personCharacterViewOfLordRows(
     const mapped = mapCharacterViewEntityEffects(rel?.viewEffects);
     if (mapped.length > 0) return mapped;
   }
-  return PERSON_THEIR_VIEW_EFFECTS[personId] ?? [];
+  return [];
 }
 
 /** @deprecated 使用 personViewOfCharacterRows */

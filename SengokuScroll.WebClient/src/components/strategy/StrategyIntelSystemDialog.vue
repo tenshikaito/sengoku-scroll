@@ -41,7 +41,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "update:visible": [value: boolean];
-  interact: [targetCharacterId: number, interaction: "Talk" | "Gift"];
+  interact: [targetCharacterId: number, interaction: "Talk" | "Gift" | "Marry" | "DeclineMarriage"];
 }>();
 
 const masterDataTabs = masterDataPresetTabs();

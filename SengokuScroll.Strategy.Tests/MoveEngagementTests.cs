@@ -63,6 +63,9 @@ public class MoveEngagementTests
 
     private static void IsolateEnemyUnitsForMarchTest(GameWorld world)
     {
+        // Hold commander personality fixed so this test isolates contact handling.
+        foreach (var character in world.GameData.Characters.Values)
+        { character.Personality.Action = 50; character.Personality.Courage = 50; character.Personality.Ambition = 50; }
         foreach (var unit in world.GameData.Units.Values.Where(u => u.ForceId != 1).ToList())
             TeleportUnit(world, unit, new Point3(9, 9));
     }

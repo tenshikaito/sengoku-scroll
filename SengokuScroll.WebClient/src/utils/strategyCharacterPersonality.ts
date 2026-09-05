@@ -17,6 +17,7 @@ export const PERSONALITY_FIELD_KEYS = [
 export type PersonalityFieldKey = (typeof PERSONALITY_FIELD_KEYS)[number];
 
 export function personalityFieldLabel(key: PersonalityFieldKey): string {
+  if (key === "action") return "慎重（越高越谨慎）";
   return t(`enum.personality.${key}`);
 }
 
@@ -31,7 +32,7 @@ export const HOBBY_CATEGORY_KEYS = [
 export type HobbyCategoryKey = (typeof HOBBY_CATEGORY_KEYS)[number];
 
 export function hobbyCategoryLabel(key: HobbyCategoryKey): string {
-  return t(`enum.hobby.${key}`);
+  return `${t(`enum.hobby.${key}`)}（展示推导）`;
 }
 
 /** 将单一喜好值拆分为五类展示（待独立字段实装前）。 */

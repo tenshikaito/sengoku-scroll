@@ -72,6 +72,9 @@ public class BattleReportDeliveryTests
 
     private static void ForceSameTileEngage(Domain.GameWorld world)
     {
+        // Test courier delivery, not the scenario's cautious-command retreat preference.
+        foreach (var character in world.GameData.Characters.Values)
+        { character.Personality.Action = 50; character.Personality.Courage = 50; character.Personality.Ambition = 50; }
         var player = world.GameData.Units.Values.First(u => u.ForceId == 1 && u.IsMilitary);
         var enemy = world.GameData.Units.Values.First(u => u.ForceId != 1 && u.IsMilitary);
         enemy.Directive = UnitDirective.Occupy;

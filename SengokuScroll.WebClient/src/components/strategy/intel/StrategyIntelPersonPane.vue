@@ -49,7 +49,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   navigate: [target: IntelNavigateTarget];
-  interact: [targetCharacterId: number, interaction: "Talk" | "Gift"];
+  interact: [targetCharacterId: number, interaction: "Talk" | "Gift" | "Marry" | "DeclineMarriage"];
 }>();
 
 const listPreset = ref<PersonListPreset>("status");
@@ -86,7 +86,7 @@ const canInteract = computed(() => {
 const interactionHint = computed(() => {
   if (props.worldState.allForcesAiControlled) return "观战模式不可手动干预";
   if (selectedPersonId.value === playerLordCharacterId.value) return "不能与自己互动";
-  return canInteract.value ? "消耗行动力并改变双方关系" : "当主与目标必须在同一据点";
+  return canInteract.value ? "交谈每天一次；金钱赠礼每7天一次；婚约须双方成年、无近亲且同意" : "当主与目标必须在同一据点";
 });
 
 const showPersonStanceEffectTabs = computed(() => {
@@ -341,7 +341,20 @@ watch(
           >
             赠礼（2 AP / 100文）
           </el-button>
+          <el-button size="small" :disabled="!canInteract || (worldState.lord.ap ?? 0) < 2"
+            @click="emit('interact', selectedPersonId, 'Marry')">
+            {{ playerLord?.pendingMarriageFromId === selectedPersonId ? '同意婚约' : '提出婚约' }}（2 AP）
+          </el-button>
+          <el-button v-if="playerLord?.pendingMarriageFromId === selectedPersonId" size="small" :disabled="!canInteract"
+            @click="emit('interact', selectedPersonId, 'DeclineMarriage')">拒绝婚约</el-button>
         </div>
+        <p v-if="selectedPerson?.defectionWarningDay != null">⚠ 此人物已有投奔预警，请改善其对当主的关系与忠诚。</p>
+        <h4 v-if="selectedPerson?.socialMemories?.length">近期人物记忆（最多64条，仅本势力可见）</h4>
+        <ul v-if="selectedPerson?.socialMemories?.length">
+          <li v-for="memory in [...selectedPerson.socialMemories].reverse()" :key="memory.id">
+            第 {{ memory.day }} 日 · {{ memory.description }} · 对象 #{{ memory.otherCharacterId }}
+          </li>
+        </ul>
       </div>
 
       <div v-else-if="detailTab === 'attributes'" class="detail-body">

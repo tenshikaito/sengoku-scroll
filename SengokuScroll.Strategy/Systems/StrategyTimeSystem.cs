@@ -31,6 +31,7 @@ public class StrategyTimeSystem(
     /// <inheritdoc />
     public void Update()
     {
+        SengokuScroll.Strategy.Helpers.EntityEffectExpiryHelper.RemoveExpired(context.GameWorldContext.GameWorld.GameData);
         tariffTaxLedger.PruneRemovedConvoys(context.GameWorldContext.GameWorld.GameData);
         var recovery = context.GameRuleConfig.NextTurnApRecovery;
 

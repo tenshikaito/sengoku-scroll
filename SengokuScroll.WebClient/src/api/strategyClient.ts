@@ -1121,7 +1121,7 @@ export const enterStrongholdAsCharacter = (characterId: number, strongholdId: nu
 export const interactWithCharacter = (
   characterId: number,
   targetCharacterId: number,
-  interaction: "Talk" | "Gift",
+  interaction: "Talk" | "Gift" | "Marry" | "DeclineMarriage",
 ) =>
   request(
     "POST",

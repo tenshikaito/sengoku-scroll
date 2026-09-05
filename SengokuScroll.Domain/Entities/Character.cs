@@ -154,6 +154,12 @@ public class Character : CharacterDefinition, IMovable
 
     /// <summary>角色间关系（参照势力外交；含看法条目）。</summary>
     public List<CharacterRelationship> Relationships { get; set; } = [];
+    public List<CharacterSocialMemory> SocialMemories { get; set; } = [];
+    public long NextSocialMemoryId { get; set; } = 1;
+    public int? LastSocialAiDay { get; set; }
+    public int? DefectionWarningDay { get; set; }
+    public int PendingMarriageFromId { get; set; }
+    public int? MarriageProposalExpiryDay { get; set; }
 
     /// <summary>当前增减益（灾害/事件/政策等）。</summary>
     public List<EntityEffect> ActiveEffects { get; set; } = [];

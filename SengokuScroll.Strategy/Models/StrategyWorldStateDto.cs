@@ -273,6 +273,9 @@ public sealed record StrategyCharacterRelationshipDto
 /// <summary>将领摘要（供前端统计与出征编组）。</summary>
 public sealed record StrategyCharacterSummaryDto
 {
+    public IReadOnlyList<CharacterSocialMemory> SocialMemories { get; init; } = [];
+    public int? DefectionWarningDay { get; init; }
+    public int? PendingMarriageFromId { get; init; }
     public required int Id { get; init; }
 
     public required int ForceId { get; init; }
@@ -2238,24 +2241,27 @@ public static class StrategyWorldStateMapper
             BirthType = c.Birth.ToString(),
             TaskRemainingDays = c.RecruitTask?.DeadlineDaysRemaining,
             ActiveTasks = CharacterIntelTasksHelper.BuildIntelTasks(c, gameData, meta, strongholds),
-            Loyalty = EntityEffectHelper.ResolveEffectiveLoyalty(c),
+            Loyalty = EntityEffectHelper.ResolveEffectiveLoyalty(c, gameData.GameDate),
             Money = c.Money,
-            Relations = CharacterRelationsHelper.BuildRelations(c, characters),
-            CharacterRelationships = MapCharacterRelationships(c),
+            Relations = CharacterRelationsHelper.BuildRelations(c, characters, gameData.GameDate),
+            CharacterRelationships = MapCharacterRelationships(c, gameData.GameDate),
+            SocialMemories = c.ForceId == meta.PlayerForceId ? c.SocialMemories.ToArray() : [],
+            DefectionWarningDay = c.ForceId == meta.PlayerForceId ? c.DefectionWarningDay : null,
+            PendingMarriageFromId = c.ForceId == meta.PlayerForceId ? c.PendingMarriageFromId : null,
             Introduction = string.IsNullOrWhiteSpace(c.Description) ? null : c.Description.Trim(),
             ActiveEffects = MapEntityEffects(c.ActiveEffects),
         };
     }
 
     /// <summary>角色间关系 + 看法条目 → DTO（ViewEffects 使用亲疏/信赖/个人观感文案）。</summary>
-    private static IReadOnlyList<StrategyCharacterRelationshipDto> MapCharacterRelationships(Character character)
+    private static IReadOnlyList<StrategyCharacterRelationshipDto> MapCharacterRelationships(Character character, GameDate today)
         => [.. character.Relationships
             .Select(r => new StrategyCharacterRelationshipDto
             {
                 TargetCharacterId = r.TargetCharacterId,
-                Relationship = r.Relationship,
-                Trust = r.Trust,
-                ViewEffects = MapCharacterViewEffects(r.ViewEffects),
+                Relationship = (sbyte)CharacterRelationshipRules.Resolve(r, today: today),
+                Trust = (sbyte)CharacterRelationshipRules.Resolve(r, trust: true, today: today),
+                ViewEffects = MapCharacterViewEffects(r.ViewEffects.Where(e => CharacterRelationshipRules.IsActive(e, today))),
             })
             .OrderBy(r => r.TargetCharacterId)];
 

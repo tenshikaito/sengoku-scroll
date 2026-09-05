@@ -19,11 +19,12 @@ public static class EntityEffectHelper
         => effects.Where(e => e.TargetStat == target).Sum(e => e.Magnitude);
 
     /// <summary>基础忠诚 + ActiveEffects 中 Loyalty 条目叠加，钳制 0–100。</summary>
-    public static byte ResolveEffectiveLoyalty(Character character)
+    public static byte ResolveEffectiveLoyalty(Character character, GameDate? today = null)
     {
         var baseValue = character.Loyalty;
-        var delta = SumMagnitude(character.ActiveEffects, EffectTargetStat.Loyalty);
-        return (byte)Math.Clamp(baseValue + delta, 0, 100);
+        var delta = character.ActiveEffects.Where(e => e.TargetStat == EffectTargetStat.Loyalty
+            && CharacterRelationshipRules.IsActive(e, today)).Sum(e => (long)e.Magnitude);
+        return (byte)Math.Clamp(baseValue + delta, 0L, 100L);
     }
 
     /// <summary>将 Duration + Magnitude 格式化为 UI「程度」列（如「永久 = -100」）。</summary>

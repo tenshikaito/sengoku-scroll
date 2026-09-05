@@ -187,12 +187,12 @@ public static class UnitDestructionRules
         }
 
         gameData.Characters.TryGetValue(victor.LeaderId, out var victorCommander);
-        var aggressiveness = victorCommander?.Personality.Action ?? 55;
-        // 业务：基础逃脱率 25%；统率/武勇提高、胜方行动性降低主将逃脱概率
+        var encirclementCaution = victorCommander?.Personality.Action ?? 55;
+        // 慎重的胜方围捕更严密；不是好战程度，保持既有公式兼容。
         var escapeChance = 25;
         escapeChance += commander.Leadership / 5;
         escapeChance += commander.Power / 8;
-        escapeChance -= aggressiveness / 4;
+        escapeChance -= encirclementCaution / 4;
 
         // 业务：胜方兵力超过溃军两倍时，主将更难脱身
         if (victor.Soldier > destroyed.Soldier * 2)

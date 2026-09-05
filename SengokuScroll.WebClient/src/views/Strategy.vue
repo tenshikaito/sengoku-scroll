@@ -130,6 +130,7 @@ import {
 } from "@/utils/strategyRealmStats";
 import { formatFoodKoku, formatMoneyKan, formatSoldiers } from "@/utils/strategyDisplayUnits";
 import { useStrategyMapInteraction } from "@/composables/useStrategyMapInteraction";
+import { characterSocialError } from "@/utils/characterSocialError";
 import type { StrategyMoveTarget } from "@/strategyMapInteraction/types";
 import {
   DEFAULT_ROUTE_VISIBILITY_POLICY,
@@ -3617,7 +3618,7 @@ async function onAdvanceDays(days: number) {
 
 async function handleCharacterInteraction(
   targetCharacterId: number,
-  interaction: "Talk" | "Gift",
+  interaction: "Talk" | "Gift" | "Marry" | "DeclineMarriage",
 ) {
   if (!state.value) return;
   const lordId = resolvePlayerLordCharacterId(state.value);
@@ -3630,9 +3631,10 @@ async function handleCharacterInteraction(
   error.value = "";
   try {
     state.value = await interactWithCharacter(lordId, targetCharacterId, interaction);
-    info.value = interaction === "Gift" ? "赠礼完成，双方关系已更新" : "交谈完成，双方关系已更新";
+    info.value = interaction === "Gift" ? "赠礼完成，双方关系已更新"
+      : interaction === "Talk" ? "交谈完成，双方关系已更新" : "婚约操作完成，请查看人物记忆与关系";
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "人物互动失败";
+    error.value = characterSocialError(e instanceof Error ? e.message : "人物互动失败");
   } finally {
     loading.value = false;
   }
