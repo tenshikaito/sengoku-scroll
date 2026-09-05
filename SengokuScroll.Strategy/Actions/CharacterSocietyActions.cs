@@ -13,6 +13,8 @@ public static class CharacterSocietyActions
     public static void AdvanceDay(GameData data, StrategyScenarioMeta meta, StrategyDayOutcomeBuffer events)
     {
         var day = data.GameDate.TotalDays;
+        var socialGroups = data.Characters.Values.Where(CanSocialize)
+            .GroupBy(SocialLocation).ToDictionary(g => g.Key, g => g.OrderBy(c => c.Id).ToArray());
         foreach (var actor in data.Characters.Values.OrderBy(c => c.Id).ToArray())
         {
             if (actor.IsDead || actor.LastSocialAiDay == day) continue;
@@ -26,28 +28,42 @@ public static class CharacterSocietyActions
             // Never consent to marriage or spend AP on behalf of a human-controlled lord.
             var humanLord = actor.Id == lordId && (!StrategyAiControlRules.IsForceAiControlled(meta, actor.ForceId)
                 || meta.HasHumanControlConfiguration && !meta.AllForcesAiControlled);
-            if (humanLord || actor.ForceStatus != Character.CharacterForceStatus.Idle || actor.IsSick
-                || actor.RecruitTask is not null || actor.DiplomacyMission is not null || actor.RecruitAssignment is not null)
+            if (humanLord || !CanSocialize(actor))
                 continue;
 
             if (actor.PendingMarriageFromId > 0 && data.Characters.TryGetValue(actor.PendingMarriageFromId, out var proposer)
                 && CharacterSocialActions.AreCoLocated(actor, proposer))
             {
-                if (CharacterMarriageActions.Eligible(data, actor, proposer) && Opinion(actor, proposer.Id, data) >= 50
-                    && Trust(actor, proposer.Id, data) >= 25 && actor.Ap >= 2)
+                var input = CharacterDecisionRules.Capture(actor, proposer.Id, data);
+                var decision = CharacterDecisionRules.Evaluate(CharacterDecisionKind.Marriage, input);
+                var eligible = CharacterMarriageActions.Eligible(data, actor, proposer);
+                var outcome = "等待考虑或恢复行动力";
+                if (eligible && input.Opinion >= 0 && input.Trust >= 0 && decision.Preferred && actor.Ap >= 2)
                 {
-                    CharacterMarriageActions.ProposeOrAccept(data, actor, proposer, out var marriageMessage);
-                    Notify(events, proposer.ForceId, "Marriage", marriageMessage);
-                    if (actor.ForceId != proposer.ForceId) Notify(events, actor.ForceId, "Marriage", marriageMessage);
+                    var result = CharacterMarriageActions.ProposeOrAccept(data, actor, proposer, out var marriageMessage);
+                    outcome = result.IsSuccess ? "同意婚约" : "婚约执行条件已变化";
+                    if (result.IsSuccess)
+                    {
+                        Notify(events, proposer.ForceId, "Marriage", marriageMessage);
+                        if (actor.ForceId != proposer.ForceId) Notify(events, actor.ForceId, "Marriage", marriageMessage);
+                    }
                 }
-                else if (!CharacterMarriageActions.Eligible(data, actor, proposer) || Opinion(actor, proposer.Id, data) < 0)
+                else if (!eligible || input.Opinion < 0 || input.Trust < 0)
+                {
                     CharacterMarriageActions.Decline(data, actor, proposer, out _);
+                    outcome = "不合婚约条件或缺乏好感/信任，拒绝";
+                }
+                CharacterDecisionRules.Remember(actor, day, CharacterDecisionKind.Marriage, proposer.Id, decision, outcome);
             }
 
             if (actor.Id != lordId && lordId > 0 && day % 7 == actor.Id % 7)
             {
-                var opinion = Opinion(actor, lordId, data);
-                var change = opinion >= 50 ? 1 : opinion <= -50 ? -2 : 0;
+                var decision = CharacterDecisionRules.Evaluate(CharacterDecisionKind.Loyalty,
+                    CharacterDecisionRules.Capture(actor, lordId, data));
+                var change = decision.Preferred ? 1 : decision.Score <= -decision.Threshold ? -2 : 0;
+                change = Math.Clamp(actor.Loyalty + change, 0, 100) - actor.Loyalty;
+                CharacterDecisionRules.Remember(actor, day, CharacterDecisionKind.Loyalty, lordId, decision,
+                    change > 0 ? "忠诚提升" : change < 0 ? "忠诚下降" : "忠诚保持");
                 if (change != 0)
                 {
                     actor.Loyalty = (byte)Math.Clamp(actor.Loyalty + change, 0, 100);
@@ -57,28 +73,59 @@ public static class CharacterSocietyActions
             }
             if (TryDefect(data, meta, events, actor, lordId)) continue;
             if (day % 7 != actor.Id % 7 || actor.Ap < 1 || actor.Hp < 50) continue;
-            var target = data.Characters.Values.Where(c => c.Id != actor.Id && !c.IsDead
-                && c.ForceId == actor.ForceId && c.ForceStatus == Character.CharacterForceStatus.Idle
-                && CharacterSocialActions.AreCoLocated(actor, c) && Opinion(actor, c.Id, data) > -25)
-                .OrderByDescending(c => Opinion(actor, c.Id, data) + Trust(actor, c.Id, data) / 2)
-                .ThenBy(c => c.Id).FirstOrDefault();
-            if (target is not null) CharacterSocialActions.PerformMeeting(data, actor, target, "Talk", out _);
+            if (!socialGroups.TryGetValue(SocialLocation(actor), out var neighbors)) continue;
+            var candidates = neighbors.Where(c => c.Id != actor.Id && CanSocialize(c)
+                && c.ForceId == actor.ForceId && CharacterSocialActions.AreCoLocated(actor, c)
+                && !TalkCoolingDown(actor, c, day))
+                .Select(c => (Id: c.Id, Input: CharacterDecisionRules.Capture(actor, c.Id, data))).ToArray();
+            var ranked = StrategyParallelWork.MapOrdered(candidates,
+                c => (c.Id, Decision: CharacterDecisionRules.Evaluate(CharacterDecisionKind.Social, c.Input)),
+                minimumParallelCount: 64);
+            var selected = ranked.OrderByDescending(c => c.Decision.Score).ThenBy(c => c.Id).FirstOrDefault();
+            if (selected.Decision is null) continue;
+            var socialOutcome = "社交意愿不足，保持当前安排";
+            if (selected.Decision.Preferred && data.Characters.TryGetValue(selected.Id, out var target))
+            {
+                var result = CharacterSocialActions.PerformMeeting(data, actor, target, "Talk", out _);
+                socialOutcome = result.IsSuccess ? "主动交谈" : "会面条件已变化，未执行";
+            }
+            CharacterDecisionRules.Remember(actor, day, CharacterDecisionKind.Social, selected.Id, selected.Decision, socialOutcome);
         }
     }
 
     private static int Opinion(Character actor, int target, GameData data)
         => actor.Relationships.FirstOrDefault(r => r.TargetCharacterId == target) is { } relationship
             ? CharacterRelationshipRules.Resolve(relationship, today: data.GameDate) : 0;
-    private static int Trust(Character actor, int target, GameData data)
-        => actor.Relationships.FirstOrDefault(r => r.TargetCharacterId == target) is { } relationship
-            ? CharacterRelationshipRules.Resolve(relationship, trust: true, today: data.GameDate) : 0;
+    private static bool CanSocialize(Character actor)
+        => !actor.IsDead && !actor.IsSick && actor.ForceStatus == Character.CharacterForceStatus.Idle
+           && actor.ActionStatus == Character.CharacterActionStatus.Waiting
+           && actor.RecruitTask is null && actor.DiplomacyMission is null && actor.RecruitAssignment is null;
+
+    private static (int Force, Character.CharacterLocationType Type, int A, int B) SocialLocation(Character c)
+        => (c.ForceId, c.LocationType, c.LocationType switch
+        {
+            Character.CharacterLocationType.Stronghold => c.LocationStrongholdId > 0 ? c.LocationStrongholdId : c.StrongholdId,
+            Character.CharacterLocationType.Unit => c.ActionTarget.UnitId,
+            _ => c.Location.X
+        }, c.LocationType == Character.CharacterLocationType.Map ? c.Location.Y : 0);
+
+    private static bool TalkCoolingDown(Character a, Character b, int day)
+        => a.Relationships.Any(r => r.TargetCharacterId == b.Id && r.LastTalkDay is int d && day - d < 1)
+           || b.Relationships.Any(r => r.TargetCharacterId == a.Id && r.LastTalkDay is int d && day - d < 1);
 
     private static bool TryDefect(GameData data, StrategyScenarioMeta meta, StrategyDayOutcomeBuffer events,
         Character actor, int lordId)
     {
         var day = data.GameDate.TotalDays;
-        var eligible = actor.Id != lordId && lordId > 0 && actor.Personality.Ambition >= 70
-            && EntityEffectHelper.ResolveEffectiveLoyalty(actor, data.GameDate) <= 20 && Opinion(actor, lordId, data) <= -60;
+        if (actor.Id == lordId || lordId <= 0) return false;
+        var input = CharacterDecisionRules.Capture(actor, lordId, data);
+        var decision = CharacterDecisionRules.Evaluate(CharacterDecisionKind.Defection, input);
+        // Hysteresis: entering intent takes 80 points; retaining it takes 65.
+        var threshold = actor.DefectionWarningDay is null ? decision.Threshold : decision.Threshold - 15;
+        decision = decision with { Threshold = threshold };
+        var eligible = input.Loyalty <= 35 && input.Opinion < 0 && decision.Preferred;
+        CharacterDecisionRules.Remember(actor, day, CharacterDecisionKind.Defection, lordId, decision,
+            eligible ? "有投奔意向，仍须预警期和合法出路" : "留在当前势力");
         if (!eligible)
         {
             if (actor.DefectionWarningDay is not null)

@@ -744,10 +744,21 @@ public static class StrategyUnitAIRules
                 foreach (var enemy in besiegers)
                 {
                     var winRate = BattleEngagementScorer.ScoreCommitWinRate(unit, enemy, gameData, mapMaster);
-                    thought.Add("解围评估 {0}：胜率={1}%", enemy.Name, winRate);
+                    var requiredWinRate = BattleConstants.AiRetreatCommitWinRateThreshold;
+                    if (gameData.Characters.TryGetValue(unit.LeaderId, out var commander))
+                    {
+                        var recipientId = target.LordId > 0 ? target.LordId : target.LeaderId;
+                        var preference = CharacterDecisionRules.Evaluate(CharacterDecisionKind.Relief,
+                            CharacterDecisionRules.Capture(commander, recipientId, gameData));
+                        requiredWinRate = Math.Clamp(requiredWinRate + preference.Score, 15, 70);
+                        CharacterDecisionRules.Remember(commander, gameData.GameDate.TotalDays,
+                            CharacterDecisionKind.Relief, recipientId, preference,
+                            $"解围所需胜率 {requiredWinRate}%，当前评估 {winRate}%；另需兵力和路径检查");
+                    }
+                    thought.Add("解围评估 {0}：胜率={1}%，主将风险门槛={2}%", enemy.Name, winRate, requiredWinRate);
                     if (!BattleFactorEvaluator.CanUnitEngage(unit)
                         || unit.Soldier < besiegers.Where(e => e.Location.IsSameTile(enemy.Location)).Sum(e => (long)e.Soldier) * OccupyEngageMinStrengthRatio
-                        || winRate < BattleConstants.AiRetreatCommitWinRateThreshold)
+                        || winRate < requiredWinRate)
                         continue;
 
                     unit.ActionTarget.UnitId = enemy.Id;

@@ -155,6 +155,7 @@ public class Character : CharacterDefinition, IMovable
     /// <summary>角色间关系（参照势力外交；含看法条目）。</summary>
     public List<CharacterRelationship> Relationships { get; set; } = [];
     public List<CharacterSocialMemory> SocialMemories { get; set; } = [];
+    public List<CharacterDecisionRecord> RecentDecisions { get; set; } = [];
     public long NextSocialMemoryId { get; set; } = 1;
     public int? LastSocialAiDay { get; set; }
     public int? DefectionWarningDay { get; set; }

@@ -274,6 +274,7 @@ public sealed record StrategyCharacterRelationshipDto
 public sealed record StrategyCharacterSummaryDto
 {
     public IReadOnlyList<CharacterSocialMemory> SocialMemories { get; init; } = [];
+    public IReadOnlyList<CharacterDecisionRecord> RecentDecisions { get; init; } = [];
     public int? DefectionWarningDay { get; init; }
     public int? PendingMarriageFromId { get; init; }
     public required int Id { get; init; }
@@ -2246,6 +2247,7 @@ public static class StrategyWorldStateMapper
             Relations = CharacterRelationsHelper.BuildRelations(c, characters, gameData.GameDate),
             CharacterRelationships = MapCharacterRelationships(c, gameData.GameDate),
             SocialMemories = c.ForceId == meta.PlayerForceId ? c.SocialMemories.ToArray() : [],
+            RecentDecisions = c.ForceId == meta.PlayerForceId ? c.RecentDecisions.ToArray() : [],
             DefectionWarningDay = c.ForceId == meta.PlayerForceId ? c.DefectionWarningDay : null,
             PendingMarriageFromId = c.ForceId == meta.PlayerForceId ? c.PendingMarriageFromId : null,
             Introduction = string.IsNullOrWhiteSpace(c.Description) ? null : c.Description.Trim(),

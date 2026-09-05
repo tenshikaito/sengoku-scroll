@@ -349,6 +349,14 @@ watch(
             @click="emit('interact', selectedPersonId, 'DeclineMarriage')">拒绝婚约</el-button>
         </div>
         <p v-if="selectedPerson?.defectionWarningDay != null">⚠ 此人物已有投奔预警，请改善其对当主的关系与忠诚。</p>
+        <h4 v-if="selectedPerson?.recentDecisions?.length">近期行为依据（本势力；评分不等于成功率）</h4>
+        <ul v-if="selectedPerson?.recentDecisions?.length">
+          <li v-for="decision in [...selectedPerson.recentDecisions].reverse()" :key="decision.behavior">
+            第 {{ decision.day }} 日 · {{ decision.outcome }} · 对象 #{{ decision.targetCharacterId }}
+            <span v-if="decision.behavior !== 'Relief'"> · 评分 {{ decision.score }} / 门槛 {{ decision.threshold }}</span>
+            <div>{{ decision.factors.map(f => `${f.name} ${f.value > 0 ? '+' : ''}${f.value}`).join('；') }}</div>
+          </li>
+        </ul>
         <h4 v-if="selectedPerson?.socialMemories?.length">近期人物记忆（最多64条，仅本势力可见）</h4>
         <ul v-if="selectedPerson?.socialMemories?.length">
           <li v-for="memory in [...selectedPerson.socialMemories].reverse()" :key="memory.id">

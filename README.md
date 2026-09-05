@@ -12,7 +12,7 @@
 | 内置剧本 | `mini_kanto` |
 | 后端 | .NET 10 / ASP.NET Core |
 | 前端 | Vue 3 / TypeScript / Vite / PixiJS / ECharts / Element Plus |
-| 自动化测试 | 504 项 .NET 测试 + 14 项前端回归测试（2026-09-06 支援解围修复；本轮仅后端改动） |
+| 自动化测试 | 519 项 .NET 测试 + 14 项前端回归测试（2026-09-06 人物行为机制首批） |
 | 存档 | V2 完整世界与运行时服务状态；10 个本地槽位；兼容旧存档 |
 | 确定性 | 固定种子、稳定哈希、并行有序输出、双局 365 日存档一致性测试 |
 | 发行方式 | Windows `win-x64` 自包含单文件包 |
@@ -21,6 +21,8 @@
 
 ## 文档目录
 
+- [人物行为机制总体设计](docs/character-agency-design.md)：能力、性格、动机、关系、记忆与认知的职责，统一决策协议及分批路线。
+- [人物决策首批验收](docs/character-agency-implementation-2026-09-06.md)：五类接入、公式、隐私、存档与多核边界。
 - [人物社会玩法首版](docs/character-society-2026-09-05.md)：社交冷却、事件记忆、NPC 社交、婚约与个人叛离。
 - [人物基础系统修复](docs/character-foundation-2026-09-05.md)：性格配置、关系有效值、真实看法与到期规则。
 - [内存优化验收](docs/memory-optimization-2026-09-05.md)：行情压缩、生命周期清理、地图资源释放和闲置房间休眠。
