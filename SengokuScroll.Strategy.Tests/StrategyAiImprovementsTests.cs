@@ -21,6 +21,75 @@ namespace SengokuScroll.Strategy.Tests;
 /// <summary>AI 自动攻城、运输封锁、守军解散、居城援防。</summary>
 public class StrategyAiImprovementsTests
 {
+    [Theory]
+    [InlineData(10000, "MarchReliefBattle", 1)]
+    [InlineData(100, "ReliefWaiting", 1)]
+    [InlineData(10000, "MarchReliefBattle", 2)]
+    [InlineData(100, "ReliefWaiting", 2)]
+    public void SupportRelief_EvaluatesBesiegerAndReplacesStaleRoute(int soldiers, string expected, int castleX)
+    {
+        using var ctx = StrategyTestWorldFactory.Create();
+        var data = ctx.World.GameData;
+        var support = data.Units[1];
+        support.Soldier = soldiers;
+        support.Directive = UnitDirective.Support;
+        support.Status = UnitStatus.Moving;
+        support.Ap = 100;
+        support.ActionTarget.RoutePoints.Enqueue(new Point2(0, 1));
+        var castle = StrategyTestWorldBuilder.CreateTestStronghold(10, 1, new Point3(castleX, 0));
+        var enemy = StrategyTestWorldBuilder.CreateTestUnit(20, 2, new Point3(1, 0));
+        enemy.SiegeMode = UnitSiegeMode.Encircle;
+        enemy.Soldier = 1000;
+        data.Forces[2] = StrategyTestWorldBuilder.CreateTestForce(2);
+        StrategyTestWorldBuilder.LinkEnemyForces(data.Forces[1], data.Forces[2]);
+        data.Strongholds[10] = castle;
+        data.Units[20] = enemy;
+        MapLocationActions.RegisterStronghold(ctx.World, castle);
+        MapLocationActions.RegisterUnit(ctx.World, enemy);
+        var decision = StrategyUnitAIRules.ExecuteDailyAction(support, data,
+            ctx.Services.GetRequiredService<Domain.Services.Pathfinding.IPathfindingService>(),
+            [enemy], [], ctx.Services.GetRequiredService<IGameWorldContext>());
+        Assert.Equal(expected, decision.Code);
+        Assert.Equal(UnitDirective.Support, support.Directive);
+        if (soldiers > 1000)
+        {
+            Assert.Equal(enemy.Id, support.ActionTarget.UnitId);
+            Assert.Equal(new Point2(1, 0), support.ActionTarget.RoutePoints.Last());
+            Assert.True(ctx.Services.GetRequiredService<UnitMoveEvaluator>().Evaluate(support, new Point2(1, 0)).IsSuccess);
+            Assert.True(ctx.Services.GetRequiredService<Domain.Rules.MovementRules>()
+                .IsPathTileBlockedByMilitary(support, new Point2(1, 0)));
+            ctx.Services.GetRequiredService<Domain.Behaviors.Actions.UnitMoveAction>().Update(support);
+            Assert.Equal(enemy.Location, support.Location);
+            var engage = StrategyUnitAIRules.ExecuteDailyAction(support, data,
+                ctx.Services.GetRequiredService<Domain.Services.Pathfinding.IPathfindingService>(),
+                [enemy], [], ctx.Services.GetRequiredService<IGameWorldContext>());
+            Assert.Equal("ReliefEngage", engage.Code);
+        }
+        else
+        {
+            Assert.Empty(support.ActionTarget.RoutePoints);
+            Assert.Equal(0, support.ActionTarget.UnitId);
+        }
+    }
+
+    [Fact]
+    public void SupportRelief_EntersAssignedCastleAfterThreatDisappears()
+    {
+        using var ctx = StrategyTestWorldFactory.Create();
+        var support = ctx.World.GameData.Units[1];
+        support.Soldier = 1000;
+        var castle = StrategyTestWorldBuilder.CreateTestStronghold(10, 1, support.Location);
+        ctx.World.GameData.Strongholds[10] = castle;
+        MapLocationActions.RegisterStronghold(ctx.World, castle);
+        support.Directive = UnitDirective.Support;
+        support.ActionTarget.StrongholdId = castle.Id;
+        var decision = StrategyUnitAIRules.ExecuteDailyAction(support, ctx.World.GameData,
+            ctx.Services.GetRequiredService<Domain.Services.Pathfinding.IPathfindingService>(),
+            [], [], ctx.Services.GetRequiredService<IGameWorldContext>());
+        Assert.Equal("SupportEnteredStronghold", decision.Code);
+        Assert.True(support.InStronghold);
+    }
+
     [Fact]
     public void ExecuteDailyAction_AutoAssault_WhenOnEnemyStrongholdTile()
     {
